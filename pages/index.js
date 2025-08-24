@@ -33,11 +33,10 @@ export default function Home() {
 いくつか質問をしていくね。
 担当エージェントとの面談でしっかりヒアリングするから、今日は自分の転職について改めて整理する感じで、気楽に話してね！
 
-まず3つ教えて！
-①求職者番号②今の職種③今どこで働いてる？`,
+まずはじめに「求職者番号」を教えて！`,
     },
   ])
-  const [currentStep, setCurrentStep] = useState(0) // 0=基本情報, 1以降=サーバー制御
+  const [currentStep, setCurrentStep] = useState(0) // 0=基本情報（フロント固定制御）
   const [candidateNumber, setCandidateNumber] = useState('')
   const [qualification, setQualification] = useState('')   // ②今の職種
   const [workplace, setWorkplace] = useState('')           // ③今どこで働いてる？
@@ -68,7 +67,6 @@ export default function Home() {
 
   const hardClearInput = () => {
     setInput('')
-    // IME中やブラウザ差で残るのを物理的にクリア
     if (inputRef.current) inputRef.current.value = ''
   }
 
@@ -89,12 +87,14 @@ export default function Home() {
         if (!isNumberConfirmed) {
           const num = (outgoing.match(/\d+/) || [])[0]
           if (!num) {
-            addAI(`ごめん！最初に求職者番号を教えてね。\n①求職者番号②今の職種③今どこで働いてる？ の順でお願い！`)
+            addAI(`ごめん！最初に「求職者番号」を数字で教えてね。`)
+            setLoading(false)
             return
           }
           setCandidateNumber(num)
           setIsNumberConfirmed(true)
-          addAI(`求職者番号：${num} だね！\n他の情報もお願い。\n②「今の職種」を教えて！`)
+          addAI(`求職者番号：${num} だね！\n次は ②「今の職種」を教えて！`)
+          setLoading(false)
           return
         }
 
@@ -102,13 +102,22 @@ export default function Home() {
         if (!qualification) {
           setQualification(outgoing)
           addAI(`OK！次は ③「いま働いてる場所」（施設名や業態）を教えて！`)
+          setLoading(false)
           return
         }
 
         // ③今どこで働いてる？ 未入力
         if (!workplace) {
           setWorkplace(outgoing)
-          // ここで初めてサーバーへ（Step1開始の合図）
+
+          // 未入力が一つでもあればここでブロック（保険）
+          if (!candidateNumber || !qualification || !outgoing) {
+            addAI(`まだ未入力があるよ。番号・職種・勤務先の3つを順番に埋めよう！`)
+            setLoading(false)
+            return
+          }
+
+          // ここで初めてサーバーへ（Step1開始）
           const res = await fetch('/api/chat', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -123,16 +132,25 @@ export default function Home() {
           })
           if (!res.ok) throw new Error('API error')
           const data = await res.json()
-          addAI(data.response || `ありがとう！\nはじめに、今回の転職理由を教えてほしいな。`)
-          if (typeof data.step === 'number') setCurrentStep(data.step) // 通常は1になる
+          addAI(
+            data.response ||
+            `ありがとう！\nはじめに、今回の転職理由を教えてほしいな。きっかけってどんなことだった？`
+          )
+          if (typeof data.step === 'number') setCurrentStep(data.step) // 通常は1に遷移
+
           // 以降の画面用にセッション受け取り
           if (data.sessionData) {
             const s = data.sessionData
             if (Array.isArray(s.mustConditions)) setMustCount(s.mustConditions.length)
             if (Array.isArray(s.wantConditions)) setWantCount(s.wantConditions.length)
           }
+          setLoading(false)
           return
         }
+
+        // ここまでで return してるはず（保険）
+        setLoading(false)
+        return
       }
 
       // ---- Step1以降はサーバー制御 ----
