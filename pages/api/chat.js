@@ -1,351 +1,240 @@
 // pages/api/chat.js
-import OpenAI from 'openai'
+import fs from 'fs'
+import path from 'path'
 
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
+// セッション保持（簡易）
+const sessions = new Map()
 
-// ===== 転職理由 分岐フロー（司令塔） =====
-const transferReasonFlow = {
-  '経営・組織に関すること': {
-    keywords: ['理念','方針','価値観','経営','運営','マネジメント','方向性','ビジョン','ミッション','評価','昇給','昇格','教育','研修','OJT','フォロー','現場理解','風通し'],
-    internal_options: [
-      'MVV・経営理念に共感できる職場で働きたい',
-      '風通しがよく意見が言いやすい職場で働きたい',
-      '評価制度が導入されている職場で働きたい',
-      '教育体制が整備されている職場で働きたい',
-      '経営者が医療職のところで働きたい',
-      '経営者が医療職ではないところで働きたい',
-    ],
-  },
-  '働く仲間に関すること': {
-    keywords: ['人間関係','雰囲気','上司','先輩','同僚','チーム','パワハラ','派閥','お局','尊敬','ロールモデル','温度感','一体感'],
-    internal_options: [
-      '人間関係のトラブルが少ない職場で働きたい',
-      '同じ価値観を持つ仲間と働きたい',
-      '尊敬できる上司・経営者と働きたい',
-      'ロールモデルとなる上司や先輩がほしい',
-      '職種関係なく一体感がある仲間と働きたい',
-      'お局がいない職場で働きたい',
-    ],
-  },
-  '仕事内容・キャリアに関すること': {
-    keywords: ['スキル','成長','挑戦','やりがい','業務','専門性','昇進','資格','患者','利用者','貢献','登用'],
-    internal_options: [
-      '今までの経験や自分の強みを活かしたい',
-      '未経験の仕事／分野に挑戦したい',
-      'スキルアップしたい',
-      '患者・利用者への貢献実感を感じられる仕事に携われる',
-      '昇進・昇格の機会がある',
-    ],
-  },
-  '労働条件に関すること': {
-    keywords: ['残業','夜勤','休日','有給','シフト','勤務時間','オンコール','直行直帰','サービス残業','人員配置','就業規則'],
-    internal_options: [
-      '直行直帰ができる職場で働きたい',
-      '残業のない職場で働きたい',
-      '希望通りに有給が取得できる職場で働きたい',
-      '副業OKな職場で働きたい',
-      '社会保険を完備している職場で働きたい',
-      '診療時間内で自己研鑽できる職場で働きたい',
-      '前残業のない職場で働きたい',
-    ],
-  },
-  'プライベートに関すること': {
-    keywords: ['家庭','育児','子育て','両立','子ども','保育園','送迎','学校行事','通院','時短','イベント'],
-    internal_options: [
-      '家庭との両立に理解のある職場で働きたい',
-      '勤務時間外でイベントがない職場で働きたい',
-      'プライベートでも仲良くしている職場で働きたい',
-    ],
-  },
-  '職場環境・設備': { keywords: ['設備','器械','機器','システム','IT','デジタル','最新','導入'], internal_options: [] },
-  '職場の安定性': { keywords: ['安定','将来性','経営状況','倒産','不安','継続','成長'], internal_options: [] },
-  '給与・待遇': { keywords: ['給料','給与','年収','月収','手取り','賞与','ボーナス','手当','待遇','福利厚生'], internal_options: [] },
-}
-
-// Must/Want の辞書（代表抜粋）
-// 実運用では全件の配列をここに貼る。今回は例示的に最低限で。
-const MUSTWANT = [
-  '残業ほぼなし', '日勤のみ可', '夜勤専従あり', 'オンコールなし・免除可',
-  '直行直帰OK', '駅近（5分以内）', '車通勤可', '社会保険完備', '有給消化率ほぼ100%',
-]
-
-const empathy = [
-  'なるほど、その気持ちよくわかる！大事な転職のきっかけだね◎',
-  'うん、その視点めちゃ大事！転職の根っこだね◎',
-  'OK、温度感つかめた！ここはちゃんと整理していこう◎',
-]
-
-// ===== セッション管理（インメモリ） =====
-const SESS = new Map()
-function getS(id) {
-  if (!SESS.has(id)) {
-    SESS.set(id, {
-      reasonTag: null,
-      s1Category: null,
-      s1Deep: 0,
-      s1Options: [],
-      _s2Suggest: null,
-      _s3Suggest: null,
+function getSession(id) {
+  if (!sessions.has(id)) {
+    sessions.set(id, {
+      step1: { deep: 0, cat: null, pendingOptions: null },
       must: [],
       want: [],
-      can: '',
-      will: '',
+      canDo: '',
+      willDo: '',
     })
   }
-  return SESS.get(id)
+  return sessions.get(id)
 }
 
-// ===== ユーティリティ =====
-const pickEmpathy = () => empathy[Math.floor(Math.random() * empathy.length)]
-const sanitize = (t) => String(t || '').replace(/絶対NG/g, '（NGは扱わない）')
-const numPick = (t) => {
-  if (!t) return null
-  const m = t.match(/\b([1-9])\b/)
-  if (m) return parseInt(m[1], 10)
-  const fw = t.match(/[１-９]/)
-  if (fw) return '１２３４５６７８９'.indexOf(fw[0]) + 1
-  return null
-}
-const labelPick = (t, ops = []) => {
-  const s = String(t || '').trim()
-  if (!s) return null
-  const exact = ops.findIndex((o) => s === o)
-  if (exact >= 0) return exact + 1
-  const norm = (v) => v.replace(/\s|　|『|』|「|」/g, '')
-  const idx = ops.findIndex((o) => norm(o).startsWith(norm(s)))
-  return idx >= 0 ? idx + 1 : null
-}
-const choices = (ops) => `次のうち近いものを選んでね（番号でOK）\n${ops.map((o, i) => `${i + 1}) 『［${o}］』`).join('\n')}`
+// JSONロード（起動時1回）
+const root = process.cwd()
+const reasonFlow = JSON.parse(
+  fs.readFileSync(path.join(root, 'public', 'tags', 'transfer_reason_flow.json'), 'utf-8')
+)
+const mustwant = JSON.parse(
+  fs.readFileSync(path.join(root, 'public', 'tags', 'mustwant.json'), 'utf-8')
+)
 
+// ------- 転職理由：分類 ----------
 function classifyReason(text) {
-  const t = String(text)
-  // プライベート優先ワード
-  if (/(家庭|両立|育児|子ども|保育園|送迎)/.test(t)) return 'プライベートに関すること'
-  // 「夜勤」単体は労働条件に即断しない：文脈が他にない時のみ労働条件
-  let best = null
-  let bestScore = 0
-  for (const [cat, cfg] of Object.entries(transferReasonFlow)) {
-    const score = cfg.keywords.reduce((acc, k) => acc + (t.includes(k) ? 1 : 0), 0)
-    if (score > bestScore) {
-      bestScore = score
-      best = cat
+  // 8カテゴリそれぞれにキーワードスコア
+  const scores = {}
+  Object.keys(reasonFlow).forEach((cat) => (scores[cat] = 0))
+  for (const cat of Object.keys(reasonFlow)) {
+    for (const kw of reasonFlow[cat].keywords) {
+      if (text.includes(kw)) scores[cat]++
     }
   }
-  if (!best) return null
-  // 夜勤だけ、など極小ヒットなら未分類へ
-  if (bestScore === 1 && /(夜勤)/.test(t) && !/(家庭|両立|育児|子ども)/.test(t)) {
-    return '労働条件に関すること'
+
+  // 明示優先ルール
+  if (/(家庭|育児|子育て|両立|子ども)/.test(text)) {
+    return { cat: 'プライベートに関すること', tie: false }
   }
-  return best
+
+  // 「夜勤」単体は労働条件に安易に振らない（文脈不足）
+  if (/夜勤/.test(text) && !/(残業|シフト|休日|有給)/.test(text)) {
+    // 深掘りで再質問させたいので未確定扱い
+    return { cat: null, tie: false }
+  }
+
+  const max = Math.max(...Object.values(scores))
+  if (max <= 0) return { cat: null, tie: false }
+
+  const tops = Object.keys(scores).filter((k) => scores[k] === max)
+  if (tops.length > 1) return { cat: tops.slice(0, 2), tie: true }
+
+  return { cat: tops[0], tie: false }
 }
 
-function hintMustWant(text) {
-  const t = String(text)
-  const hits = MUSTWANT.filter((lbl) => t.includes(lbl))
-  return Array.from(new Set(hits)).slice(0, 3)
+// ------- Must/Want 照合 ----------
+function matchTags(text, pool, max = 3) {
+  const hits = []
+  for (const item of pool) {
+    if (text.includes(item)) hits.push(item)
+    if (hits.length >= max) break
+  }
+  return hits
 }
 
-// ====== ハンドラ ======
 export default async function handler(req, res) {
-  if (req.method !== 'POST') return res.status(405).json({ message: 'Method not allowed' })
+  if (req.method !== 'POST') return res.status(405).json({ msg: 'Method Not Allowed' })
+  const { sessionId, currentStep, candidate, message } = req.body
+  const S = getSession(sessionId)
+  const say = (t) => res.json({ reply: t, nextStep: currentStep, header: {} })
 
-  try {
-    const { message, conversationHistory = [], currentStep = 1, sessionId, basics = {} } = req.body
-    const S = getS(sessionId)
-    const user = String(message || '')
+  // Step1: 転職理由
+  if (currentStep === 1) {
+    // まず分類
+    const cls = classifyReason(message)
 
-    // ===== Step1: 転職理由 =====
-    if (currentStep === 1) {
-      // 選択肢提示中（番号 / ラベル）
-      if (S.s1Options.length) {
-        const n = numPick(user) ?? labelPick(user, S.s1Options)
-        if (n && n >= 1 && n <= S.s1Options.length) {
-          S.reasonTag = S.s1Options[n - 1]
-          S.s1Options = []
-          S.s1Category = null
-          S.s1Deep = 0
-          return res.json({
-            response: sanitize(`そっか、『［${S.reasonTag}］』が一番近いってことだね、了解！\n\nありがとう！\nじゃあ次の質問！\n今回の転職でこれだけは絶対譲れない！というのを教えて！\n仕事内容でも、制度でも、条件でもOK◎\n\n例えば・・・\n「絶対土日休みじゃないと困る！」\n「絶対オンコールはできない！」\n\n後から『あるといいな』『ないといいな』についても聞くから、今は『絶対！』というものだけ教えてね。`),
-            step: 2,
-            sessionData: S,
-          })
-        }
-        return res.json({
-          response: sanitize(`番号（1〜${S.s1Options.length}）か、ラベルそのままで選んでね！\n${choices(S.s1Options)}`),
-          step: 1,
-          sessionData: S,
-        })
+    // 同点 → どっちを主にするか二択
+    if (cls.tie && Array.isArray(cls.cat)) {
+      return say(
+        `${cls.cat[0]} と ${cls.cat[1]}、どちらも気になってるんだね。\nどちらが今回いちばん重要？\nA) ${cls.cat[0]}\nB) ${cls.cat[1]}`
+      )
+    }
+    // 二択の回答を受け入れる
+    if (/^\s*[AB]\s*$/i.test(message) && Array.isArray(S.step1.awaitTwo)) {
+      const pick = /^a/i.test(message) ? S.step1.awaitTwo[0] : S.step1.awaitTwo[1]
+      S.step1.cat = pick
+      S.step1.awaitTwo = null
+    } else if (cls.tie) {
+      // 初出の二択提示
+      S.step1.awaitTwo = cls.cat
+      return
+    }
+
+    // カテゴリ確定していなければ深掘り
+    const cat = S.step1.cat || cls.cat
+    if (!cat) {
+      S.step1.deep++
+      if (S.step1.deep <= 2) {
+        return say(
+          'もう少し詳しく教えて！\n（例：人間関係／評価制度／残業・休日／育児との両立 などの言葉があると助かる）'
+        )
       }
-
-      // カテゴリ判定
-      const cat = classifyReason(user)
-      if (!cat) {
-        return res.json({
-          response: sanitize(`${pickEmpathy()}\n\n${choices([])}\n（このカテゴリは候補提示なし。次の発話で具体例を教えてね）`),
-          step: 1,
-          sessionData: S,
-        })
-      }
-
-      S.s1Category = cat
-      S.s1Deep += 1
-      const ops = transferReasonFlow[cat].internal_options || []
-
-      if (ops.length) {
-        // 2〜3件だけ提示
-        const pick = ops.slice(0, 3)
-        S.s1Options = pick
-        return res.json({
-          response: sanitize(`${pickEmpathy()}\n${choices(pick)}`),
-          step: 1,
-          sessionData: S,
-        })
-      }
-      // 内部候補が空 → 未マッチ処理のみ
+      // 深掘り上限 → 未マッチ扱いで次へ
+      S.step1.deep = 0
+      S.step1.cat = null
       return res.json({
-        response: sanitize(`${pickEmpathy()}\n\nありがとう！\nじゃあ次の質問！\n今回の転職でこれだけは絶対譲れない！というのを教えて！\n（仕事内容でも制度でも条件でもOK◎）`),
-        step: 2,
-        sessionData: S,
+        reply: 'なるほど、その気持ちよくわかる！大事な転職のきっかけだね◎\n\nじゃあ次の質問！\n今回の転職で「これだけは絶対譲れない！」というのを教えて！\n仕事内容でも、制度でも、条件でもOK◎\n\n例えば・・・\n「絶対土日休みじゃないと困る！」\n「絶対オンコールはできない！」\n\n後から『あるといいな』『ないといいな』についても聞くから、今は『絶対！』というものだけ教えてね。',
+        nextStep: 2,
+        header: {},
       })
     }
 
-    // ===== Step2: Must =====
-    if (currentStep === 2) {
-      if (S._s2Suggest && S._s2Suggest.length) {
-        const n = numPick(user)
-        if (n && n >= 1 && n <= S._s2Suggest.length) {
-          const chosen = S._s2Suggest[n - 1]
-          S.must.push(chosen)
-          S._s2Suggest = null
-          return res.json({
-            response: sanitize(`そっか、『［${chosen}］』が絶対ってことだね！\n他にも絶対条件はある？（「ある」/「ない」）`),
-            step: 2,
-            sessionData: S,
-          })
-        }
-        return res.json({
-          response: sanitize(`番号で選んでね！\n${S._s2Suggest.map((l, i) => `${i + 1}) 『［${l}］'`).join('\n')}`),
-          step: 2,
-          sessionData: S,
-        })
-      }
+    // カテゴリ確定：内部候補提示 or 共感のみ
+    const node = reasonFlow[cat]
+    S.step1.cat = cat
 
-      // 直接ヒット
-      const hits = hintMustWant(user)
-      if (hits.length) {
-        S.must.push(hits[0])
-        return res.json({
-          response: sanitize(`そっか、『［${hits[0]}］』が絶対ってことだね！\n他にも絶対条件はある？（「ある」/「ない」）`),
-          step: 2,
-          sessionData: S,
-        })
-      }
-
-      if (/ある/.test(user)) {
-        S._s2Suggest = MUSTWANT.slice(0, 3)
-        return res.json({
-          response: sanitize(`候補を挙げるね。番号でOK！\n${S._s2Suggest.map((l, i) => `${i + 1}) 『［${l}］'`).join('\n')}`),
-          step: 2,
-          sessionData: S,
-        })
-      }
-      if (/ない/.test(user)) {
-        return res.json({
-          response: sanitize(`了解！\nそれじゃあ次に、こうだったらいいな、というのを聞いていくね。\nこれも仕事内容でも、制度でも、条件面でもOK◎\n\n例えば・・・\n「マイカー通勤ができると嬉しいな」\n「できれば夜勤がないといいな」\nって感じ！`),
-          step: 3,
-          sessionData: S,
-        })
-      }
-
-      // 深掘り（最小限）
+    if (node.internal_options && node.internal_options.length >= 2) {
+      const opts = node.internal_options.slice(0, 3)
+      S.step1.pendingOptions = opts
+      const lines = opts.map((o, i) => `${i + 1}) ${o}`).join('\n')
+      return say(
+        `うん、その視点めちゃ大事！\n次のうち近いものを選んでね（番号でOK）\n${lines}`
+      )
+    } else {
+      // 給与・待遇 / 環境設備 / 安定性 などは候補なし → 共感のみで次へ
+      S.step1.deep = 0
+      S.step1.cat = null
       return res.json({
-        response: sanitize(`了解！どんな「絶対」かもう少しだけ具体的に！\n（例：残業ほぼなし／日勤のみ可／直行直帰OK など）`),
-        step: 2,
-        sessionData: S,
+        reply:
+          'なるほど、その気持ちよくわかる！大事な転職のきっかけだね◎\n\nじゃあ次の質問！\n今回の転職で「これだけは絶対譲れない！」というのを教えて！\n仕事内容でも、制度でも、条件でもOK◎\n\n例えば・・・\n「絶対土日休みじゃないと困る！」\n「絶対オンコールはできない！」\n\n後から『あるといいな』『ないといいな』についても聞くから、今は『絶対！』というものだけ教えてね。',
+        nextStep: 2,
+        header: {},
       })
     }
-
-    // ===== Step3: Want =====
-    if (currentStep === 3) {
-      if (S._s3Suggest && S._s3Suggest.length) {
-        const n = numPick(user)
-        if (n && n >= 1 && n <= S._s3Suggest.length) {
-          const chosen = S._s3Suggest[n - 1]
-          S.want.push(chosen)
-          S._s3Suggest = null
-          return res.json({
-            response: sanitize(`了解！『［${chosen}］』だと嬉しいってことだね！\n他にもある？（「ある」/「ない」）`),
-            step: 3,
-            sessionData: S,
-          })
-        }
-        return res.json({
-          response: sanitize(`番号で選んでね！\n${S._s3Suggest.map((l, i) => `${i + 1}) 『［${l}］'`).join('\n')}`),
-          step: 3,
-          sessionData: S,
-        })
-      }
-
-      const hits = hintMustWant(user)
-      if (hits.length) {
-        S.want.push(hits[0])
-        return res.json({
-          response: sanitize(`了解！『［${hits[0]}］』だと嬉しいってことだね！\n他にもある？（「ある」/「ない」）`),
-          step: 3,
-          sessionData: S,
-        })
-      }
-      if (/ある/.test(user)) {
-        S._s3Suggest = MUSTWANT.slice(3, 6)
-        return res.json({
-          response: sanitize(`このあたりはどう？番号でOK！\n${S._s3Suggest.map((l, i) => `${i + 1}) 『［${l}］'`).join('\n')}`),
-          step: 3,
-          sessionData: S,
-        })
-      }
-      if (/ない/.test(user)) {
-        return res.json({
-          response: sanitize(`質問は残り2つ！\nこれまでやってきたことを自然文で教えて。`),
-          step: 4,
-          sessionData: S,
-        })
-      }
-
-      return res.json({
-        response: sanitize(`了解！「できれば」どんな感じ？キーワードでOK！\n（例：車通勤可／駅近／残業ほぼなし など）`),
-        step: 3,
-        sessionData: S,
-      })
-    }
-
-    // ===== Step4: Can =====
-    if (currentStep === 4) {
-      S.can = user
-      return res.json({
-        response: sanitize(`これが最後の質問👏\nこれから挑戦したいこと・やってみたいことを教えて。`),
-        step: 5,
-        sessionData: S,
-      })
-    }
-
-    // ===== Step5: Will =====
-    if (currentStep === 5) {
-      S.will = user
-      return res.json({
-        response: sanitize(`今日はたくさん話してくれてありがとう！\n整理できた内容は担当エージェントに共有しておくね。`),
-        step: 6,
-        sessionData: S,
-      })
-    }
-
-    // フォールバック
-    return res.json({
-      response: sanitize('OK！続けよう！'),
-      step: currentStep,
-      sessionData: S,
-    })
-  } catch (err) {
-    console.error(err)
-    return res.status(500).json({ message: 'Internal error' })
   }
+
+  // Step1: 内部候補の番号選択
+  if (currentStep === 1 && /^\s*[1-3]\s*$/.test(message) && S.step1.pendingOptions) {
+    const idx = Number(message.trim()) - 1
+    const pick = S.step1.pendingOptions[idx]
+    S.step1.pendingOptions = null
+    S.step1.cat = null
+    return res.json({
+      reply:
+        `了解！『${pick}』で受け取ったよ。\n\nじゃあ次の質問！\n今回の転職で「これだけは絶対譲れない！」というのを教えて！\n仕事内容でも、制度でも、条件でもOK◎\n\n例えば・・・\n「絶対土日休みじゃないと困る！」\n「絶対オンコールはできない！」\n\n後から『あるといいな』『ないといいな』についても聞くから、今は『絶対！』というものだけ教えてね。`,
+      nextStep: 2,
+      header: {},
+    })
+  }
+
+  // Step2: Must
+  if (currentStep === 2) {
+    // “ない/大丈夫/以上” → 次へ
+    if (/^(ない|大丈夫|以上|特にない)/.test(message)) {
+      return res.json({
+        reply:
+          '了解！じゃあ次に、こうだったらいいな、というのを聞いていくね。\nこれも仕事内容でも、制度でも、条件面でもOK◎\n\n例えば・・・\n「マイカー通勤ができると嬉しいな」\n「できれば夜勤がないといいな」\nって感じ！',
+        nextStep: 3,
+        header: { mustCount: S.must.length },
+      })
+    }
+
+    const hits = matchTags(message, mustwant.pool, 3)
+    if (hits.length) {
+      // 重複除外
+      for (const h of hits) if (!S.must.includes(h)) S.must.push(h)
+      return res.json({
+        reply:
+          `そっか、『${hits.join('／')}』が絶対ってことだね！他にも絶対条件はある？（なければ「ない」）`,
+        nextStep: 2,
+        header: { mustCount: S.must.length },
+      })
+    }
+
+    // 深掘り
+    return res.json({
+      reply:
+        '了解！どんな「絶対」をもう少しだけ具体的に！（例：残業ほぼなし／日勤のみ可／直行直帰OK など）',
+      nextStep: 2,
+      header: { mustCount: S.must.length },
+    })
+  }
+
+  // Step3: Want
+  if (currentStep === 3) {
+    if (/^(ない|大丈夫|以上|特にない)/.test(message)) {
+      return res.json({
+        reply:
+          '質問は残り2つ！これまでやってきたことを自然文で教えて。簡条書きでもOK。',
+        nextStep: 4,
+        header: { wantCount: S.want.length },
+      })
+    }
+
+    const hits = matchTags(message, mustwant.pool, 3)
+    if (hits.length) {
+      for (const h of hits) if (!S.want.includes(h)) S.want.push(h)
+      return res.json({
+        reply: `了解！『${hits.join('／')}』だと嬉しいってことだね！ 他にもある？（なければ「ない」）`,
+        nextStep: 3,
+        header: { wantCount: S.want.length },
+      })
+    }
+
+    return res.json({
+      reply: 'OK！「できれば」はどんな感じ？キーワードでOK！（例：車通勤可／駅近／残業ほぼなし など）',
+      nextStep: 3,
+      header: { wantCount: S.want.length },
+    })
+  }
+
+  // Step4: いままで（Can）
+  if (currentStep === 4) {
+    S.canDo = (S.canDo ? S.canDo + '\n' : '') + message
+    return res.json({
+      reply: 'これが最後の質問👏 これから挑戦したいこと・やってみたいことを教えて。',
+      nextStep: 5,
+      header: {},
+    })
+  }
+
+  // Step5: これから（Will）
+  if (currentStep === 5) {
+    S.willDo = (S.willDo ? S.willDo + '\n' : '') + message
+    return res.json({
+      reply:
+        '今日はたくさん話してくれてありがとう！\nあなたの希望は担当エージェントに共有するね。\nこのまま面談に進もう！',
+      nextStep: 5,
+      header: {},
+    })
+  }
+
+  // それ以外
+  return say('OK')
 }
