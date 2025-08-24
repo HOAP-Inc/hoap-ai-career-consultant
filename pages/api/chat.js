@@ -73,8 +73,141 @@ const transferReasonFlow = {
   }
 };
 
-// mustWant辞書（正確なtag_label）
-const mustWantItems = [
+// キーワードマッピング辞書（入力キーワード → tag_label）
+const keywordMapping = {
+  // 勤務時間関連
+  "オンコール": "オンコールなし・免除可",
+  "オンコールなし": "オンコールなし・免除可",
+  "呼び出し": "オンコールなし・免除可",
+  "残業": "残業ほぼなし",
+  "残業なし": "残業ほぼなし",
+  "残業少ない": "残業ほぼなし",
+  "定時": "残業ほぼなし",
+  "夜勤なし": "日勤のみ可",
+  "日勤のみ": "日勤のみ可",
+  "日勤だけ": "日勤のみ可",
+  
+  // 休日関連
+  "土日休み": "土日祝休み",
+  "土日祝": "土日祝休み",
+  "週休2日": "週休2日",
+  "有給": "有給消化率ほぼ100%",
+  "有給取りやすい": "有給消化率ほぼ100%",
+  "休みやすい": "有給消化率ほぼ100%",
+  
+  // 通勤関連
+  "車通勤": "車通勤可",
+  "マイカー": "車通勤可",
+  "自家用車": "車通勤可",
+  "車で通勤": "車通勤可",
+  "バイク": "バイク通勤可",
+  "駐車場": "駐車場完備",
+  "駅近": "駅近（5分以内）",
+  "駅から近い": "駅近（5分以内）",
+  "直行直帰": "直行直帰OK",
+  
+  // 給与関連
+  "年収300": "年収300万以上",
+  "年収350": "年収350万以上", 
+  "年収400": "年収400万以上",
+  "年収450": "年収450万以上",
+  "年収500": "年収500万以上",
+  "賞与": "賞与あり",
+  "ボーナス": "賞与あり",
+  "退職金": "退職金あり",
+  
+  // 福利厚生関連
+  "社会保険": "社会保険完備",
+  "保険": "社会保険完備",
+  "託児所": "託児所・保育支援あり",
+  "保育園": "託児所・保育支援あり",
+  "子育て": "託児所・保育支援あり",
+  "副業": "副業OK",
+  "住宅手当": "住宅手当",
+  "交通費": "交通費支給",
+  
+  // 教育・研修関連
+  "研修": "研修制度あり",
+  "教育": "研修制度あり",
+  "資格取得": "資格取得支援あり",
+  "資格支援": "資格取得支援あり",
+  "評価制度": "評価制度あり",
+  
+  // サービス形態関連
+  "急性期": "急性期病棟",
+  "回復期": "回復期病棟",
+  "療養": "慢性期・療養型病院",
+  "クリニック": "クリニック",
+  "訪問看護": "訪問看護ステーション",
+  "デイサービス": "通所介護（デイサービス）",
+  "デイケア": "通所リハビリテーション（デイケア）",
+  "特養": "特別養護老人ホーム",
+  "老健": "介護老人保健施設",
+  "サ高住": "サービス付き高齢者向け住宅（サ高住）",
+  "有料老人ホーム": "介護付き有料老人ホーム"
+};
+
+// 改良版マッチング関数
+function findBestMatches(userInput, maxResults = 3) {
+  const inputLower = userInput.toLowerCase();
+  const matches = [];
+  
+  // 1. キーワードマッピングから直接マッチ
+  for (const [keyword, tagLabel] of Object.entries(keywordMapping)) {
+    if (inputLower.includes(keyword.toLowerCase())) {
+      matches.push({ item: tagLabel, score: 10, reason: 'keyword_mapping' });
+    }
+  }
+  
+  // 2. mustWantItemsから部分一致
+  mustWantItems.forEach(item => {
+    const itemLower = item.toLowerCase();
+    let score = 0;
+    
+    // 完全一致
+    if (inputLower === itemLower) {
+      score = 9;
+    }
+    // 含まれている
+    else if (inputLower.includes(itemLower) || itemLower.includes(inputLower)) {
+      score = 8;
+    }
+    // 単語レベルでの部分マッチ
+    else {
+      const inputWords = inputLower.split(/[\s・()（）]/);
+      const itemWords = itemLower.split(/[\s・()（）]/);
+      
+      let matchCount = 0;
+      inputWords.forEach(inputWord => {
+        if (inputWord.length > 1) { // 1文字の単語は無視
+          itemWords.forEach(itemWord => {
+            if (inputWord.includes(itemWord) || itemWord.includes(inputWord)) {
+              matchCount++;
+            }
+          });
+        }
+      });
+      
+      if (matchCount > 0) {
+        score = Math.min(7, matchCount * 2);
+      }
+    }
+    
+    if (score > 0) {
+      matches.push({ item, score, reason: 'partial_match' });
+    }
+  });
+  
+  // 3. スコア順にソート、重複除去
+  const uniqueMatches = matches
+    .sort((a, b) => b.score - a.score)
+    .filter((match, index, array) => 
+      array.findIndex(m => m.item === match.item) === index
+    )
+    .slice(0, maxResults);
+  
+  return uniqueMatches.map(match => match.item);
+}
   "急性期病棟", "回復期病棟", "慢性期・療養型病院", "一般病院", "地域包括ケア病棟", "療養病棟", 
   "緩和ケア病棟（ホスピス）", "クリニック", "精神科病院", "訪問看護ステーション", 
   "精神科特化型訪問看護ステーション", "機能強化型訪問看護ステーション", "訪問リハビリテーション", 
@@ -242,7 +375,7 @@ export default async function handler(req, res) {
           if (extractedNumber.length < 5) {
             return res.json({
               response: `番号が違うみたい...もう一度確認してもらえる？
-登録時のLINEに書いてあるよ！`,
+求職者番号は5桁以上の数字だよ。`,
               step: 0
             });
           }
@@ -262,10 +395,7 @@ export default async function handler(req, res) {
 いくつか質問をしていくね。
 担当エージェントとの面談でしっかりヒアリングするから、今日は自分の転職について改めて整理する感じで、気楽に話してね！
 
-まず3つ教えて！
-①求職者番号②今の職種③今どこで働いてる？
-
-まずは①求職者番号を教えて！（登録時のLINEで送ってるよ！）`,
+まずは①求職者番号を教えて！（登録時のLINEに書いてあるよ）`,
             step: 0
           });
         }
@@ -453,7 +583,7 @@ export default async function handler(req, res) {
 
 ${optionsList}
 
-番号でも、内容でも、どちらでもOKだよ！`,
+番号でも、内容でも、どちらでもOKです！`,
           step: 1
         });
       }
@@ -503,16 +633,8 @@ ${optionsList}
         }
       }
 
-      // mustWant辞書マッチング（厳密）
-      const matchedItems = mustWantItems.filter(item => {
-        const itemLower = item.toLowerCase();
-        const messageLower = message.toLowerCase();
-        return messageLower.includes(itemLower) || 
-               itemLower.includes(messageLower) ||
-               // 部分マッチング（より柔軟に）
-               messageLower.split(' ').some(word => itemLower.includes(word)) ||
-               itemLower.split(' ').some(word => messageLower.includes(word));
-      });
+      // mustWant辞書マッチング（改良版）
+      const matchedItems = findBestMatches(message, 3);
 
       if (matchedItems.length === 0) {
         // 未マッチ処理
@@ -596,16 +718,8 @@ ${optionsList}
         }
       }
 
-      // mustWant辞書マッチング（Step2と同じロジック）
-      const matchedItems = mustWantItems.filter(item => {
-        const itemLower = item.toLowerCase();
-        const messageLower = message.toLowerCase();
-        return messageLower.includes(itemLower) || 
-               itemLower.includes(messageLower) ||
-               // 部分マッチング（より柔軟に）
-               messageLower.split(' ').some(word => itemLower.includes(word)) ||
-               itemLower.split(' ').some(word => messageLower.includes(word));
-      });
+      // mustWant辞書マッチング（Step2と同じ改良版）
+      const matchedItems = findBestMatches(message, 3);
 
       if (matchedItems.length === 0) {
         // 未マッチ処理
