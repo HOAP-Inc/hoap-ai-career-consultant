@@ -1,322 +1,313 @@
 // pages/api/chat.js
-import OpenAI from 'openai';
+import OpenAI from 'openai'
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
-});
+})
 
-// 転職理由分類データ（元プロンプト完全準拠）
+// ===== 転職理由 8カテゴリ（司令塔データ） =====
 const transferReasonFlow = {
-  "経営・組織に関すること": {
-    "keywords": ["理念", "方針", "価値観", "経営", "運営", "マネジメント", "方向性", "ビジョン", "ミッション", "考え方", "姿勢", "経営陣", "トップ", "風通し", "意見", "発言", "評価制度", "評価", "昇給", "昇格", "公平", "基準", "教育体制", "研修", "マニュアル", "OJT", "フォロー", "教育", "サポート", "経営者", "医療職", "現場理解", "売上", "数字"],
-    "internal_options": [
-      "MVV・経営理念に共感できる職場で働きたい",
-      "風通しがよく意見が言いやすい職場で働きたい", 
-      "評価制度が導入されている職場で働きたい",
-      "教育体制が整備されている職場で働きたい",
-      "経営者が医療職のところで働きたい",
-      "経営者が医療職ではないところで働きたい"
-    ]
+  '経営・組織に関すること': {
+    keywords: [
+      '理念','方針','価値観','経営','運営','マネジメント','方向性','ビジョン','ミッション','考え方','姿勢','経営陣','トップ','風通し','意見','発言','評価制度','評価','昇給','昇格','公平','基準','教育体制','研修','マニュアル','OJT','フォロー','教育','サポート','経営者','医療職','現場理解','売上','数字'
+    ],
+    internal_options: [
+      'MVV・経営理念に共感できる職場で働きたい',
+      '風通しがよく意見が言いやすい職場で働きたい',
+      '評価制度が導入されている職場で働きたい',
+      '教育体制が整備されている職場で働きたい',
+      '経営者が医療職のところで働きたい',
+      '経営者が医療職ではないところで働きたい',
+    ],
   },
-  "働く仲間に関すること": {
-    "keywords": ["人間関係", "職場の雰囲気", "上司", "先輩", "同僚", "チームワーク", "いじめ", "パワハラ", "セクハラ", "陰口", "派閥", "お局", "理不尽", "相談できない", "孤立", "コミュニケーション", "ロールモデル", "尊敬", "憧れ", "見習いたい", "価値観", "温度感", "やる気", "信頼", "品格", "一貫性", "目標", "手本", "職種", "連携", "助け合い", "壁", "分断", "古株", "権力", "圧", "支配"],
-    "internal_options": [
-      "人間関係のトラブルが少ない職場で働きたい",
-      "同じ価値観を持つ仲間と働きたい", 
-      "尊敬できる上司・経営者と働きたい",
-      "ロールモデルとなる上司や先輩がほしい",
-      "職種関係なく一体感がある仲間と働きたい",
-      "お局がいない職場で働きたい"
-    ]
+  '働く仲間に関すること': {
+    keywords: [
+      '人間関係','職場の雰囲気','上司','先輩','同僚','チームワーク','いじめ','パワハラ','セクハラ','陰口','派閥','お局','理不尽','相談できない','孤立','コミュニケーション','ロールモデル','尊敬','憧れ','見習いたい','価値観','温度感','やる気','信頼','品格','一貫性','目標','手本','職種','連携','助け合い','壁','分断','古株','権力','圧','支配'
+    ],
+    internal_options: [
+      '人間関係のトラブルが少ない職場で働きたい',
+      '同じ価値観を持つ仲間と働きたい',
+      '尊敬できる上司・経営者と働きたい',
+      'ロールモデルとなる上司や先輩がほしい',
+      '職種関係なく一体感がある仲間と働きたい',
+      'お局がいない職場で働きたい',
+    ],
   },
-  "仕事内容・キャリアに関すること": {
-    "keywords": ["スキルアップ", "成長", "挑戦", "やりがい", "業務内容", "専門性", "研修", "教育", "キャリア", "昇進", "昇格", "資格取得", "経験", "学べる", "新しい", "幅を広げる", "経験", "強み", "活かす", "資格", "得意", "未経験", "分野", "患者", "利用者", "貢献", "実感", "書類", "件数", "役立つ", "ありがとう", "責任", "役職", "機会", "道筋", "登用"],
-    "internal_options": [
-      "今までの経験や自分の強みを活かしたい",
-      "未経験の仕事／分野に挑戦したい",
-      "スキルアップしたい",
-      "患者・利用者への貢献実感を感じられる仕事に携われる",
-      "昇進・昇格の機会がある"
-    ]
+  '仕事内容・キャリアに関すること': {
+    keywords: [
+      'スキルアップ','成長','挑戦','やりがい','業務内容','専門性','研修','教育','キャリア','昇進','昇格','資格取得','経験','学べる','新しい','幅を広げる','強み','活かす','資格','得意','未経験','分野','患者','利用者','貢献','実感','書類','件数','役立つ','ありがとう','責任','役職','機会','道筋','登用'
+    ],
+    internal_options: [
+      '今までの経験や自分の強みを活かしたい',
+      '未経験の仕事／分野に挑戦したい',
+      'スキルアップしたい',
+      '患者・利用者への貢献実感を感じられる仕事に携われる',
+      '昇進・昇格の機会がある',
+    ],
   },
-  "労働条件に関すること": {
-    "keywords": ["残業", "夜勤", "休日", "有給", "働き方", "時間", "シフト", "勤務時間", "連勤", "休憩", "オンコール", "呼び出し", "副業", "兼業", "社会保険", "保険", "健保", "厚生年金", "診療時間", "自己研鑽", "勉強", "学習", "研修時間", "直行直帰", "事務所", "立ち寄り", "朝礼", "日報", "定時", "サービス残業", "申請制", "人員配置", "希望日", "半休", "時間有休", "承認", "就業規則", "兼業", "許可", "健康保険", "雇用保険", "労災", "手続き", "始業前", "準備", "清掃", "打刻"],
-    "internal_options": [
-      "直行直帰ができる職場で働きたい",
-      "残業のない職場で働きたい", 
-      "希望通りに有給が取得できる職場で働きたい",
-      "副業OKな職場で働きたい",
-      "社会保険を完備している職場で働きたい",
-      "診療時間内で自己研鑽できる職場で働きたい",
-      "前残業のない職場で働きたい"
-    ]
+  '労働条件に関すること': {
+    keywords: [
+      '残業','夜勤','休日','有給','働き方','時間','シフト','勤務時間','連勤','休憩','オンコール','呼び出し','副業','兼業','社会保険','保険','健保','厚生年金','診療時間','自己研鑽','勉強','学習','研修時間','直行直帰','事務所','立ち寄り','朝礼','日報','定時','サービス残業','申請制','人員配置','希望日','半休','時間有休','承認','就業規則','許可','健康保険','雇用保険','労災','手続き','始業前','準備','清掃','打刻'
+    ],
+    internal_options: [
+      '直行直帰ができる職場で働きたい',
+      '残業のない職場で働きたい',
+      '希望通りに有給が取得できる職場で働きたい',
+      '副業OKな職場で働きたい',
+      '社会保険を完備している職場で働きたい',
+      '診療時間内で自己研鑽できる職場で働きたい',
+      '前残業のない職場で働きたい',
+    ],
   },
-  "プライベートに関すること": {
-    "keywords": ["家庭", "育児", "子育て", "両立", "ライフステージ", "子ども", "家族", "介護", "保育園", "送迎", "学校行事", "通院", "発熱", "中抜け", "時短", "イベント", "飲み会", "BBQ", "社員旅行", "早朝清掃", "強制", "業務外", "就業後", "休日", "オフ", "プライベート", "仲良く", "交流", "ごはん", "趣味"],
-    "internal_options": [
-      "家庭との両立に理解のある職場で働きたい",
-      "勤務時間外でイベントがない職場で働きたい", 
-      "プライベートでも仲良くしている職場で働きたい"
-    ]
+  'プライベートに関すること': {
+    keywords: [
+      '家庭','育児','子育て','両立','ライフステージ','子ども','家族','介護','保育園','送迎','学校行事','通院','発熱','中抜け','時短','イベント','飲み会','BBQ','社員旅行','早朝清掃','強制','業務外','就業後','休日','オフ','プライベート','仲良く','交流','ごはん','趣味'
+    ],
+    internal_options: [
+      '家庭との両立に理解のある職場で働きたい',
+      '勤務時間外でイベントがない職場で働きたい',
+      'プライベートでも仲良くしている職場で働きたい',
+    ],
   },
-  "職場環境・設備": {
-    "keywords": ["設備", "環境", "施設", "器械", "機器", "システム", "IT", "デジタル", "古い", "新しい", "最新", "設置", "導入", "整備"],
-    "internal_options": []
+  '職場環境・設備': {
+    keywords: ['設備','環境','施設','器械','機器','システム','IT','デジタル','古い','新しい','最新','設置','導入','整備'],
+    internal_options: [],
   },
-  "職場の安定性": {
-    "keywords": ["安定", "将来性", "経営状況", "倒産", "リストラ", "不安", "継続", "持続", "成長", "発展", "将来", "先行き"],
-    "internal_options": []
+  '職場の安定性': {
+    keywords: ['安定','将来性','経営状況','倒産','リストラ','不安','継続','持続','成長','発展','将来','先行き'],
+    internal_options: [],
   },
-  "給与・待遇": {
-    "keywords": ["給料", "給与", "年収", "月収", "手取り", "賞与", "ボーナス", "昇給", "手当", "待遇", "福利厚生", "安い", "低い", "上がらない", "生活できない", "お金"],
-    "internal_options": []
-  }
-};
-
-// キーワードマッピング辞書（入力キーワード → tag_label）
-const keywordMapping = {
-  // 勤務時間関連
-  "オンコール": "オンコールなし・免除可",
-  "オンコールなし": "オンコールなし・免除可",
-  "呼び出し": "オンコールなし・免除可",
-  "残業": "残業ほぼなし",
-  "残業なし": "残業ほぼなし",
-  "残業少ない": "残業ほぼなし",
-  "定時": "残業ほぼなし",
-  "夜勤なし": "日勤のみ可",
-  "日勤のみ": "日勤のみ可",
-  "日勤だけ": "日勤のみ可",
-  
-  // 休日関連
-  "土日休み": "土日祝休み",
-  "土日祝": "土日祝休み",
-  "週休2日": "週休2日",
-  "有給": "有給消化率ほぼ100%",
-  "有給取りやすい": "有給消化率ほぼ100%",
-  "休みやすい": "有給消化率ほぼ100%",
-  
-  // 通勤関連
-  "車通勤": "車通勤可",
-  "マイカー": "車通勤可",
-  "自家用車": "車通勤可",
-  "車で通勤": "車通勤可",
-  "バイク": "バイク通勤可",
-  "駐車場": "駐車場完備",
-  "駅近": "駅近（5分以内）",
-  "駅から近い": "駅近（5分以内）",
-  "直行直帰": "直行直帰OK",
-  
-  // 給与関連
-  "年収300": "年収300万以上",
-  "年収350": "年収350万以上", 
-  "年収400": "年収400万以上",
-  "年収450": "年収450万以上",
-  "年収500": "年収500万以上",
-  "賞与": "賞与あり",
-  "ボーナス": "賞与あり",
-  "退職金": "退職金あり",
-  
-  // 福利厚生関連
-  "社会保険": "社会保険完備",
-  "保険": "社会保険完備",
-  "託児所": "託児所・保育支援あり",
-  "保育園": "託児所・保育支援あり",
-  "子育て": "託児所・保育支援あり",
-  "副業": "副業OK",
-  "住宅手当": "住宅手当",
-  "交通費": "交通費支給",
-  
-  // 教育・研修関連
-  "研修": "研修制度あり",
-  "教育": "研修制度あり",
-  "資格取得": "資格取得支援あり",
-  "資格支援": "資格取得支援あり",
-  "評価制度": "評価制度あり",
-  
-  // サービス形態関連
-  "急性期": "急性期病棟",
-  "回復期": "回復期病棟",
-  "療養": "慢性期・療養型病院",
-  "クリニック": "クリニック",
-  "訪問看護": "訪問看護ステーション",
-  "デイサービス": "通所介護（デイサービス）",
-  "デイケア": "通所リハビリテーション（デイケア）",
-  "特養": "特別養護老人ホーム",
-  "老健": "介護老人保健施設",
-  "サ高住": "サービス付き高齢者向け住宅（サ高住）",
-  "有料老人ホーム": "介護付き有料老人ホーム"
-};
-
-// 改良版マッチング関数
-function findBestMatches(userInput, maxResults = 3) {
-  const inputLower = userInput.toLowerCase();
-  const matches = [];
-  
-  // 1. キーワードマッピングから直接マッチ
-  for (const [keyword, tagLabel] of Object.entries(keywordMapping)) {
-    if (inputLower.includes(keyword.toLowerCase())) {
-      matches.push({ item: tagLabel, score: 10, reason: 'keyword_mapping' });
-    }
-  }
-  
-  // 2. mustWantItemsから部分一致
-  mustWantItems.forEach(item => {
-    const itemLower = item.toLowerCase();
-    let score = 0;
-    
-    // 完全一致
-    if (inputLower === itemLower) {
-      score = 9;
-    }
-    // 含まれている
-    else if (inputLower.includes(itemLower) || itemLower.includes(inputLower)) {
-      score = 8;
-    }
-    // 単語レベルでの部分マッチ
-    else {
-      const inputWords = inputLower.split(/[\s・()（）]/);
-      const itemWords = itemLower.split(/[\s・()（）]/);
-      
-      let matchCount = 0;
-      inputWords.forEach(inputWord => {
-        if (inputWord.length > 1) { // 1文字の単語は無視
-          itemWords.forEach(itemWord => {
-            if (inputWord.includes(itemWord) || itemWord.includes(inputWord)) {
-              matchCount++;
-            }
-          });
-        }
-      });
-      
-      if (matchCount > 0) {
-        score = Math.min(7, matchCount * 2);
-      }
-    }
-    
-    if (score > 0) {
-      matches.push({ item, score, reason: 'partial_match' });
-    }
-  });
-  
-  // 3. スコア順にソート、重複除去
-  const uniqueMatches = matches
-    .sort((a, b) => b.score - a.score)
-    .filter((match, index, array) => 
-      array.findIndex(m => m.item === match.item) === index
-    )
-    .slice(0, maxResults);
-  
-  return uniqueMatches.map(match => match.item);
+  '給与・待遇': {
+    keywords: ['給料','給与','年収','月収','手取り','賞与','ボーナス','昇給','手当','待遇','福利厚生','安い','低い','上がらない','生活できない','お金'],
+    internal_options: [],
+  },
 }
-  "急性期病棟", "回復期病棟", "慢性期・療養型病院", "一般病院", "地域包括ケア病棟", "療養病棟", 
-  "緩和ケア病棟（ホスピス）", "クリニック", "精神科病院", "訪問看護ステーション", 
-  "精神科特化型訪問看護ステーション", "機能強化型訪問看護ステーション", "訪問リハビリテーション", 
-  "訪問栄養指導", "通所介護（デイサービス）", "認知症対応型通所介護（認知症専門デイサービス）", 
-  "地域密着型通所介護（定員18名以下）", "通所リハビリテーション（デイケア）", "訪問介護", 
-  "定期巡回・随時対応型訪問介護看護", "訪問入浴", "小規模多機能型居宅介護", "看護小規模多機能型居宅介護", 
-  "特別養護老人ホーム", "地域密着型特別養護老人ホーム（定員29名以下）", "介護老人保健施設", 
-  "介護付き有料老人ホーム", "ショートステイ（短期入所生活介護）", "サービス付き高齢者向け住宅（サ高住）", 
-  "住宅型有料老人ホーム", "軽費老人ホーム（ケアハウス）", "健康型有料老人ホーム", "シニア向け分譲マンション", 
-  "放課後等デイサービス", "生活介護（障害者の日中活動）", "就労継続支援A型", "就労継続支援B型", 
-  "短期入所（障害者向けショートステイ）", "歯科クリニック", "訪問歯科", "歯科口腔外科（病院内診療科）", 
-  "大学病院歯科・歯学部附属病院", "歯科技工所", "院内ラボ", "保育園", "幼稚園", 
-  "企業（産業保健・企業内看護など）", "4週8休以上", "育児支援あり", "年間休日120日以上", 
-  "週1日からOK", "週2日からOK", "土日祝休み", "家庭都合休OK", "月1シフト提出", 
-  "毎週～隔週シフト提出", "有給消化率ほぼ100%", "長期休暇あり", "週休2日", "週休3日", 
-  "日勤のみ可", "夜勤専従あり", "2交替制", "3交替制", "午前のみ勤務", "午後のみ勤務", 
-  "残業ほぼなし", "オンコールなし・免除可", "緊急訪問なし", "時差出勤導入", "フレックスタイム制度あり", 
-  "残業月20時間以内", "スキマ時間勤務", "時短勤務相談可", "駅近（5分以内）", "車通勤可", 
-  "バイク通勤可", "自転車通勤可", "駐車場完備", "直行直帰OK", "年収300万以上", "年収350万以上", 
-  "年収400万以上", "年収450万以上", "年収500万以上", "年収550万以上", "年収600万以上", 
-  "年収650万以上", "年収700万以上", "賞与あり", "退職金あり", "寮あり・社宅あり", 
-  "託児所・保育支援あり", "社会保険完備", "交通費支給", "扶養控除内考慮", "復職支援", 
-  "住宅手当", "副業OK", "日・祝日給与UP", "引越し手当", "緊急訪問時の手当・代休あり", 
-  "スマホ・タブレット貸与あり", "電動アシスト自転車・バイク・車貸与", "社割あり", 
-  "ハラスメント相談窓口あり", "研修制度あり", "資格取得支援あり", "セミナー参加費補助あり", 
-  "マニュアル完備", "動画マニュアルあり", "評価制度あり", "メンター制度あり", "独立・開業支援あり", 
-  "院長・分院長候補", "担当制"
-];
 
-// 共感セリフのバリエーション
+// ===== must/want の正式ラベル全集 =====
+const mustWantItems = [
+  '急性期病棟','回復期病棟','慢性期・療養型病院','一般病院','地域包括ケア病棟','療養病棟',
+  '緩和ケア病棟（ホスピス）','クリニック','精神科病院','訪問看護ステーション',
+  '精神科特化型訪問看護ステーション','機能強化型訪問看護ステーション','訪問リハビリテーション',
+  '訪問栄養指導','通所介護（デイサービス）','認知症対応型通所介護（認知症専門デイサービス）',
+  '地域密着型通所介護（定員18名以下）','通所リハビリテーション（デイケア）','訪問介護',
+  '定期巡回・随時対応型訪問介護看護','訪問入浴','小規模多機能型居宅介護','看護小規模多機能型居宅介護',
+  '特別養護老人ホーム','地域密着型特別養護老人ホーム（定員29名以下）','介護老人保健施設',
+  '介護付き有料老人ホーム','ショートステイ（短期入所生活介護）','サービス付き高齢者向け住宅（サ高住）',
+  '住宅型有料老人ホーム','軽費老人ホーム（ケアハウス）','健康型有料老人ホーム','シニア向け分譲マンション',
+  '放課後等デイサービス','生活介護（障害者の日中活動）','就労継続支援A型','就労継続支援B型',
+  '短期入所（障害者向けショートステイ）','歯科クリニック','訪問歯科','歯科口腔外科（病院内診療科）',
+  '大学病院歯科・歯学部附属病院','歯科技工所','院内ラボ','保育園','幼稚園',
+  '企業（産業保健・企業内看護など）','4週8休以上','育児支援あり','年間休日120日以上',
+  '週1日からOK','週2日からOK','土日祝休み','家庭都合休OK','月1シフト提出',
+  '毎週～隔週シフト提出','有給消化率ほぼ100%','長期休暇あり','週休2日','週休3日',
+  '日勤のみ可','夜勤専従あり','2交替制','3交替制','午前のみ勤務','午後のみ勤務',
+  '残業ほぼなし','オンコールなし・免除可','緊急訪問なし','時差出勤導入','フレックスタイム制度あり',
+  '残業月20時間以内','スキマ時間勤務','時短勤務相談可','駅近（5分以内）','車通勤可',
+  'バイク通勤可','自転車通勤可','駐車場完備','直行直帰OK','年収300万以上','年収350万以上',
+  '年収400万以上','年収450万以上','年収500万以上','年収550万以上','年収600万以上',
+  '年収650万以上','年収700万以上','賞与あり','退職金あり','寮あり・社宅あり',
+  '託児所・保育支援あり','社会保険完備','交通費支給','扶養控除内考慮','復職支援',
+  '住宅手当','副業OK','日・祝日給与UP','引越し手当','緊急訪問時の手当・代休あり',
+  'スマホ・タブレット貸与あり','電動アシスト自転車・バイク・車貸与','社割あり',
+  'ハラスメント相談窓口あり','研修制度あり','資格取得支援あり','セミナー参加費補助あり',
+  'マニュアル完備','動画マニュアルあり','評価制度あり','メンター制度あり','独立・開業支援あり',
+  '院長・分院長候補','担当制',
+]
+
+// ===== 入力→正式ラベルの簡易マッピング =====
+const keywordMapping = {
+  // 勤務時間
+  'オンコール':'オンコールなし・免除可',
+  'オンコールなし':'オンコールなし・免除可',
+  '呼び出し':'オンコールなし・免除可',
+  '残業':'残業ほぼなし',
+  '残業なし':'残業ほぼなし',
+  '残業少ない':'残業ほぼなし',
+  '定時':'残業ほぼなし',
+  '夜勤なし':'日勤のみ可',
+  '日勤のみ':'日勤のみ可',
+  '日勤だけ':'日勤のみ可',
+  '夜勤専従':'夜勤専従あり',
+  '2交替':'2交替制',
+  '3交替':'3交替制',
+  '午前のみ':'午前のみ勤務',
+  '午後のみ':'午後のみ勤務',
+  '時短':'時短勤務相談可',
+  'フレックス':'フレックスタイム制度あり',
+
+  // 休日
+  '土日休み':'土日祝休み',
+  '土日祝':'土日祝休み',
+  '週休2日':'週休2日',
+  '週休3日':'週休3日',
+  '4週8休':'4週8休以上',
+  '年間休日120':'年間休日120日以上',
+  '有給':'有給消化率ほぼ100%',
+  '長期休暇':'長期休暇あり',
+  '家庭都合':'家庭都合休OK',
+  '育児':'育児支援あり',
+
+  // 通勤
+  '車通勤':'車通勤可',
+  'マイカー':'車通勤可',
+  'バイク':'バイク通勤可',
+  '自転車':'自転車通勤可',
+  '駐車場':'駐車場完備',
+  '駅近':'駅近（5分以内）',
+  '直行直帰':'直行直帰OK',
+
+  // 給与・待遇
+  '年収300':'年収300万以上',
+  '年収350':'年収350万以上',
+  '年収400':'年収400万以上',
+  '年収450':'年収450万以上',
+  '年収500':'年収500万以上',
+  '年収550':'年収550万以上',
+  '年収600':'年収600万以上',
+  '年収650':'年収650万以上',
+  '年収700':'年収700万以上',
+  '賞与':'賞与あり',
+  'ボーナス':'賞与あり',
+  '退職金':'退職金あり',
+  '社会保険':'社会保険完備',
+  '託児所':'託児所・保育支援あり',
+  '保育園':'託児所・保育支援あり',
+  '子育て':'託児所・保育支援あり',
+  '副業':'副業OK',
+  '住宅手当':'住宅手当',
+  '交通費':'交通費支給',
+
+  // 形態
+  '急性期':'急性期病棟',
+  '回復期':'回復期病棟',
+  '療養':'慢性期・療養型病院',
+  'クリニック':'クリニック',
+  '訪問看護':'訪問看護ステーション',
+  'デイサービス':'通所介護（デイサービス）',
+  'デイケア':'通所リハビリテーション（デイケア）',
+  '特養':'特別養護老人ホーム',
+  '老健':'介護老人保健施設',
+  'サ高住':'サービス付き高齢者向け住宅（サ高住）',
+  '有料老人ホーム':'介護付き有料老人ホーム',
+}
+
+// ===== マッチング関数 =====
+function findBestMatches(userInput, maxResults = 3) {
+  const inputLower = (userInput || '').toLowerCase()
+  const matches = []
+
+  // 1) 直接マッピング
+  for (const [kw, tag] of Object.entries(keywordMapping)) {
+    if (kw && inputLower.includes(kw.toLowerCase())) {
+      matches.push({ item: tag, score: 10 })
+    }
+  }
+
+  // 2) 正式リストの部分一致
+  mustWantItems.forEach((item) => {
+    const itemLower = item.toLowerCase()
+    let score = 0
+    if (inputLower === itemLower) score = 9
+    else if (inputLower.includes(itemLower) || itemLower.includes(inputLower)) score = 8
+    else {
+      const iw = inputLower.split(/[\s・()（）、。]/).filter(Boolean)
+      const jw = itemLower.split(/[\s・()（）、。]/).filter(Boolean)
+      let c = 0
+      iw.forEach((a) => {
+        if (a.length > 1) jw.forEach((b) => { if (a.includes(b) || b.includes(a)) c++ })
+      })
+      if (c > 0) score = Math.min(7, c * 2)
+    }
+    if (score > 0) matches.push({ item, score })
+  })
+
+  const unique = matches
+    .sort((a, b) => b.score - a.score)
+    .filter((m, i, arr) => arr.findIndex((x) => x.item === m.item) === i)
+    .slice(0, maxResults)
+
+  return unique.map((m) => m.item)
+}
+
+// ===== 共感セリフ（カテゴリ別） =====
 const empathyResponses = {
-  "経営・組織に関すること": [
-    "経営方針って職場選びで重要だよね！",
-    "組織の体制は働きやすさに直結するもんね！",
-    "評価制度がしっかりしてないと不安になるよね！"
+  '経営・組織に関すること': [
+    '経営方針って職場選びで重要だよね！',
+    '組織の体制は働きやすさに直結するもんね！',
+    '評価制度がしっかりしてないと不安になるよね！',
   ],
-  "働く仲間に関すること": [
-    "人間関係って本当に大事だよね！",
-    "職場の人間関係でしんどい思いしてるんだね！",
-    "毎日顔を合わせる人たちだから重要だよね！"
+  '働く仲間に関すること': [
+    '人間関係って本当に大事だよね！',
+    '職場の人間関係でしんどい思いしてるんだね！',
+    '毎日顔を合わせる人たちだから重要だよね！',
   ],
-  "仕事内容・キャリアに関すること": [
-    "やりがいって仕事を続ける上で大切だもんね！",
-    "キャリアアップできないと将来が不安だよね！",
-    "自分の成長を感じられない仕事は辛いよね！"
+  '仕事内容・キャリアに関すること': [
+    'やりがいって仕事を続ける上で大切だもんね！',
+    'キャリアアップできないと将来が不安だよね！',
+    '自分の成長を感じられない仕事は辛いよね！',
   ],
-  "労働条件に関すること": [
-    "働き方の条件は本当に重要だもんね！",
-    "それは体調にも影響するから大変だね！",
-    "労働環境が悪いと続けるのが辛いよね！"
+  '労働条件に関すること': [
+    '働き方の条件は本当に重要だもんね！',
+    'それは体調にも影響するから大変だね！',
+    '労働環境が悪いと続けるのが辛いよね！',
   ],
-  "プライベートに関すること": [
-    "家庭との両立って本当に大変だよね！",
-    "プライベートの時間も大切にしたいもんね！",
-    "ワークライフバランスは重要だよね！"
+  'プライベートに関すること': [
+    '家庭との両立って本当に大変だよね！',
+    'プライベートの時間も大切にしたいもんね！',
+    'ワークライフバランスは重要だよね！',
   ],
-  "職場環境・設備": [
-    "働く環境って作業効率にも影響するもんね！",
-    "古い設備だと仕事がやりにくいよね！"
+  '職場環境・設備': [
+    '働く環境って作業効率にも影響するもんね！',
+    '古い設備だと仕事がやりにくいよね！',
   ],
-  "職場の安定性": [
-    "職場の将来性は気になるよね！",
-    "経営が不安定だと心配になるもんね！"
+  '職場の安定性': [
+    '職場の将来性は気になるよね！',
+    '経営が不安定だと心配になるもんね！',
   ],
-  "給与・待遇": [
-    "お給料のことは生活に直結するもんね！",
-    "待遇面での不満があると続けるのが辛いよね！"
-  ]
-};
+  '給与・待遇': [
+    'お給料のことは生活に直結するもんね！',
+    '待遇面での不満があると続けるのが辛いよね！',
+  ],
+}
 
-// 深掘り質問（カテゴリ別）
+// ===== 深掘り質問 =====
 const deepDrillQuestions = {
-  "経営・組織に関すること": [
-    ["経営方針で特に合わないと感じる部分は？", "組織の体制で困ってることがある？", "評価や教育面で不満がある？"],
-    ["それって改善されそうにない感じ？", "他のスタッフも同じように感じてる？", "具体的にはどんな場面で一番感じる？"]
+  '経営・組織に関すること': [
+    ['経営方針で特に合わないと感じる部分は？', '組織の体制で困ってることがある？', '評価や教育面で不満がある？'],
+    ['それって改善されそうにない感じ？', '他のスタッフも同じように感じてる？', '具体的にはどんな場面で一番感じる？'],
   ],
-  "働く仲間に関すること": [
-    ["具体的にはどんな人間関係で困ってるの？", "上司や先輩との関係？それとも同僚との関係？", "職場の雰囲気が悪いってこと？"],
-    ["それって毎日続いてる感じ？", "相談できる人はいない状況？", "チームワークの面でも困ってることある？"]
+  '働く仲間に関すること': [
+    ['具体的にはどんな人間関係で困ってるの？', '上司や先輩との関係？それとも同僚との関係？', '職場の雰囲気が悪いってこと？'],
+    ['それって毎日続いてる感じ？', '相談できる人はいない状況？', 'チームワークの面でも困ってることある？'],
   ],
-  "仕事内容・キャリアに関すること": [
-    ["今の仕事内容で物足りなさを感じてる？", "キャリアアップの機会がない？", "やりがいを感じられない？"],
-    ["どんな仕事だったらやりがいを感じられそう？", "スキルアップの機会が欲しい？", "もっと責任のある仕事をしたい？"]
+  '仕事内容・キャリアに関すること': [
+    ['今の仕事内容で物足りなさを感じてる？', 'キャリアアップの機会がない？', 'やりがいを感じられない？'],
+    ['どんな仕事だったらやりがいを感じられそう？', 'スキルアップの機会が欲しい？', 'もっと責任のある仕事をしたい？'],
   ],
-  "労働条件に関すること": [
-    ["具体的にはどの辺りが一番きつい？", "時間的なこと？それとも休みの取りづらさ？", "勤務条件で特に困ってることは？"],
-    ["それがずっと続いてる状況？", "改善の見込みはなさそう？", "他にも労働条件で困ってることある？"]
+  '労働条件に関すること': [
+    ['具体的にはどの辺りが一番きつい？', '時間的なこと？それとも休みの取りづらさ？', '勤務条件で特に困ってることは？'],
+    ['それがずっと続いてる状況？', '改善の見込みはなさそう？', '他にも労働条件で困ってることある？'],
   ],
-  "プライベートに関すること": [
-    ["家庭との両立で困ってることがある？", "プライベートの時間が取れない？", "職場のイベントが負担？"],
-    ["それって改善の余地はなさそう？", "他にも両立で困ってることある？", "理想的な働き方はどんな感じ？"]
+  'プライベートに関すること': [
+    ['家庭との両立で困ってることがある？', 'プライベートの時間が取れない？', '職場のイベントが負担？'],
+    ['それって改善の余地はなさそう？', '他にも両立で困ってることある？', '理想的な働き方はどんな感じ？'],
   ],
-  "職場環境・設備": [
-    ["どんな設備や環境で困ってる？", "古い機器で作業効率が悪い？", "IT環境が整っていない？"],
-    ["それって業務に支障が出てる？", "改善の要望は出したことある？", "他にも設備面で困ることある？"]
+  '職場環境・設備': [
+    ['どんな設備や環境で困ってる？', '古い機器で作業効率が悪い？', 'IT環境が整っていない？'],
+    ['それって業務に支障が出てる？', '改善の要望は出したことある？', '他にも設備面で困ることある？'],
   ],
-  "職場の安定性": [
-    ["経営状況で不安に感じることがある？", "将来性に疑問を感じてる？", "職場の安定性が心配？"],
-    ["それって具体的にはどんなことで感じる？", "他のスタッフも同じように不安がってる？", "改善される見込みはなさそう？"]
+  '職場の安定性': [
+    ['経営状況で不安に感じることがある？', '将来性に疑問を感じてる？', '職場の安定性が心配？'],
+    ['それって具体的にはどんなことで感じる？', '他のスタッフも同じように不安がってる？', '改善される見込みはなさそう？'],
   ],
-  "給与・待遇": [
-    ["給与面で特に困ってることは？", "昇給の見込みがない？", "福利厚生が充実してない？"],
-    ["それって生活に支障が出るレベル？", "他と比較して低いと感じる？", "改善の交渉はしたことある？"]
-  ]
-};
+  '給与・待遇': [
+    ['給与面で特に困ってることは？', '昇給の見込みがない？', '福利厚生が充実してない？'],
+    ['それって生活に支障が出るレベル？', '他と比較して低いと感じる？', '改善の交渉はしたことある？'],
+  ],
+}
 
-// セッションデータ管理
-const sessions = new Map();
-
+// ===== セッション管理（簡易） =====
+const sessions = new Map()
 function getSession(sessionId) {
   if (!sessions.has(sessionId)) {
     sessions.set(sessionId, {
@@ -333,554 +324,323 @@ function getSession(sessionId) {
       currentCategory: null,
       awaitingSelection: false,
       selectionOptions: [],
-      currentStep2Processing: false,
-      currentStep3Processing: false
-    });
+    })
   }
-  return sessions.get(sessionId);
+  return sessions.get(sessionId)
 }
 
-// ランダム選択ヘルパー
-function getRandomFromArray(array, count = 1) {
-  const shuffled = array.sort(() => 0.5 - Math.random());
-  return shuffled.slice(0, count);
+function pick(arr) {
+  return arr[Math.floor(Math.random() * arr.length)]
 }
 
+// ====== ハンドラ ======
 export default async function handler(req, res) {
-  if (req.method !== 'POST') {
-    return res.status(405).json({ message: 'Method not allowed' });
-  }
+  if (req.method !== 'POST') return res.status(405).json({ message: 'Method not allowed' })
 
   try {
-    const { 
-      message, 
-      conversationHistory = [], 
-      currentStep = 0, 
-      candidateNumber = '', 
-      isNumberConfirmed = false, 
-      sessionId = 'default'
-    } = req.body;
+    const {
+      message = '',
+      conversationHistory = [],
+      currentStep = 0,
+      candidateNumber = '',
+      isNumberConfirmed = false,
+      sessionId = 'default',
+    } = req.body
 
-    const session = getSession(sessionId);
+    const session = getSession(sessionId)
+    const msg = String(message || '').trim()
 
-    // Step0: 基本情報収集（番号→職種→勤務先の順）
+    // ---- Step0: 基本情報（番号→職種→勤務先）----
     if (currentStep === 0) {
-      // Step0-1: 求職者番号収集
+      // 0-1: 番号
       if (!session.candidateNumber) {
-        const numberMatch = message.match(/\d+/);
-        if (numberMatch) {
-          const extractedNumber = numberMatch[0];
-          
-          // 5桁以上チェック
-          if (extractedNumber.length < 5) {
-            return res.json({
-              response: `番号が違うみたい...もう一度確認してもらえる？
-求職者番号は5桁以上の数字だよ。`,
-              step: 0
-            });
-          }
-          
-          session.candidateNumber = extractedNumber;
+        const num = (msg.match(/\d+/) || [])[0]
+        if (!num) {
           return res.json({
-            response: `求職者番号：${extractedNumber} だね！
-次は ②「今の職種」を教えて！`,
+            response:
+              'こんにちは！\n担当エージェントとの面談がスムーズに進むように、HOAPのAIエージェントに少しだけ話を聞かせてね。\n\nまずは①求職者番号を教えて！（登録時のLINEに書いてあるよ）',
             step: 0,
-            candidateNumber: extractedNumber
-          });
-        } else {
-          return res.json({
-            response: `こんにちは！
-担当エージェントとの面談がスムーズに進むように、HOAPのAIエージェントに少しだけ話を聞かせてね。
-
-いくつか質問をしていくね。
-担当エージェントとの面談でしっかりヒアリングするから、今日は自分の転職について改めて整理する感じで、気楽に話してね！
-
-まずは①求職者番号を教えて！（登録時のLINEに書いてあるよ）`,
-            step: 0
-          });
+          })
         }
-      }
-      
-      // Step0-2: 職種収集
-      else if (!session.qualification) {
-        session.qualification = message;
+        if (num.length < 5) {
+          return res.json({
+            response: '番号が違うみたい…もう一度確認してもらえる？\n求職者番号は5桁以上の数字だよ。',
+            step: 0,
+          })
+        }
+        session.candidateNumber = num
         return res.json({
-          response: `OK！次は ③「いま働いてる場所」（施設名や業態）を教えて！`,
+          response: `求職者番号：${num} だね！\n次は ②「今の職種」を教えて！`,
           step: 0,
-          qualification: message
-        });
+          candidateNumber: num,
+        })
       }
-      
-      // Step0-3: 勤務先収集→Step1へ
-      else {
-        session.workplace = message;
-        return res.json({
-          response: `なるほど、ありがとう！
-ここから本題いくよ。
 
-はじめに、今回の転職理由を教えてほしいな。きっかけってどんなことだった？
-しんどいと思ったこと、これはもう無理って思ったこと、逆にこういうことに挑戦したい！って思ったこと、何でもOKだよ◎`,
+      // 0-2: 職種
+      if (!session.qualification) {
+        session.qualification = msg
+        return res.json({
+          response: 'OK！次は ③「いま働いてる場所」（施設名や業態）を教えて！',
+          step: 0,
+          qualification: msg,
+        })
+      }
+
+      // 0-3: 勤務先 → Step1へ
+      if (!session.workplace) {
+        session.workplace = msg
+        return res.json({
+          response:
+            'なるほど、ありがとう！\nここから本題いくよ。\n\nはじめに、今回の転職理由を教えてほしいな。きっかけってどんなことだった？\nしんどいと思ったこと、これはもう無理って思ったこと、逆にこういうことに挑戦したい！って思ったこと、何でもOKだよ◎',
           step: 1,
-          workplace: message,
+          workplace: msg,
           basicInfo: {
             candidateNumber: session.candidateNumber,
             qualification: session.qualification,
-            workplace: message
-          }
-        });
+            workplace: msg,
+          },
+        })
       }
     }
 
-    // Step1: 転職理由（完全版）
+    // ---- Step1: 転職理由 ----
     if (currentStep === 1) {
-      // 選択肢への回答チェック
-      if (session.awaitingSelection) {
-        const selectedOption = session.selectionOptions.find(opt => 
-          message.toLowerCase().includes(opt.toLowerCase().substring(0, 15)) ||
-          message.includes('1') && session.selectionOptions[0] === opt ||
-          message.includes('2') && session.selectionOptions[1] === opt ||
-          message.includes('3') && session.selectionOptions[2] === opt
-        );
-        
-        if (selectedOption) {
-          session.transferReason = selectedOption;
-          session.awaitingSelection = false;
-          session.selectionOptions = [];
-          
-          // カテゴリに応じた柔軟な共感
-          const categoryEmpathy = getRandomFromArray(empathyResponses[session.currentCategory] || ["それは大事だよね！"], 1)[0];
-          
+      // 選択待ち
+      if (session.awaitingSelection && session.selectionOptions.length) {
+        const sel = session.selectionOptions.find(
+          (opt, i) =>
+            msg.includes(opt) ||
+            msg === String(i + 1) ||
+            msg.includes(String(i + 1))
+        )
+        if (sel) {
+          session.transferReason = sel
+          session.awaitingSelection = false
+          session.selectionOptions = []
+          const emp = pick(empathyResponses[session.currentCategory] || ['それは大事だよね！'])
+          // Step1: 共感（柔軟）＋復唱（「つまり…」）
           return res.json({
-            response: `${categoryEmpathy}つまり『${selectedOption}』ってことだね！
-
-ありがとう！
-
-じゃあ次の質問！
-今回の転職でこれだけは絶対譲れない！というのを教えて！
-仕事内容でも、制度でも、条件でもOK◎
-
-例えば・・・
-「絶対土日休みじゃないと困る！」
-「絶対オンコールはできない！」
-
-後から『あるといいな』『ないといいな』についても聞くから、今は『絶対！』というものだけ教えてね。`,
+            response:
+              `${emp}つまり『${sel}』ってことだね！\n\nありがとう！\n\nじゃあ次の質問！\n今回の転職でこれだけは絶対譲れない！というのを教えて！\n仕事内容でも、制度でも、条件でもOK◎\n\n例えば・・・\n「絶対土日休みじゃないと困る！」\n「絶対オンコールはできない！」\n\n後から『あるといいな』『ないといいな』についても聞くから、今は『絶対！』というものだけ教えてね。`,
             step: 2,
-            taggedData: {
-              transferReason: selectedOption
-            }
-          });
-        } else {
-          return res.json({
-            response: "選択肢の中から選んでいただけますか？番号でも、内容でも、どちらでもOKです！",
-            step: 1
-          });
+            taggedData: { transferReason: sel },
+          })
         }
+        return res.json({ response: '番号でも内容でもOKだよ。選択肢から教えてね！', step: 1 })
       }
 
-      // キーワードマッチング処理（大幅強化版）
-      const keywordMatches = {};
-      
-      Object.keys(transferReasonFlow).forEach(category => {
-        const keywords = transferReasonFlow[category].keywords;
-        let matchCount = 0;
-        
-        keywords.forEach(keyword => {
-          const keywordLower = keyword.toLowerCase();
-          const messageLower = message.toLowerCase();
-          
-          // 完全マッチ
-          if (messageLower.includes(keywordLower)) {
-            matchCount += 3;
-          }
-          // 部分マッチ（1文字でもマッチ強化）
-          else if (keywordLower.includes(messageLower) && messageLower.length >= 1) {
-            matchCount += 2;
-          }
-          // 類推マッチング（特別ルール）
-          else {
-            // 「人」→「人間関係」「職場の雰囲気」「上司」「同僚」等
-            if (messageLower === '人' && ['人間関係', '職場の雰囲気', '上司', '先輩', '同僚'].includes(keywordLower)) {
-              matchCount += 5;
-            }
-            // 「給料」→「給与」「年収」「待遇」等  
-            if (messageLower === '給料' && ['給与', '年収', '待遇', 'お金'].includes(keywordLower)) {
-              matchCount += 5;
-            }
-            // 「時間」→「残業」「勤務時間」「働き方」等
-            if (messageLower === '時間' && ['残業', '勤務時間', '働き方'].includes(keywordLower)) {
-              matchCount += 5;
-            }
-            // 「休み」→「休日」「有給」等
-            if (messageLower === '休み' && ['休日', '有給'].includes(keywordLower)) {
-              matchCount += 5;
-            }
-            // 「仕事」→「業務内容」「やりがい」「キャリア」等
-            if (messageLower === '仕事' && ['業務内容', 'やりがい', 'キャリア'].includes(keywordLower)) {
-              matchCount += 5;
-            }
-            // 「会社」→「経営」「組織」「理念」等
-            if (messageLower === '会社' && ['経営', '組織', '理念'].includes(keywordLower)) {
-              matchCount += 5;
-            }
-          }
-        });
-        
-        if (matchCount > 0) {
-          keywordMatches[category] = matchCount;
-        }
-      });
-      
-      // さらに緩い類推マッチング（どのカテゴリにもマッチしない場合の救済）
-      if (Object.keys(keywordMatches).length === 0) {
-        const messageLower = message.toLowerCase();
-        
-        // 人間関係系の救済キーワード
-        if (messageLower.match(/人|同僚|上司|先輩|雰囲気|関係|いじめ|パワハラ|お局/)) {
-          keywordMatches["働く仲間に関すること"] = 3;
-        }
-        // 労働条件系の救済キーワード  
-        else if (messageLower.match(/時間|残業|夜勤|休み|有給|働き方|シフト|オン|コール/)) {
-          keywordMatches["労働条件に関すること"] = 3;
-        }
-        // 給与系の救済キーワード
-        else if (messageLower.match(/給料|給与|年収|お金|安い|低い|待遇|ボーナス/)) {
-          keywordMatches["給与・待遇"] = 3;
-        }
-        // 仕事内容系の救済キーワード
-        else if (messageLower.match(/仕事|業務|やりがい|成長|キャリア|スキル|挑戦/)) {
-          keywordMatches["仕事内容・キャリアに関すること"] = 3;
-        }
-        // 経営系の救済キーワード
-        else if (messageLower.match(/会社|経営|組織|方針|理念|評価|教育/)) {
-          keywordMatches["経営・組織に関すること"] = 3;
-        }
-        // プライベート系の救済キーワード
-        else if (messageLower.match(/家庭|育児|子|家族|両立|プライベート|イベント/)) {
-          keywordMatches["プライベートに関すること"] = 3;
-        }
+      // キーワード集計
+      const counts = {}
+      const lower = msg.toLowerCase()
+      Object.keys(transferReasonFlow).forEach((cat) => {
+        let c = 0
+        transferReasonFlow[cat].keywords.forEach((k) => {
+          const kw = k.toLowerCase()
+          if (lower.includes(kw)) c += 3
+          else if (kw.includes(lower) && lower.length >= 1) c += 2
+        })
+        if (c > 0) counts[cat] = c
+      })
+
+      // 救済ルール（何も引っかからない場合）
+      if (Object.keys(counts).length === 0) {
+        if (lower.match(/人|同僚|上司|先輩|雰囲気|関係|いじめ|パワハラ|お局/))
+          counts['働く仲間に関すること'] = 3
+        else if (lower.match(/時間|残業|夜勤|休み|有給|働き方|シフト|オン|コール/))
+          counts['労働条件に関すること'] = 3
+        else if (lower.match(/給料|給与|年収|お金|待遇|ボーナス/))
+          counts['給与・待遇'] = 3
+        else if (lower.match(/仕事|業務|やりがい|成長|キャリア|スキル|挑戦/))
+          counts['仕事内容・キャリアに関すること'] = 3
+        else if (lower.match(/会社|経営|組織|方針|理念|評価|教育/))
+          counts['経営・組織に関すること'] = 3
+        else if (lower.match(/家庭|育児|子|家族|両立|プライベート|イベント/))
+          counts['プライベートに関すること'] = 3
       }
 
-      // 最多マッチカテゴリを特定
-      const maxMatches = Math.max(...Object.values(keywordMatches), 0);
-      const topCategories = Object.keys(keywordMatches).filter(cat => 
-        keywordMatches[cat] === maxMatches
-      );
+      const max = Math.max(0, ...Object.values(counts))
+      const tops = Object.keys(counts).filter((k) => counts[k] === max)
 
-      if (topCategories.length === 0) {
-        // 未マッチ処理
-        session.transferReasonRaw = message;
+      if (tops.length === 0) {
+        session.transferReasonRaw = msg
+        // Step1 未マッチ固定セリフ
         return res.json({
-          response: `なるほど、その気持ちよくわかる！大事な転職のきっかけだね◎
-
-ありがとう！
-
-じゃあ次の質問！
-今回の転職でこれだけは絶対譲れない！というのを教えて！
-仕事内容でも、制度でも、条件でもOK◎
-
-例えば・・・
-「絶対土日休みじゃないと困る！」
-「絶対オンコールはできない！」
-
-後から『あるといいな』『ないといいな』についても聞くから、今は『絶対！』というものだけ教えてね。`,
+          response:
+            'なるほど、その気持ちよくわかる！大事な転職のきっかけだね◎\n\nありがとう！\n\nじゃあ次の質問！\n今回の転職でこれだけは絶対譲れない！というのを教えて！\n仕事内容でも、制度でも、条件でもOK◎\n\n例えば・・・\n「絶対土日休みじゃないと困る！」\n「絶対オンコールはできない！」\n\n後から『あるといいな』『ないといいな』についても聞くから、今は『絶対！』というものだけ教えてね。',
           step: 2,
-          taggedData: {
-            transferReason: null,
-            transferReasonRaw: message
-          }
-        });
+          taggedData: { transferReason: null, transferReasonRaw: msg },
+        })
       }
 
-      const selectedCategory = topCategories[0];
-      const categoryData = transferReasonFlow[selectedCategory];
-      const options = categoryData.internal_options;
+      const category = tops[0]
+      const options = transferReasonFlow[category].internal_options || []
+      session.currentCategory = category
 
-      // 禁止カテゴリ（候補が空）の処理
+      // 候補が空 → 未分類で次へ
       if (options.length === 0) {
-        session.transferReasonRaw = message;
+        session.transferReasonRaw = msg
+        // Step1 未マッチ固定セリフ
         return res.json({
-          response: `なるほど、その気持ちよくわかる！大事な転職のきっかけだね◎
-
-ありがとう！
-
-じゃあ次の質問！
-今回の転職でこれだけは絶対譲れない！というのを教えて！
-仕事内容でも、制度でも、条件でもOK◎
-
-例えば・・・
-「絶対土日休みじゃないと困る！」
-「絶対オンコールはできない！」
-
-後から『あるといいな』『ないといいな』についても聞くから、今は『絶対！』というものだけ教えてね。`,
+          response:
+            'なるほど、その気持ちよくわかる！大事な転職のきっかけだね◎\n\nありがとう！\n\nじゃあ次の質問！\n今回の転職でこれだけは絶対譲れない！というのを教えて！',
           step: 2,
-          taggedData: {
-            transferReason: null,
-            transferReasonRaw: message
-          }
-        });
+          taggedData: { transferReason: null, transferReasonRaw: msg },
+        })
       }
 
-      // 深掘りまたは候補提示
+      // 深掘り2回 → 3回目で候補提示
       if (session.deepDrillCount < 2) {
-        session.deepDrillCount++;
-        session.currentCategory = selectedCategory;
-        
-        // カテゴリ別深掘り質問を取得
-        const drillQuestions = deepDrillQuestions[selectedCategory] || [
-          ["それについてもう少し詳しく教えて", "具体的にはどんな？"],
-          ["他にも関連することはある？", "それはなぜ？"]
-        ];
-        const selectedQuestion = getRandomFromArray(drillQuestions[session.deepDrillCount - 1], 1)[0];
-        
-        return res.json({
-          response: selectedQuestion,
-          step: 1
-        });
+        session.deepDrillCount += 1
+        const qsList = deepDrillQuestions[category] || [['もう少し詳しく教えて！'], ['他にもある？']]
+        const qs = qsList[session.deepDrillCount - 1] || ['もう少し詳しく教えて！']
+        return res.json({ response: pick(qs), step: 1 })
       } else {
-        // 候補提示（2-3件厳守）
-        const candidateOptions = options.slice(0, 3);
-        const optionsList = candidateOptions.map((opt, index) => 
-          `${index + 1}. ${opt}`
-        ).join('\n');
-        
-        session.awaitingSelection = true;
-        session.selectionOptions = candidateOptions;
-        
+        const cand = options.slice(0, 3)
+        session.awaitingSelection = true
+        session.selectionOptions = cand
+        const list = cand.map((o, i) => `${i + 1}. ${o}`).join('\n')
         return res.json({
-          response: `この中だとどれが一番近い？
-
-${optionsList}
-
-番号でも、内容でも、どちらでもOKです！`,
-          step: 1
-        });
+          response: `この中だとどれが一番近い？\n\n${list}\n\n番号でも、内容でも、どちらでもOKです！`,
+          step: 1,
+        })
       }
     }
 
-    // Step2: 絶対希望（Must条件）
+    // ---- Step2: Must ----
     if (currentStep === 2) {
-      // 「ない」チェック
-      if (message.toLowerCase().includes('ない') || message.toLowerCase().includes('なし')) {
+      const lower = msg.toLowerCase()
+      if (lower.includes('ない') || lower.includes('なし')) {
         return res.json({
-          response: `ありがとう！
-
-それじゃあ次に、こうだったらいいな、というのを聞いていくね。
-これも仕事内容でも、制度でも、条件面でも、条件でもOK◎
-
-例えば・・・
-「マイカー通勤ができると嬉しいな」
-「できれば夜勤がないといいな」
-って感じ！`,
-          step: 3
-        });
-      }
-
-      // 選択処理中の回答チェック
-      if (session.awaitingSelection) {
-        const selectedOption = session.selectionOptions.find(opt => 
-          message.toLowerCase().includes(opt.toLowerCase()) ||
-          message.includes('1') && session.selectionOptions[0] === opt ||
-          message.includes('2') && session.selectionOptions[1] === opt ||
-          message.includes('3') && session.selectionOptions[2] === opt
-        );
-        
-        if (selectedOption) {
-          session.mustConditions.push(selectedOption);
-          session.awaitingSelection = false;
-          session.selectionOptions = [];
-          
-          return res.json({
-            response: `そっか、『${selectedOption}』が絶対ってことだね！
-
-他にも絶対条件はある？`,
-            step: 2,
-            taggedData: {
-              mustConditions: session.mustConditions
-            }
-          });
-        }
-      }
-
-      // mustWant辞書マッチング（改良版）
-      const matchedItems = findBestMatches(message, 3);
-
-      if (matchedItems.length === 0) {
-        // 未マッチ処理
-        return res.json({
-          response: `そっか、わかった！大事な希望だね◎
-
-他にも絶対条件はある？`,
-          step: 2
-        });
-      }
-
-      const topMatches = matchedItems.slice(0, 3);
-      if (topMatches.length === 1) {
-        session.mustConditions.push(topMatches[0]);
-        return res.json({
-          response: `そっか、『${topMatches[0]}』が絶対ってことだね！
-
-他にも絶対条件はある？`,
-          step: 2,
-          taggedData: {
-            mustConditions: session.mustConditions
-          }
-        });
-      } else {
-        const optionsList = topMatches.map((opt, index) => 
-          `${index + 1}. ${opt}`
-        ).join('\n');
-        
-        session.awaitingSelection = true;
-        session.selectionOptions = topMatches;
-        
-        return res.json({
-          response: `この中だとどれが一番近い？
-
-${optionsList}
-
-番号でも、内容でも、どちらでもOKです！`,
-          step: 2
-        });
-      }
-    }
-
-    // Step3: 希望条件（Want条件）
-    if (currentStep === 3) {
-      // 「ない」チェック
-      if (message.toLowerCase().includes('ない') || message.toLowerCase().includes('なし')) {
-        return res.json({
-          response: `質問は残り2つ！
-あと少しだから、頑張って😆✨️
-
-次に教えて欲しいのは『これまでやってきたこと』
-ここは次回担当エージェントがしっかりヒアリングしていくから、ざっくりでOKだよ。
-これまでやってきたことで、これからも活かしたいことを教えてね。`,
-          step: 4
-        });
-      }
-
-      // 選択処理中の回答チェック
-      if (session.awaitingSelection) {
-        const selectedOption = session.selectionOptions.find(opt => 
-          message.toLowerCase().includes(opt.toLowerCase()) ||
-          message.includes('1') && session.selectionOptions[0] === opt ||
-          message.includes('2') && session.selectionOptions[1] === opt ||
-          message.includes('3') && session.selectionOptions[2] === opt
-        );
-        
-        if (selectedOption) {
-          session.wantConditions.push(selectedOption);
-          session.awaitingSelection = false;
-          session.selectionOptions = [];
-          
-          return res.json({
-            response: `了解！『${selectedOption}』だと嬉しいってことだね！
-
-他にもあったらいいなっていうのはある？`,
-            step: 3,
-            taggedData: {
-              wantConditions: session.wantConditions
-            }
-          });
-        }
-      }
-
-      // mustWant辞書マッチング（Step2と同じ改良版）
-      const matchedItems = findBestMatches(message, 3);
-
-      if (matchedItems.length === 0) {
-        // 未マッチ処理
-        return res.json({
-          response: `了解！気持ちは受け取ったよ◎
-
-他にもあったらいいなっていうのはある？`,
-          step: 3
-        });
-      }
-
-      const topMatches = matchedItems.slice(0, 3);
-      if (topMatches.length === 1) {
-        session.wantConditions.push(topMatches[0]);
-        return res.json({
-          response: `了解！『${topMatches[0]}』だと嬉しいってことだね！
-
-他にもあったらいいなっていうのはある？`,
+          response:
+            'それじゃあ次に、こうだったらいいな、というのを聞いていくね。\nこれも仕事内容でも、制度でも、条件面でもOK◎\n\n例えば・・・\n「マイカー通勤ができると嬉しいな」\n「できれば夜勤がないといいな」\nって感じ！',
           step: 3,
-          taggedData: {
-            wantConditions: session.wantConditions
-          }
-        });
-      } else {
-        const optionsList = topMatches.map((opt, index) => 
-          `${index + 1}. ${opt}`
-        ).join('\n');
-        
-        session.awaitingSelection = true;
-        session.selectionOptions = topMatches;
-        
-        return res.json({
-          response: `この中だとどれが一番近い？
-
-${optionsList}
-
-番号でも、内容でも、どちらでもOKです！`,
-          step: 3
-        });
+        })
       }
+
+      if (session.awaitingSelection && session.selectionOptions.length) {
+        const sel = session.selectionOptions.find(
+          (opt, i) =>
+            msg.includes(opt) || msg === String(i + 1) || msg.includes(String(i + 1))
+        )
+        if (sel) {
+          session.mustConditions.push(sel)
+          session.awaitingSelection = false
+          session.selectionOptions = []
+          // Step2: 専用復唱
+          return res.json({
+            response: `そっか、『${sel}』が絶対ってことだね！\n\n他にも絶対条件はある？`,
+            step: 2,
+            taggedData: { mustConditions: session.mustConditions },
+          })
+        }
+      }
+
+      const matched = findBestMatches(msg, 3)
+      if (matched.length === 0) {
+        // Step2 未マッチ固定セリフ
+        return res.json({
+          response: 'そっか、わかった！大事な希望だね◎\n\n他にも絶対条件はある？',
+          step: 2,
+        })
+      }
+      if (matched.length === 1) {
+        session.mustConditions.push(matched[0])
+        // Step2: 専用復唱
+        return res.json({
+          response: `そっか、『${matched[0]}』が絶対ってことだね！\n\n他にも絶対条件はある？`,
+          step: 2,
+          taggedData: { mustConditions: session.mustConditions },
+        })
+      }
+      session.awaitingSelection = true
+      session.selectionOptions = matched
+      return res.json({
+        response:
+          `この中だとどれが一番近い？\n\n${matched.map((o, i) => `${i + 1}. ${o}`).join('\n')}\n\n番号でも、内容でも、どちらでもOKです！`,
+        step: 2,
+      })
     }
 
-    // Step4: Can（これまでやってきたこと）
+    // ---- Step3: Want ----
+    if (currentStep === 3) {
+      const lower = msg.toLowerCase()
+      if (lower.includes('ない') || lower.includes('なし')) {
+        return res.json({
+          response:
+            '質問は残り2つ！あと少しだから、頑張って😆✨️\n\n次に教えて欲しいのは『これまでやってきたこと（活かしたい経験）』。\nざっくりでOKだよ！',
+          step: 4,
+        })
+      }
+
+      if (session.awaitingSelection && session.selectionOptions.length) {
+        const sel = session.selectionOptions.find(
+          (opt, i) =>
+            msg.includes(opt) || msg === String(i + 1) || msg.includes(String(i + 1))
+        )
+        if (sel) {
+          session.wantConditions.push(sel)
+          session.awaitingSelection = false
+          session.selectionOptions = []
+          // Step3: 専用復唱
+          return res.json({
+            response: `了解！『${sel}』だと嬉しいってことだね！\n\n他にもあったらいいなっていうのはある？`,
+            step: 3,
+            taggedData: { wantConditions: session.wantConditions },
+          })
+        }
+      }
+
+      const matched = findBestMatches(msg, 3)
+      if (matched.length === 0) {
+        // Step3 未マッチ固定セリフ
+        return res.json({
+          response: '了解！気持ちは受け取ったよ◎\n\n他にもあったらいいなっていうのはある？',
+          step: 3,
+        })
+      }
+      if (matched.length === 1) {
+        session.wantConditions.push(matched[0])
+        // Step3: 専用復唱
+        return res.json({
+          response: `了解！『${matched[0]}』だと嬉しいってことだね！\n\n他にもあったらいいなっていうのはある？`,
+          step: 3,
+          taggedData: { wantConditions: session.wantConditions },
+        })
+      }
+      session.awaitingSelection = true
+      session.selectionOptions = matched
+      return res.json({
+        response:
+          `この中だとどれが一番近い？\n\n${matched.map((o, i) => `${i + 1}. ${o}`).join('\n')}\n\n番号でも、内容でも、どちらでもOKです！`,
+        step: 3,
+      })
+    }
+
+    // ---- Step4: Can ----
     if (currentStep === 4) {
-      session.canDo = message;
+      session.canDo = msg
       return res.json({
-        response: `いいね！
-
-これが最後の質問👏
-今回の転職で叶えたい挑戦や、夢はある？`,
-        step: 5
-      });
+        response:
+          'いいね！\n\nこれが最後の質問👏\n今回の転職で叶えたい挑戦や、夢はある？',
+        step: 5,
+      })
     }
 
-    // Step5: Will（挑戦したいこと）
+    // ---- Step5: Will ----
     if (currentStep === 5) {
-      session.willDo = message;
+      session.willDo = msg
       return res.json({
-        response: `今日はたくさん話してくれてありがとう！
-ここまでの内容を担当エージェントに引き継ぐね。
-次回の面談で一緒に詰めていこう！
-
-📋 **収集データ**
-求職者番号: ${session.candidateNumber}
-転職理由: ${session.transferReason || session.transferReasonRaw || '未設定'}
-絶対条件: ${session.mustConditions.length > 0 ? session.mustConditions.join(', ') : '未設定'}
-希望条件: ${session.wantConditions.length > 0 ? session.wantConditions.join(', ') : '未設定'}
-活かしたい経験: ${session.canDo}
-挑戦したいこと: ${session.willDo}`,
+        response:
+          `今日はたくさん話してくれてありがとう！ここまでの内容を担当エージェントに引き継ぐね。\n次回の面談で一緒に詰めていこう！\n\n📋 収集データ\n求職者番号: ${session.candidateNumber}\n転職理由: ${session.transferReason || session.transferReasonRaw || '未設定'}\n絶対条件: ${session.mustConditions.length ? session.mustConditions.join(', ') : '未設定'}\n希望条件: ${session.wantConditions.length ? session.wantConditions.join(', ') : '未設定'}\n活かしたい経験: ${session.canDo || '未入力'}\n挑戦したいこと: ${session.willDo || '未入力'}`,
         step: 6,
-        sessionData: session
-      });
+        sessionData: session,
+      })
     }
 
-    // Step6: 完了
-    if (currentStep >= 6) {
-      return res.json({
-        response: "ヒアリング完了です！お疲れ様でした✨",
-        step: 6,
-        sessionData: session
-      });
-    }
-
-    return res.json({ 
-      response: "申し訳ありません。システムエラーが発生しました。", 
-      step: currentStep 
-    });
-
-  } catch (error) {
-    console.error('Error in chat API:', error);
-    return res.status(500).json({ 
-      message: 'Internal server error',
-      error: error.message 
-    });
+    // ---- 完了 ----
+    return res.json({ response: 'ヒアリング完了です！お疲れ様でした✨', step: 6, sessionData: session })
+  } catch (err) {
+    console.error('Error in chat API:', err)
+    return res.status(500).json({ message: 'Internal server error', error: String(err?.message || err) })
   }
 }
