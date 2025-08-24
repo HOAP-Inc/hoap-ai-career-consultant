@@ -1,6 +1,5 @@
-// pages/_app.js
+// before
 import '@/styles/globals.css'
 
-export default function App({ Component, pageProps }) {
-  return <Component {...pageProps} />
-}
+// after
+import '../styles/globals.css'
