@@ -477,20 +477,88 @@ export default async function handler(req, res) {
         }
       }
 
-      // キーワードマッチング処理
+      // キーワードマッチング処理（大幅強化版）
       const keywordMatches = {};
+      
       Object.keys(transferReasonFlow).forEach(category => {
         const keywords = transferReasonFlow[category].keywords;
         let matchCount = 0;
+        
         keywords.forEach(keyword => {
-          if (message.toLowerCase().includes(keyword.toLowerCase())) {
-            matchCount++;
+          const keywordLower = keyword.toLowerCase();
+          const messageLower = message.toLowerCase();
+          
+          // 完全マッチ
+          if (messageLower.includes(keywordLower)) {
+            matchCount += 3;
+          }
+          // 部分マッチ（1文字でもマッチ強化）
+          else if (keywordLower.includes(messageLower) && messageLower.length >= 1) {
+            matchCount += 2;
+          }
+          // 類推マッチング（特別ルール）
+          else {
+            // 「人」→「人間関係」「職場の雰囲気」「上司」「同僚」等
+            if (messageLower === '人' && ['人間関係', '職場の雰囲気', '上司', '先輩', '同僚'].includes(keywordLower)) {
+              matchCount += 5;
+            }
+            // 「給料」→「給与」「年収」「待遇」等  
+            if (messageLower === '給料' && ['給与', '年収', '待遇', 'お金'].includes(keywordLower)) {
+              matchCount += 5;
+            }
+            // 「時間」→「残業」「勤務時間」「働き方」等
+            if (messageLower === '時間' && ['残業', '勤務時間', '働き方'].includes(keywordLower)) {
+              matchCount += 5;
+            }
+            // 「休み」→「休日」「有給」等
+            if (messageLower === '休み' && ['休日', '有給'].includes(keywordLower)) {
+              matchCount += 5;
+            }
+            // 「仕事」→「業務内容」「やりがい」「キャリア」等
+            if (messageLower === '仕事' && ['業務内容', 'やりがい', 'キャリア'].includes(keywordLower)) {
+              matchCount += 5;
+            }
+            // 「会社」→「経営」「組織」「理念」等
+            if (messageLower === '会社' && ['経営', '組織', '理念'].includes(keywordLower)) {
+              matchCount += 5;
+            }
           }
         });
+        
         if (matchCount > 0) {
           keywordMatches[category] = matchCount;
         }
       });
+      
+      // さらに緩い類推マッチング（どのカテゴリにもマッチしない場合の救済）
+      if (Object.keys(keywordMatches).length === 0) {
+        const messageLower = message.toLowerCase();
+        
+        // 人間関係系の救済キーワード
+        if (messageLower.match(/人|同僚|上司|先輩|雰囲気|関係|いじめ|パワハラ|お局/)) {
+          keywordMatches["働く仲間に関すること"] = 3;
+        }
+        // 労働条件系の救済キーワード  
+        else if (messageLower.match(/時間|残業|夜勤|休み|有給|働き方|シフト|オン|コール/)) {
+          keywordMatches["労働条件に関すること"] = 3;
+        }
+        // 給与系の救済キーワード
+        else if (messageLower.match(/給料|給与|年収|お金|安い|低い|待遇|ボーナス/)) {
+          keywordMatches["給与・待遇"] = 3;
+        }
+        // 仕事内容系の救済キーワード
+        else if (messageLower.match(/仕事|業務|やりがい|成長|キャリア|スキル|挑戦/)) {
+          keywordMatches["仕事内容・キャリアに関すること"] = 3;
+        }
+        // 経営系の救済キーワード
+        else if (messageLower.match(/会社|経営|組織|方針|理念|評価|教育/)) {
+          keywordMatches["経営・組織に関すること"] = 3;
+        }
+        // プライベート系の救済キーワード
+        else if (messageLower.match(/家庭|育児|子|家族|両立|プライベート|イベント/)) {
+          keywordMatches["プライベートに関すること"] = 3;
+        }
+      }
 
       // 最多マッチカテゴリを特定
       const maxMatches = Math.max(...Object.values(keywordMatches), 0);
