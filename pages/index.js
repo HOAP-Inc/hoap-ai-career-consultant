@@ -10,54 +10,132 @@ const steps = [
   { label: 'これから' },
 ]
 
-// ステータス用の小さいチップ
+// ステータス用チップ
 function StatusChip({ label, value, ok }) {
   return (
     <div className="flex items-center gap-1 text-xs px-2 py-1 rounded-full border shadow-sm select-none
       bg-white/80 border-pink-100 text-slate-700">
       <span className="text-slate-400">{label}：</span>
-      <span className={`${ok ? 'font-medium text-slate-800' : 'text-slate-400'}`}>
-        {value}
-      </span>
+      <span className={`${ok ? 'font-medium text-slate-800' : 'text-slate-400'}`}>{value}</span>
     </div>
   )
 }
 
 export default function Home() {
+  // ====== 会話・UI状態 ======
   const [messages, setMessages] = useState([
     {
       type: 'ai',
       content:
-        'こんにちは！\n担当エージェントとの面談がスムーズに進むように、HOAPのAIエージェントに少しだけ話を聞かせてね。\n\nいくつか質問をしていくね。\n担当エージェントとの面談でしっかりヒアリングするから、今日は自分の転職について改めて整理する感じで、気楽に話してね！\n\nまず3つ教えて！\n①求職者番号②今の職種③今どこで働いてる？',
+`こんにちは！
+担当エージェントとの面談がスムーズに進むように、HOAPのAIエージェントに少しだけ話を聞かせてね。
+
+いくつか質問をしていくね。
+担当エージェントとの面談でしっかりヒアリングするから、今日は自分の転職について改めて整理する感じで、気楽に話してね！
+
+まず3つ教えて！
+①求職者番号②今の職種③今どこで働いてる？`,
     },
   ])
-  const [currentStep, setCurrentStep] = useState(0)
+  const [currentStep, setCurrentStep] = useState(0) // 0=基本情報, 1以降=サーバー制御
   const [candidateNumber, setCandidateNumber] = useState('')
-  const [qualification, setQualification] = useState('')   // 職種
-  const [workplace, setWorkplace] = useState('')           // 勤務先/業態
-  const [transferReason, setTransferReason] = useState('') // 転職理由
+  const [qualification, setQualification] = useState('')   // ②今の職種
+  const [workplace, setWorkplace] = useState('')           // ③今どこで働いてる？
+  const [transferReason, setTransferReason] = useState('')
   const [mustCount, setMustCount] = useState(0)
   const [wantCount, setWantCount] = useState(0)
 
   const [isNumberConfirmed, setIsNumberConfirmed] = useState(false)
-  const [sessionId] = useState(() => Math.random().toString(36).slice(2))
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
+  const [sessionId] = useState(() => Math.random().toString(36).slice(2))
 
+  // ====== 参照 ======
   const listRef = useRef(null)
+  const inputRef = useRef(null)
 
+  // ====== スクロール追従 ======
   useEffect(() => {
     listRef.current?.lastElementChild?.scrollIntoView({ behavior: 'smooth' })
   }, [messages, loading])
 
-  const onSend = async () => {
-    if (!input.trim() || loading) return
-    const outgoing = input.trim()
-    setMessages((m) => [...m, { type: 'user', content: outgoing }])
+  // ====== ユーティリティ ======
+  const addAI = (text) =>
+    setMessages((m) => [...m, { type: 'ai', content: text }])
+
+  const addUser = (text) =>
+    setMessages((m) => [...m, { type: 'user', content: text }])
+
+  const hardClearInput = () => {
     setInput('')
+    // IME中やブラウザ差で残るのを物理的にクリア
+    if (inputRef.current) inputRef.current.value = ''
+  }
+
+  // ====== 送信 ======
+  const onSend = async () => {
+    const raw = inputRef.current ? inputRef.current.value : input
+    const outgoing = (raw || '').trim()
+    if (!outgoing || loading) return
+
+    addUser(outgoing)
+    hardClearInput()
     setLoading(true)
 
     try {
+      // ---- Step0 はフロントで厳密制御（1個ずつ） ----
+      if (currentStep === 0) {
+        // ①求職者番号 未確定
+        if (!isNumberConfirmed) {
+          const num = (outgoing.match(/\d+/) || [])[0]
+          if (!num) {
+            addAI(`ごめん！最初に求職者番号を教えてね。\n①求職者番号②今の職種③今どこで働いてる？ の順でお願い！`)
+            return
+          }
+          setCandidateNumber(num)
+          setIsNumberConfirmed(true)
+          addAI(`求職者番号：${num} だね！\n他の情報もお願い。\n②「今の職種」を教えて！`)
+          return
+        }
+
+        // ②今の職種 未入力
+        if (!qualification) {
+          setQualification(outgoing)
+          addAI(`OK！次は ③「いま働いてる場所」（施設名や業態）を教えて！`)
+          return
+        }
+
+        // ③今どこで働いてる？ 未入力
+        if (!workplace) {
+          setWorkplace(outgoing)
+          // ここで初めてサーバーへ（Step1開始の合図）
+          const res = await fetch('/api/chat', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              message: '基本情報の入力が完了しました。',
+              conversationHistory: messages.concat({ type: 'user', content: outgoing }),
+              currentStep: 0,
+              candidateNumber,
+              isNumberConfirmed: true,
+              sessionId,
+            }),
+          })
+          if (!res.ok) throw new Error('API error')
+          const data = await res.json()
+          addAI(data.response || `ありがとう！\nはじめに、今回の転職理由を教えてほしいな。`)
+          if (typeof data.step === 'number') setCurrentStep(data.step) // 通常は1になる
+          // 以降の画面用にセッション受け取り
+          if (data.sessionData) {
+            const s = data.sessionData
+            if (Array.isArray(s.mustConditions)) setMustCount(s.mustConditions.length)
+            if (Array.isArray(s.wantConditions)) setWantCount(s.wantConditions.length)
+          }
+          return
+        }
+      }
+
+      // ---- Step1以降はサーバー制御 ----
       const res = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -73,11 +151,10 @@ export default function Home() {
       if (!res.ok) throw new Error('API error')
       const data = await res.json()
 
-      setMessages((m) => [...m, { type: 'ai', content: data.response }])
+      addAI(data.response)
 
       if (typeof data.step === 'number') setCurrentStep(data.step)
 
-      // セッションミラーが返ってきたらUIに反映
       if (data.sessionData) {
         const s = data.sessionData
         if (s.candidateNumber) { setCandidateNumber(s.candidateNumber); setIsNumberConfirmed(true) }
@@ -88,26 +165,12 @@ export default function Home() {
         if (Array.isArray(s.wantConditions)) setWantCount(s.wantConditions.length)
       }
 
-      // 旧APIの個別返却にも互換
-      if (typeof data.candidateNumber === 'string' && data.candidateNumber) {
-        setCandidateNumber(data.candidateNumber)
-        setIsNumberConfirmed(true)
-      }
-      if (typeof data.isNumberConfirmed === 'boolean') setIsNumberConfirmed(data.isNumberConfirmed)
-
-      // Step0のとき、最低限のUI埋め（セッション返却がない版の保険）
-      if (currentStep === 0 && isNumberConfirmed) {
-        if (!qualification) setQualification(outgoing)
-        else if (!workplace) setWorkplace(outgoing)
-      }
+      // サーバー未実装時の保険：自由文の転職理由を軽く保持
       if (currentStep === 1 && !transferReason) {
         setTransferReason(outgoing.length > 120 ? outgoing.slice(0, 120) + '…' : outgoing)
       }
     } catch (e) {
-      setMessages((m) => [
-        ...m,
-        { type: 'ai', content: 'すみません、エラーが発生しました。もう一度お試しください。' },
-      ])
+      addAI('すみません、エラーが発生しました。もう一度お試しください。')
     } finally {
       setLoading(false)
     }
@@ -122,7 +185,7 @@ export default function Home() {
         <meta name='viewport' content='width=device-width, initial-scale=1' />
       </Head>
 
-      {/* ちょいデザイン（グローバルCSSは _app.js で読み込み済み） */}
+      {/* ちょいデザイン */}
       <style jsx global>{`
         .gradient-bg { background: linear-gradient(135deg, #fdf2f8 0%, #faf5ff 50%, #eff6ff 100%); }
         .gradient-text { background: linear-gradient(135deg, #ec4899 0%, #8b5cf6 50%, #3b82f6 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
@@ -157,7 +220,7 @@ export default function Home() {
             />
           </div>
 
-          {/* ▼ ステータス行 */}
+          {/* ステータス行 */}
           <div className="mt-3 flex flex-wrap gap-2">
             <StatusChip label="番号" value={candidateNumber || '未入力'} ok={!!candidateNumber} />
             <StatusChip label="職種" value={qualification || '未入力'} ok={!!qualification} />
@@ -176,14 +239,10 @@ export default function Home() {
             <div key={i} className={`flex ${m.type === 'user' ? 'justify-end' : 'justify-start'} message-enter`}>
               <div className={`flex max-w-xs lg:max-w-2xl ${m.type === 'user' ? 'flex-row-reverse' : 'flex-row'} items-start gap-3`}>
                 <div className={`flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center overflow-hidden ${m.type === 'user' ? 'bg-gradient-to-r from-pink-400 via-purple-400 to-blue-400 text-white shadow-md' : 'bg-gradient-to-r from-gray-100 to-gray-200 shadow-md border-2 border-white'}`}>
-                  {m.type === 'user' ? (
-                    <svg width={18} height={18} viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth={2}>
-                      <path d='M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2'></path>
-                      <circle cx='12' cy='7' r='4'></circle>
-                    </svg>
-                  ) : (
-                    <span className='text-xl'>🤖</span>
-                  )}
+                  {m.type === 'user'
+                    ? (<svg width={18} height={18} viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth={2}><path d='M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2'></path><circle cx='12' cy='7' r='4'></circle></svg>)
+                    : (<span className='text-xl'>🤖</span>)
+                  }
                 </div>
                 <div className={`${m.type === 'user' ? 'bg-gradient-to-r from-pink-500 via-purple-500 to-blue-500 text-white ml-auto shadow-lg' : 'bg-white/90 backdrop-blur-sm text-slate-700 border border-pink-100/50'} rounded-2xl px-4 py-3 shadow-sm`}>
                   <div className='text-sm whitespace-pre-wrap leading-relaxed'>{m.content}</div>
@@ -216,13 +275,14 @@ export default function Home() {
           <div className='flex items-end gap-3'>
             <div className='flex-1 relative'>
               <textarea
+                ref={inputRef}
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 placeholder={!isNumberConfirmed && currentStep === 0 ? '求職者番号を入力してください...' : 'メッセージを入力...'}
                 className='w-full bg-white border border-pink-200 rounded-xl px-4 py-3 text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-purple-400 focus:border-transparent resize-none min-h-[52px] max-h-32 shadow-sm'
                 rows={1}
                 onKeyDown={(e) => {
-                  if (e.key === 'Enter' && !e.shiftKey) {
+                  if (e.key === 'Enter' && !e.isComposing && !e.shiftKey) {
                     e.preventDefault()
                     onSend()
                   }
