@@ -52,9 +52,10 @@
           <div class='bg-white/90 backdrop-blur-sm text-slate-700 border border-pink-100/50 rounded-2xl px-4 py-3 shadow-sm'>
             <div class='text-sm whitespace-pre-wrap leading-relaxed'>
               こんにちは  
-              担当との面談をスムーズにするために、AIが先に少しだけ聞くね。<br><br>
-              まず三つ教えて  
-              ①求職者番号 ②今の職種 ③今どこで働いてる
+              担当エージェントとの面談をスムーズにするために、株式会社HOAPのAIキャリアエージェントに先に少しだけ話を聞かせてね。<br><br>
+              
+　　　　　　　　 まず3つだけ教えて！  
+              ①求職者番号 ②今の職種 ③今どこで働いてる？
             </div>
           </div>
         </div>
@@ -206,14 +207,14 @@
 絶対土日休みじゃないと困る！
 絶対オンコールはできない！
 
-後から あるといいな についても聞くから、今は 絶対 だけ教えてね。`;
+後から「あるといいな」についても聞くから、今は「絶対」だけ教えてね。`;
       }
       else if (currentStep === 2) {
         if (/なし|ない/i.test(message)) {
           currentStep = 3; bump = true;
           response =
 `ありがとう！
-それじゃあ次に、こうだったらいいな、というのを聞いていくね。
+それじゃあ次に「こうだったらいいな」というのを聞いていくね。
 これも仕事内容でも、制度でも、条件面でもOK◎
 
 例えば・・・
