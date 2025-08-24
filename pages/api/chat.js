@@ -230,38 +230,73 @@ export default async function handler(req, res) {
 
     const session = getSession(sessionId);
 
-    // Step0: 求職者番号チェック
+    // Step0: 基本情報収集（番号→職種→勤務先の順）
     if (currentStep === 0) {
-      if (!isNumberConfirmed) {
+      // Step0-1: 求職者番号収集
+      if (!session.candidateNumber) {
         const numberMatch = message.match(/\d+/);
         if (numberMatch) {
           const extractedNumber = numberMatch[0];
+          
+          // 5桁以上チェック
+          if (extractedNumber.length < 5) {
+            return res.json({
+              response: `番号が違うみたい...もう一度確認してもらえる？
+登録時のLINEに書いてあるよ！`,
+              step: 0
+            });
+          }
+          
           session.candidateNumber = extractedNumber;
           return res.json({
-            response: `求職者番号：${extractedNumber} ですね！
-他の情報もお聞かせください。
-②今の職種③今どこで働いてる？`,
-            candidateNumber: extractedNumber,
-            isNumberConfirmed: true,
-            step: 0
+            response: `求職者番号：${extractedNumber} だね！
+次は ②「今の職種」を教えて！`,
+            step: 0,
+            candidateNumber: extractedNumber
           });
         } else {
           return res.json({
-            response: `すみません、最初に求職者番号を教えていただけますか？
+            response: `こんにちは！
+担当エージェントとの面談がスムーズに進むように、HOAPのAIエージェントに少しだけ話を聞かせてね。
+
+いくつか質問をしていくね。
+担当エージェントとの面談でしっかりヒアリングするから、今日は自分の転職について改めて整理する感じで、気楽に話してね！
+
+まず3つ教えて！
 ①求職者番号②今の職種③今どこで働いてる？
-の順でお願いします。`,
+
+まずは①求職者番号を教えて！（登録時のLINEで送ってるよ！）`,
             step: 0
           });
         }
-      } else {
-        // 職種・職場を保存してStep1へ
+      }
+      
+      // Step0-2: 職種収集
+      else if (!session.qualification) {
         session.qualification = message;
         return res.json({
-          response: `ありがとう！
+          response: `OK！次は ③「いま働いてる場所」（施設名や業態）を教えて！`,
+          step: 0,
+          qualification: message
+        });
+      }
+      
+      // Step0-3: 勤務先収集→Step1へ
+      else {
+        session.workplace = message;
+        return res.json({
+          response: `なるほど、ありがとう！
+ここから本題いくよ。
 
 はじめに、今回の転職理由を教えてほしいな。きっかけってどんなことだった？
 しんどいと思ったこと、これはもう無理って思ったこと、逆にこういうことに挑戦したい！って思ったこと、何でもOKだよ◎`,
-          step: 1
+          step: 1,
+          workplace: message,
+          basicInfo: {
+            candidateNumber: session.candidateNumber,
+            qualification: session.qualification,
+            workplace: message
+          }
         });
       }
     }
@@ -418,7 +453,7 @@ export default async function handler(req, res) {
 
 ${optionsList}
 
-番号でも、内容でも、どちらでもOKです！`,
+番号でも、内容でも、どちらでもOKだよ！`,
           step: 1
         });
       }
