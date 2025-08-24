@@ -1,7 +1,7 @@
 import OpenAI from 'openai'
-
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
 
+// === 転職理由カテゴリ ===
 const transferReasonFlow = {
   '経営・組織に関すること': {
     keywords: ['理念','方針','価値観','経営','運営','マネジメント','方向性','ビジョン','ミッション','考え方','姿勢','経営陣','トップ','風通し','意見','発言','評価制度','評価','昇給','昇格','公平','基準','教育体制','研修','マニュアル','OJT','フォロー','教育','サポート','経営者','医療職','現場理解','売上','数字'],
@@ -15,19 +15,14 @@ const transferReasonFlow = {
     keywords: ['スキルアップ','成長','挑戦','やりがい','業務内容','専門性','研修','教育','キャリア','昇進','昇格','資格取得','経験','学べる','新しい','幅を広げる','強み','活かす','資格','得意','未経験','分野','患者','利用者','貢献','実感','書類','件数','役立つ','ありがとう','責任','役職','機会','道筋','登用'],
     internal_options: ['今までの経験や自分の強みを活かしたい','未経験の仕事／分野に挑戦したい','スキルアップしたい','患者・利用者への貢献実感を感じられる仕事に携われる','昇進・昇格の機会がある']
   },
-  '労働条件に関すること': {
-    keywords: ['残業','夜勤','休日','有給','働き方','時間','シフト','勤務時間','連勤','休憩','オンコール','呼び出し','副業','兼業','社会保険','保険','健保','厚生年金','診療時間','自己研鑽','勉強','学習','研修時間','直行直帰','事務所','立ち寄り','朝礼','日報','定時','サービス残業','申請制','人員配置','希望日','半休','時間有休','承認','就業規則','兼業','許可','健康保険','雇用保険','労災','手続き','始業前','準備','清掃','打刻'],
-    internal_options: []
-  },
-  'プライベートに関すること': {
-    keywords: ['家庭','育児','子育て','両立','ライフステージ','子ども','家族','介護','保育園','送迎','学校行事','通院','発熱','中抜け','時短','イベント','飲み会','BBQ','社員旅行','早朝清掃','強制','業務外','就業後','休日','オフ','プライベート','仲良く','交流','ごはん','趣味'],
-    internal_options: ['家庭との両立に理解のある職場で働きたい','勤務時間外でイベントがない職場で働きたい','プライベートでも仲良くしている職場で働きたい']
-  },
+  '労働条件に関すること': { keywords: ['残業','夜勤','休日','有給','働き方','時間','シフト','勤務時間','連勤','休憩','オンコール','呼び出し','副業','兼業','社会保険','保険','健保','厚生年金','診療時間','自己研鑽','勉強','学習','研修時間','直行直帰','事務所','立ち寄り','朝礼','日報','定時','サービス残業','申請制','人員配置','希望日','半休','時間有休','承認','就業規則','兼業','許可','健康保険','雇用保険','労災','手続き','始業前','準備','清掃','打刻'], internal_options: [] },
+  'プライベートに関すること': { keywords: ['家庭','育児','子育て','両立','ライフステージ','子ども','家族','介護','保育園','送迎','学校行事','通院','発熱','中抜け','時短','イベント','飲み会','BBQ','社員旅行','早朝清掃','強制','業務外','就業後','休日','オフ','プライベート','仲良く','交流','ごはん','趣味'], internal_options: ['家庭との両立に理解のある職場で働きたい','勤務時間外でイベントがない職場で働きたい','プライベートでも仲良くしている職場で働きたい'] },
   '職場環境・設備': { keywords: ['設備','環境','施設','器械','機器','システム','IT','デジタル','古い','新しい','最新','設置','導入','整備'], internal_options: [] },
   '職場の安定性': { keywords: ['安定','将来性','経営状況','倒産','リストラ','不安','継続','持続','成長','発展','将来','先行き'], internal_options: [] },
   '給与・待遇': { keywords: ['給料','給与','年収','月収','手取り','賞与','ボーナス','昇給','手当','待遇','福利厚生','安い','低い','上がらない','生活できない','お金'], internal_options: [] }
 }
 
+// === Must/NG 辞書 ===
 const mustWantItems = [
   '急性期病棟','回復期病棟','慢性期・療養型病院','一般病院','地域包括ケア病棟','療養病棟',
   '緩和ケア病棟（ホスピス）','クリニック','精神科病院','訪問看護ステーション',
@@ -58,6 +53,7 @@ const mustWantItems = [
   '院長・分院長候補','担当制'
 ]
 
+// === セッション管理 ===
 const sessions = new Map()
 function getSession(sessionId) {
   if (!sessions.has(sessionId)) {
@@ -79,83 +75,79 @@ function getSession(sessionId) {
   return sessions.get(sessionId)
 }
 
+// === ユーティリティ ===
 function detectCategory(text) {
   const hits = []
   for (const [cat, cfg] of Object.entries(transferReasonFlow)) {
-    const score = cfg.keywords.reduce((s, kw) => (text.includes(kw) ? s + 1 : s), 0)
-    if (score > 0) hits.push({ cat, score })
+    const found = cfg.keywords.filter(kw => text.includes(kw))
+    if (found.length) hits.push({ cat, score: found.length, keywords: found })
   }
   hits.sort((a, b) => b.score - a.score)
-  return hits[0]?.cat || null
+  return hits[0] || null
 }
-
 function pickOptions(cat) {
   const opts = transferReasonFlow[cat]?.internal_options || []
   if (!opts.length) return []
   const shuffled = [...opts].sort(() => Math.random() - 0.5)
   return shuffled.slice(0, Math.min(3, opts.length))
 }
-
 function matchMustWant(text) {
   const found = []
   for (const item of mustWantItems) if (text.includes(item)) found.push(item)
   return [...new Set(found)]
 }
 
+// === ハンドラ ===
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ message: 'Method not allowed' })
+
   try {
     const { message, conversationHistory = [], currentStep = 0, candidateNumber = '', isNumberConfirmed = false, sessionId = 'default' } = req.body
     const session = getSession(sessionId)
 
-   // --- Step0: 求職者番号 → 職種 → 勤務先 を順に確定 ---
-if (currentStep === 0) {
-  if (!isNumberConfirmed) {
-    const num = (message.match(/\d+/) || [null])[0]
-    if (num) {
-      session.candidateNumber = num
+    // --- Step0: ①番号 → ②職種 → ③勤務先（順番固定） ---
+    if (currentStep === 0) {
+      if (!isNumberConfirmed) {
+        const num = (message.match(/\d+/) || [null])[0]
+        if (num) {
+          session.candidateNumber = num
+          return res.json({
+            response: `求職者番号：${num} ね！\n次は ②「今の職種」を教えて！`,
+            candidateNumber: num,
+            isNumberConfirmed: true,
+            step: 0
+          })
+        }
+        return res.json({
+          response: `OK、まずは ①求職者番号 だけ教えて！`,
+          step: 0
+        })
+      }
+
+      if (!session.qualification) {
+        session.qualification = message.trim()
+        return res.json({
+          response: `ナイス。次は ③「いま働いてる場所」（施設名や業態）を教えて！`,
+          step: 0
+        })
+      }
+
+      if (!session.workplace) {
+        session.workplace = message.trim()
+        return res.json({
+          response:
+            'OK、ここから本題いくよ。\nまずは「転職理由」。きっかけってどんなことだった？\nしんどかったこと、これは無理だと思ったこと、挑戦したいこと、何でもOK！',
+          step: 1
+        })
+      }
+
       return res.json({
-        response: `求職者番号：${num} ですね！\n次に「今の職種」を教えてください。`,
-        candidateNumber: num,
-        isNumberConfirmed: true,
-        step: 0
+        response: 'ここから本題いくよ。まずは「転職理由」を教えて！',
+        step: 1
       })
     }
-    return res.json({
-      response: `すみません、最初に求職者番号を教えてください。\n①求職者番号`,
-      step: 0
-    })
-  }
 
-  // ここから番号は確定済み。職種→勤務先を順に集める
-  if (!session.qualification) {
-    session.qualification = message.trim()
-    return res.json({
-      response: `ありがとう！\n次に「今どこで働いてる？」（施設名や業態）を教えてください。`,
-      step: 0
-    })
-  }
-
-  if (!session.workplace) {
-    session.workplace = message.trim()
-    return res.json({
-      response:
-        'OK！\n\nはじめに、今回の転職理由を教えてほしいな。きっかけってどんなことだった？\nしんどいと思ったこと、これはもう無理って思ったこと、逆にこういうことに挑戦したい！って思ったこと、何でもOKだよ◎',
-      step: 1
-    })
-  }
-
-  // 念のため（両方埋まってたらStep1へ）
-  return res.json({
-    response:
-      'はじめに、今回の転職理由を教えてほしいな。きっかけってどんなことだった？',
-    step: 1
-  })
-}
-
-    const systemPrompt = 'あなたはHOAPのAIキャリアエージェント。登録済みの正式ラベルにのみ整合。候補提示は2〜3件。給与・待遇/職場環境・設備/職場の安定性は候補提示禁止で共感のみ。'
-
-    // Step1: 転職理由（深掘り→候補提示→番号選択）
+    // --- Step1: 転職理由（ヘッダー→候補） ---
     if (currentStep === 1) {
       if (session.awaitingSelection) {
         const num = (message.match(/[1-3１-３]/) || [null])[0]
@@ -171,32 +163,28 @@ if (currentStep === 0) {
           session.awaitingSelection = false
           session.selectionOptions = []
           session.deepDrillCount = 0
-          return res.json({ response: '了解。\nじゃあ次の質問！絶対にゆずれない条件を教えてほしいな。思いつく範囲でOK。', step: 2 })
+          return res.json({ response: '了解。\nじゃあ次！絶対にゆずれない条件を教えて。', step: 2 })
         }
         const list = session.selectionOptions.map((o,i)=>`${i+1}. ${o}`).join('\n')
-        return res.json({ response: `うまく読み取れなかった…\n番号で選んでね。\n\n${list}`, step: 1 })
+        return res.json({ response: `番号で選んでね（自由入力でもOK）。\n\n${list}`, step: 1 })
       }
 
-      const cat = detectCategory(message) || session.currentCategory
-      if (!session.currentCategory && cat) session.currentCategory = cat
-      const noCandidate = !transferReasonFlow[session.currentCategory || '']?.internal_options?.length
+      const detection = detectCategory(message)
+      if (detection) session.currentCategory = detection.cat
+      const noCandidate = detection && !transferReasonFlow[detection.cat]?.internal_options?.length
 
-      if (session.deepDrillCount < 3 && !noCandidate) {
-        session.deepDrillCount += 1
-        const followups = {
-          '働く仲間に関すること': ['それって誰との関係？上司？同僚？','いつ頃から感じてた？きっかけは？','一番つらかったポイントは？'],
-          '経営・組織に関すること': ['一番合わない点は？理念？運用？評価？','現場理解の不足はどの場面？','改善の声は出しやすかった？'],
-          '仕事内容・キャリアに関すること': ['今の業務で物足りない所は？','活かしたい強みは？','挑戦したい分野は？'],
-          'プライベートに関すること': ['両立で困る時間帯は？','周囲の理解は？','どんな働き方なら安心？']
-        }
-        const follow = (followups[session.currentCategory] || ['もう少し詳しく教えて。'])[session.deepDrillCount - 1] || 'もう少し詳しく教えて。'
-        return res.json({ response: `なるほど、その気持ちよくわかる！大事な転職のきっかけだね◎\n${follow}`, step: 1 })
-      }
+      const header =
+        detection
+          ? `カテゴリ：${detection.cat}\n拾えたキーワード：${(detection.keywords || []).slice(0,5).join('・') || '—'}\n`
+          : 'カテゴリ：未分類\n拾えたキーワード：—\n'
 
       if (noCandidate) {
         session.transferReason = message.trim()
         session.deepDrillCount = 0
-        return res.json({ response: 'なるほど、その気持ちよくわかる！大事な転職のきっかけだね◎\nじゃあ次の質問！絶対にゆずれない条件を教えて。', step: 2 })
+        return res.json({
+          response: `なるほど、その気持ちよくわかる！大事な転職のきっかけだね◎\n${header}じゃあ次！絶対にゆずれない条件を教えて。`,
+          step: 2
+        })
       }
 
       const options = pickOptions(session.currentCategory)
@@ -204,36 +192,40 @@ if (currentStep === 0) {
         session.selectionOptions = options
         session.awaitingSelection = true
         const list = options.map((o,i)=>`${i+1}. ${o}`).join('\n')
-        return res.json({ response: `ここまでの話から近いのはこのあたり。\n番号で選んでね。\n\n${list}`, step: 1 })
+        return res.json({
+          response: `${header}近いのはこのあたり。番号で選んでね（自由入力でもOK）。\n\n${list}`,
+          step: 1
+        })
       }
 
       session.transferReason = message.trim()
-      return res.json({ response: 'OK。じゃあ次！絶対にゆずれない条件を教えて。', step: 2 })
+      return res.json({ response: `${header}OK。じゃあ次！絶対にゆずれない条件を教えて。`, step: 2 })
     }
 
-    // Step2: Must
+    // --- Step2: Must ---
     if (currentStep === 2) {
       const found = matchMustWant(message)
       if (found.length) session.mustConditions = Array.from(new Set([...(session.mustConditions||[]), ...found]))
       return res.json({ response: '了解。次、絶対NGを教えて。\n避けたい職場タイプや働き方があれば挙げてね。', step: 3 })
     }
 
-    // Step3: NG
+    // --- Step3: NG ---
     if (currentStep === 3) {
       const found = matchMustWant(message)
       if (found.length) session.ngConditions = Array.from(new Set([...(session.ngConditions||[]), ...found]))
       return res.json({ response: '質問は残り2つ！これまでやってきたことを自然文で教えて。箇条書きでもOK。', step: 4 })
     }
 
-    // Step4: これまで
+    // --- Step4: これまで ---
     if (currentStep === 4) {
       session.canDo = message.trim()
       return res.json({ response: 'これが最後の質問👏 これから挑戦したいこと・やってみたいことを教えて。', step: 5 })
     }
 
-    // Step5: これから + 要約
+    // --- Step5: これから + 要約 ---
     if (currentStep === 5) {
       session.willDo = message.trim()
+      const systemPrompt = 'あなたはHOAPのAIキャリアエージェント。登録済みの正式ラベルにのみ整合。候補提示は2〜3件。給与・待遇/職場環境・設備/職場の安定性は候補提示禁止で共感のみ。'
       const summaryPrompt = `${systemPrompt}\n次のデータを2〜4行で自然文要約。\n- 転職理由: ${session.transferReason || '記録なし'}\n- 絶対条件: ${(session.mustConditions||[]).join('、') || 'なし'}\n- 絶対NG: ${(session.ngConditions||[]).join('、') || 'なし'}\n- これまで: ${session.canDo || '未入力'}\n- これから: ${session.willDo || '未入力'}\n禁止: 新規ラベルや事実の捏造。`
       let summary = ''
       try {
@@ -251,7 +243,7 @@ if (currentStep === 0) {
       return res.json({ response: closing, step: 6, sessionData: session })
     }
 
-    return res.json({ response: '想定外のステップです。最初からやり直してください。', step: 0 })
+    return res.json({ response: '想定外のステップです。最初からやり直してね。', step: 0 })
   } catch (e) {
     console.error('Error in chat API:', e)
     return res.status(500).json({ message: 'Internal server error', error: e.message })
