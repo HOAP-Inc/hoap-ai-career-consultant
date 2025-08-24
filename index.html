@@ -100,380 +100,81 @@
       </div>
     </div>
   </div>
+<script>
+// --- メッセージ表示（ユーザー／AI共通） ---
+function addMessage(type, content){
+  const wrap=document.getElementById('messages');
+  const row=document.createElement('div');
+  row.className='flex '+(type==='user'?'justify-end':'justify-start')+' message-enter';
+  row.innerHTML=`
+    <div class="flex max-w-xs lg:max-w-2xl ${type==='user'?'flex-row-reverse':'flex-row'} items-start gap-3">
+      <div class="flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center ${
+        type==='user'
+        ? 'bg-gradient-to-r from-pink-400 via-purple-400 to-blue-400 text-white'
+        : 'bg-gradient-to-r from-gray-100 to-gray-200 border-2 border-white'
+      }">
+        ${type==='user' ? '👤' : '🤖'}
+      </div>
+      <div class="rounded-2xl px-4 py-3 ${
+        type==='user'
+        ? 'bg-gradient-to-r from-pink-500 via-purple-500 to-blue-500 text-white ml-auto'
+        : 'bg-white/90 text-slate-700 border border-pink-100/50'
+      }">
+        <div class="text-sm whitespace-pre-wrap leading-relaxed">${content}</div>
+      </div>
+    </div>`;
+  wrap.appendChild(row);
+  row.scrollIntoView({behavior:'smooth',block:'end'});
+}
 
-  <script>
-    /***** データ（正式ラベルのみ） *****/
-    const REASON_FLOW = {"転職理由_分類フロー":[
-      {"カテゴリ":"経営・組織に関すること","キーワード":["理念","方針","価値観","経営","運営","マネジメント","方向性","ビジョン","ミッション","考え方","姿勢","経営陣","トップ","風通し","意見","発言","評価制度","評価","昇給","昇格","公平","基準","教育体制","研修","マニュアル","OJT","フォロー","教育","サポート","経営者","医療職","現場理解","売上","数字"],"内部候補":["MVV・経営理念に共感できる職場で働きたい","風通しがよく意見が言いやすい職場で働きたい","評価制度が導入されている職場で働きたい","教育体制が整備されている職場で働きたい","経営者が医療職のところで働きたい","経営者が医療職ではないところで働きたい"]},
-      {"カテゴリ":"働く仲間に関すること","キーワード":["人間関係","職場の雰囲気","上司","先輩","同僚","チームワーク","いじめ","パワハラ","セクハラ","陰口","派閥","お局","理不尽","相談できない","孤立","コミュニケーション","ロールモデル","尊敬","憧れ","見習いたい","価値観","温度感","やる気","信頼","品格","一貫性","目標","手本","職種","連携","助け合い","壁","分断","古株","権力","圧","支配"],"内部候補":["人間関係のトラブルが少ない職場で働きたい","同じ価値観を持つ仲間と働きたい","尊敬できる上司・経営者と働きたい","ロールモデルとなる上司や先輩がほしい","職種関係なく一体感がある仲間と働きたい","お局がいない職場で働きたい"]},
-      {"カテゴリ":"仕事内容・キャリアに関すること","キーワード":["スキルアップ","成長","挑戦","やりがい","業務内容","専門性","研修","教育","キャリア","昇進","昇格","資格取得","経験","学べる","新しい","幅を広げる","強み","活かす","資格","得意","未経験","分野","患者","利用者","貢献","実感","書類","件数","役立つ","ありがとう","責任","役職","機会","道筋","登用"],"内部候補":["今までの経験や自分の強みを活かしたい","未経験の仕事／分野に挑戦したい","スキルアップしたい","患者・利用者への貢献実感を感じられる仕事に携われる","昇進・昇格の機会がある"]},
-      {"カテゴリ":"労働条件に関すること","キーワード":["残業","夜勤","休日","有給","働き方","時間","シフト","勤務時間","連勤","休憩","オンコール","呼び出し","副業","兼業","社会保険","診療時間","自己研鑽","勉強","学習","研修時間","直行直帰","事務所","立ち寄り","朝礼","日報","定時","サービス残業","申請制","人員配置","希望日","半休","時間有休","承認","就業規則","兼業","許可","健康保険","雇用保険","労災","手続き","始業前","準備","清掃","打刻"],"内部候補":["直行直帰ができる職場で働きたい","残業のない職場で働きたい","希望通りに有給が取得できる職場で働きたい","副業OKな職場で働きたい","社会保険を完備している職場で働きたい","診療時間内で自己研鑽できる職場で働きたい","前残業のない職場で働きたい"]},
-      {"カテゴリ":"プライベートに関すること","キーワード":["家庭","育児","子育て","両立","ライフステージ","子ども","家族","介護","保育園","送迎","学校行事","通院","発熱","中抜け","時短","イベント","飲み会","BBQ","社員旅行","早朝清掃","強制","業務外","就業後","休日","オフ","プライベート","仲良く","交流","ごはん","趣味"],"内部候補":["家庭との両立に理解のある職場で働きたい","勤務時間外でイベントがない職場で働きたい","プライベートでも仲良くしている職場で働きたい"]},
-      {"カテゴリ":"職場環境・設備","キーワード":["設備","環境","施設","器械","機器","システム","IT","デジタル","古い","新しい","最新","設置","導入","整備"],"内部候補":[]},
-      {"カテゴリ":"職場の安定性","キーワード":["安定","将来性","経営状況","倒産","リストラ","不安","継続","持続","成長","発展","将来","先行き"],"内部候補":[]},
-      {"カテゴリ":"給与・待遇","キーワード":["給料","給与","年収","月収","手取り","賞与","ボーナス","昇給","手当","待遇","福利厚生","安い","低い","上がらない","生活できない","お金"],"内部候補":[]}
-    ]};
+// --- GPT呼び出し用 ---
+window.chatHistory = window.chatHistory || [];
 
-    // must/want（必要要素のみ・正式表記）
-    const MUSTWANT = {
-      "categories": {
-        "勤務条件": {
-          "勤務時間": ["日勤のみ可","夜勤専従あり","2交替制","3交替制","午前のみ勤務","午後のみ勤務","残業ほぼなし","オンコールなし・免除可","緊急訪問なし","時差出勤導入","フレックスタイム制度あり","残業月20時間以内","スキマ時間勤務","時短勤務相談可"]
-        },
-        "アクセス": { "アクセス": ["駅近（5分以内）","直行直帰OK","車通勤可","バイク通勤可","自転車通勤可","駐車場完備"] },
-        "休日": { "休日": ["土日祝休み","週休2日","週休3日","有給消化率ほぼ100%"] }
-      }
-    };
-    const MW_FLAT = (()=>{ const out=[]; const c=MUSTWANT.categories; Object.values(c).forEach(sub=>Object.values(sub).forEach(arr=>out.push(...arr))); return out;})();
+async function processMessage(raw){
+  const message = String(raw||'').trim();
+  if(!message) return;
 
-    // 同義語→正式ラベル寄せ
-    const SYNONYMS = {
-      "オンコールなし":"オンコールなし・免除可",
-      "オンコール免除":"オンコールなし・免除可",
-      "オンコールNG":"オンコールなし・免除可",
-      "夜間呼び出しなし":"オンコールなし・免除可",
-      "直行直帰":"直行直帰OK",
-      "車通勤":"車通勤可",
-      "駐車場あり":"駐車場完備",
-      "土日休み":"土日祝休み",
-      "夜勤なし":"日勤のみ可",
-      "残業なし":"残業ほぼなし"
-    };
+  // ユーザー発話を表示
+  addMessage('user', message);
 
-    /***** 状態 *****/
-    let currentStep = 0; // 0:基本 → 1:理由 → 2:Must → 3:Want → 4:Can → 5:Will
-    let isNumberConfirmed = false;
-    let deepDrill = 0;
-    let awaitingKind = null;   // 'reason'|'must'|'want'
-    let pendingOptions = [];
-    let reasonHistory = [];
-
-    const session = {
-      candidateNumber:'', qualification:'', workplace:'',
-      reasonTag:null, mustTags:[], wantTags:[], canText:'', willText:''
-    };
-
-    /***** UI *****/
-    function addMessage(type, content){
-      const wrap=document.getElementById('messages');
-      const row=document.createElement('div');
-      row.className='flex '+(type==='user'?'justify-end':'justify-start')+' message-enter';
-      row.innerHTML=`
-        <div class="flex max-w-xs lg:max-w-2xl ${type==='user'?'flex-row-reverse':'flex-row'} items-start gap-3">
-          <div class="flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center ${type==='user'?'bg-gradient-to-r from-pink-400 via-purple-400 to-blue-400 text-white':'bg-gradient-to-r from-gray-100 to-gray-200 border-2 border-white'}">
-            ${type==='user' ? '👤' : '🤖'}
-          </div>
-          <div class="rounded-2xl px-4 py-3 ${type==='user'?'bg-gradient-to-r from-pink-500 via-purple-500 to-blue-500 text-white ml-auto':'bg-white/90 text-slate-700 border border-pink-100/50'}">
-            <div class="text-sm whitespace-pre-wrap leading-relaxed">${content}</div>
-          </div>
-        </div>`;
-      wrap.appendChild(row); row.scrollIntoView({behavior:'smooth',block:'end'});
-    }
-    function updateChips(){
-      const set=(id,text,ghost)=>{const el=document.getElementById(id); el.textContent=text; el.classList.toggle('chip-ghost',!!ghost);};
-      set('chip-id','番号：'+(session.candidateNumber||'未入力'), !session.candidateNumber);
-      set('chip-qual','職種：'+(session.qualification||'未入力'), !session.qualification);
-      set('chip-work','勤務先：'+(session.workplace||'未入力'), !session.workplace);
-      set('chip-reason','転職理由：'+(session.reasonTag||'未設定'), !session.reasonTag);
-      set('chip-must','Must：'+session.mustTags.length+'件', session.mustTags.length===0);
-      set('chip-want','Want：'+session.wantTags.length+'件', session.wantTags.length===0);
-    }
-    function updateProgressBar(){
-      const pct=((currentStep+1)/6)*100;
-      document.getElementById('progress-bar').style.width=pct+'%';
-      document.getElementById('current-step').textContent=currentStep+1;
-      document.getElementById('step-label').textContent=['基本情報','転職理由','絶対条件','希望条件','経験','挑戦'][currentStep];
-      document.getElementById('number-required').style.display=(currentStep===0 && !isNumberConfirmed)?'block':'none';
-      updateChips();
-    }
-    function showOptions(options, kind){
-      const allow = (kind==='reason')
-        ? new Set(REASON_FLOW['転職理由_分類フロー'].flatMap(x=>x['内部候補']))
-        : new Set(MW_FLAT);
-      const filtered=[...options].filter(o=>allow.has(o)).slice(0,3);
-      if(filtered.length===0){ hideOptions(); return; }
-      const box=document.getElementById('option-box');
-      const area=document.getElementById('option-buttons');
-      area.innerHTML=''; pendingOptions=filtered; awaitingKind=kind;
-      filtered.forEach(label=>{
-        const b=document.createElement('button');
-        b.className='btn chip'; b.textContent='『'+label+'』';
-        b.addEventListener('click',()=>onPick(label));
-        area.appendChild(b);
-      });
-      box.classList.remove('hidden');
-    }
-    function hideOptions(){
-      document.getElementById('option-box').classList.add('hidden');
-      document.getElementById('option-buttons').innerHTML='';
-      pendingOptions=[]; awaitingKind=null;
-    }
-
-    /***** 解析 *****/
-    function parseInitialThree(text){
-      const num=text.match(/\d{2,}/); // 半角数字のみ
-      const result={number:null,qual:null,work:null};
-      if(num) result.number=num[0];
-      const rest=(num?text.replace(num[0],''):text).trim();
-      if(rest){
-        const parts=rest.split(/[,\s　\/]+/).filter(Boolean);
-        if(parts[0]) result.qual=parts[0];
-        if(parts[1]) result.work=parts.slice(1).join(' ');
-      }
-      return result;
-    }
-    function countMatches(text, words){
-      const t=text.toLowerCase(); return words.reduce((a,w)=>a+(t.includes(String(w).toLowerCase())?1:0),0);
-    }
-    function pickReasonCategoryFromHistory(){
-      const joined = reasonHistory.join(' ');
-      const items = REASON_FLOW['転職理由_分類フロー'].map(rec=>({
-        cat: rec['カテゴリ'],
-        score: countMatches(joined, rec['キーワード']),
-        options: rec['内部候補']
-      })).sort((a,b)=>b.score-a.score);
-      if(items.length===0 || items[0].score===0) return [];
-      // プライベート優先（差が小さいとき）
-      const privWords=["家庭","育児","子育て","両立","ライフステージ","子ども","家族","介護"];
-      const priHit=countMatches(joined,privWords)>0;
-      if(priHit){
-        const pri=items.find(i=>i.cat==="プライベートに関すること");
-        if(pri && (items[0].cat==="プライベートに関すること" || (items[0].score-pri.score)<2)) return [pri];
-      }
-      const top=items[0].score; return items.filter(i=>i.score===top);
-    }
-    function bestFromMustWant(text){
-      let normalized=text;
-      Object.entries(SYNONYMS).forEach(([k,v])=>{
-        const re=new RegExp(k,'g'); normalized=normalized.replace(re,v);
-      });
-      const t=normalized.toLowerCase();
-      const scored=MW_FLAT.map(item=>{
-        const low=item.toLowerCase(); let s=0;
-        if(t.includes(low)) s+=3;
-        t.split(/[ \n\r\t、。・,，!！?？]+/).forEach(tok=>{ if(tok && low.includes(tok)) s+=1; });
-        return {item,score:s};
-      }).filter(x=>x.score>0).sort((a,b)=>b.score-a.score).map(x=>x.item);
-      return [...new Set(scored)].slice(0,3);
-    }
-
-    /***** 口調 *****/
-    const EMPATHY = {
-      reason: ['それはしんどいよね。','うん、その状況はきつい。','なるほどね、わかる。'],
-      must:   ['OK、大事な条件だね。','了解、それは外せないね。','うん、そこは絶対だよね。'],
-      want:   ['いいね、イメージ見えてきたよ。','了解、その方向いいね。','うん、その感じがあると働きやすいよね。']
-    };
-    const DRILL = {
-      reason: ['どの場面で一番そう感じた？','一番のモヤモヤはどこ？','もう少し詳しく聞いてもいい？','それが続くと何が困る？'],
-      must:   ['対象や条件のイメージ、もう少し具体的に教えて！','頻度や水準はどのくらいを想定してる？','場所や働き方の前提はある？'],
-      want:   ['あると嬉しいポイント、具体的にどの辺？','どのくらいの頻度/水準だとちょうどいい？','他にも近いイメージある？']
-    };
-    const pick = arr => arr[Math.floor(Math.random()*arr.length)];
-
-    /***** 選択 *****/
-    function onPick(label){
-      hideOptions();
-      if(awaitingKind==='reason'){
-        addMessage('ai', `${pick(EMPATHY.reason)}\nつまり『${label}』ってことだね！`);
-        session.reasonTag=label; updateChips();
-        addMessage('ai','ありがとう！');
-        // → Step2へ
-        deepDrill=0; currentStep=2; updateProgressBar();
-        addMessage('ai',
-`じゃあ次の質問！
-今回の転職でこれだけは絶対譲れない！というのを教えて！
-仕事内容でも、制度でも、条件でもOK◎
-
-例えば・・・
-「絶対土日休みじゃないと困る！」
-「絶対オンコールはできない！」`);
-      }else if(awaitingKind==='must'){
-        addMessage('ai', `そっか、『${label}』が絶対ってことだね！`);
-        session.mustTags.push(label); updateChips();
-        addMessage('ai','ありがとう！');
-        addMessage('ai','他にも絶対条件はある？（なければ「ない」）');
-      }else if(awaitingKind==='want'){
-        addMessage('ai', `了解！『${label}』だと嬉しいってことだね！`);
-        session.wantTags.push(label); updateChips();
-        addMessage('ai','ありがとう！');
-        addMessage('ai','他にもあったらいいなっていうのはある？（なければ「ない」）');
-      }
-    }
-
-    /***** メイン *****/
-    async function processMessage(raw){
-      const message=String(raw||'').trim(); if(!message) return;
-
-      // 候補表示中でも選択を強制しない
-      if(awaitingKind && pendingOptions.length){
-        const typed=pendingOptions.find(o=>message.includes(o));
-        if(typed){ onPick(typed); return; }
-      }
-
-      // Step0：3つ（番号を保持・半角必須）
-      if(currentStep===0){
-        const parsed=parseInitialThree(message);
-
-        // 今回メッセージに番号が含まれていたら確定
-        if(parsed.number){ session.candidateNumber=parsed.number; isNumberConfirmed=true; }
-        // 分割入力OK：埋まっていないところだけ補完
-        if(parsed.qual && !session.qualification) session.qualification=parsed.qual;
-        if(parsed.work && !session.workplace)      session.workplace=parsed.work;
-
-        updateChips();
-
-        // まだ番号未確定なら番号だけ要求
-        if(!isNumberConfirmed){
-          addMessage('ai','最初に「求職者番号（半角）」だけ教えてね！');
-          return;
-        }
-
-        // 不足分だけ順番に聞く
-        if(!session.qualification){
-          addMessage('ai',`求職者番号：${session.candidateNumber} 受け取ったよ。今の職種は？`);
-          return;
-        }
-        if(!session.workplace){
-          addMessage('ai',`OK、今の職種は『${session.qualification}』ね。今どこで働いてる？`);
-          return;
-        }
-
-        // 3つ揃ったらStep1へ
-        addMessage('ai','ありがとう！');
-        currentStep=1; updateProgressBar();
-        addMessage('ai','はじめに、今回の転職理由を教えてほしいな。きっかけってどんなことだった？\nしんどいと思ったこと、これはもう無理って思ったこと、逆にこういうことに挑戦したい！って思ったこと、何でもOKだよ◎');
-        return;
-      }
-
-      // Step1：転職理由（深掘り→3発目で候補／“他はある？”は禁止）
-      if(currentStep===1){
-        reasonHistory.push(message);
-        addMessage('ai', pick(EMPATHY.reason));
-
-        const tops=pickReasonCategoryFromHistory();
-        if(tops.length>1){
-          addMessage('ai', `${tops[0].cat} と ${tops[1].cat} の両方が近そう。今はどっちがより重要？\nA) ${tops[0].cat}\nB) ${tops[1].cat}`);
-          window.__tie={a:tops[0],b:tops[1]}; currentStep=1.1; return;
-        }
-        const chosen = tops.length===1 ? tops[0] : null;
-
-        if(deepDrill<2){ deepDrill++; addMessage('ai', pick(DRILL.reason)); return; }
-
-        const opts = (chosen && chosen.options) ? chosen.options.slice(0,3) : [];
-        if(!opts.length){
-          addMessage('ai','ありがとう！');
-          deepDrill=0; currentStep=2; updateProgressBar();
-          addMessage('ai',
-`じゃあ次の質問！
-今回の転職でこれだけは絶対譲れない！というのを教えて！
-仕事内容でも、制度でも、条件でもOK◎
-
-例えば・・・
-「絶対土日休みじゃないと困る！」
-「絶対オンコールはできない！」`);
-          return;
-        }
-        showOptions(opts,'reason'); return;
-      }
-
-      if(currentStep===1.1){
-        if(!window.__tie){ currentStep=1; return processMessage(message); }
-        const pickAB = /^a\b/i.test(message) ? window.__tie.a : (/^b\b/i.test(message) ? window.__tie.b : null);
-        if(!pickAB){ currentStep=1; return processMessage(message); }
-        if(deepDrill<2){ deepDrill++; addMessage('ai', pick(DRILL.reason)); currentStep=1; return; }
-        const opts=(pickAB.options||[]).slice(0,3);
-        if(!opts.length){
-          addMessage('ai','ありがとう！');
-          deepDrill=0; currentStep=2; updateProgressBar();
-          addMessage('ai',
-`じゃあ次の質問！
-今回の転職でこれだけは絶対譲れない！というのを教えて！
-仕事内容でも、制度でも、条件でもOK◎
-
-例えば・・・
-「絶対土日休みじゃないと困る！」
-「絶対オンコールはできない！」`);
-          return;
-        }
-        showOptions(opts,'reason'); currentStep=1; return;
-      }
-
-      // Step2：Must
-      if(currentStep===2){
-        if (/^ない$|^無し$|^なし$/i.test(message)){
-          addMessage('ai','ありがとう！');
-          currentStep=3; updateProgressBar();
-          addMessage('ai','それじゃあ次に、こうだったらいいな、というのを教えていくね。仕事内容でも、制度でも、条件面でもOK◎');
-          return;
-        }
-        addMessage('ai', pick(EMPATHY.must));
-        const cands=bestFromMustWant(message);
-        if(cands.length){ showOptions(cands,'must'); return; }
-        if(!window.__must) window.__must={drill:0};
-        if(window.__must.drill<2){ window.__must.drill++; addMessage('ai', pick(DRILL.must)); return; }
-        addMessage('ai','ありがとう！');
-        addMessage('ai','他にも絶対条件はある？（なければ「ない」）');
-        return;
-      }
-
-      // Step3：Want
-      if(currentStep===3){
-        if (/^ない$|^無し$|^なし$/i.test(message)){
-          addMessage('ai','質問は残り2つ！');
-          currentStep=4; updateProgressBar();
-          addMessage('ai','これまでやってきたことを教えてね。ざっくりでOK！');
-          return;
-        }
-        addMessage('ai', pick(EMPATHY.want));
-        const cands=bestFromMustWant(message);
-        if(cands.length){ showOptions(cands,'want'); return; }
-        if(!window.__want) window.__want={drill:0};
-        if(window.__want.drill<2){ window.__want.drill++; addMessage('ai', pick(DRILL.want)); return; }
-        addMessage('ai','ありがとう！');
-        addMessage('ai','他にもあったらいいなっていうのはある？（なければ「ない」）');
-        return;
-      }
-
-      // Step4：Can
-      if(currentStep===4){
-        session.canText=message; addMessage('ai','ありがとう！');
-        currentStep=5; updateProgressBar();
-        addMessage('ai','これが最後！今回の転職で叶えたい挑戦や、夢はある？');
-        return;
-      }
-
-      // Step5：Will
-      if(currentStep===5){
-        session.willText=message; addMessage('ai','ありがとう！');
-        currentStep=6; updateProgressBar();
-        const summary =
-`📋 収集データ（内部保存）
-求職者番号：${session.candidateNumber||'未入力'}
-職種：${session.qualification||'未入力'}
-勤務先：${session.workplace||'未入力'}
-転職理由：${session.reasonTag||'未設定'}
-Must：${session.mustTags.length?session.mustTags.join('、'):'未設定'}
-Want：${session.wantTags.length?session.wantTags.join('、'):'未設定'}
-活かしたい経験：${session.canText||'未入力'}
-挑戦したいこと：${session.willText||'未入力'}`;
-        addMessage('ai', summary);
-        return;
-      }
-    }
-
-    /***** 送信 *****/
-    document.getElementById('send-button').addEventListener('click',()=>{
-      const input=document.getElementById('message-input');
-      const text=input.value.trim(); if(!text) return;
-      addMessage('user',text); input.value='';
-      processMessage(text);
-    });
-    document.getElementById('message-input').addEventListener('keypress',(e)=>{
-      if(e.key==='Enter' && !e.shiftKey){ e.preventDefault(); document.getElementById('send-button').click(); }
+  // API呼び出し
+  try{
+    const res = await fetch('/api/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ message, history: window.chatHistory })
     });
 
-    // init
-    updateProgressBar();
-  </script>
+    let data = {};
+    try { data = await res.json(); } catch {}
+
+    const reply = (data && data.reply) ? data.reply : '（応答が取れなかった…）';
+    addMessage('ai', reply);
+
+    // 履歴に積む
+    window.chatHistory.push({ role:'user', content: message });
+    window.chatHistory.push({ role:'assistant', content: reply });
+
+  }catch(e){
+    addMessage('ai','（サーバーに接続できないみたい…）');
+  }
+}
+
+// --- イベントリスナー ---
+document.getElementById('send-button').addEventListener('click', async ()=>{
+  const input=document.getElementById('message-input');
+  const msg=input.value.trim();
+  if(!msg) return;
+  input.value='';
+  await processMessage(msg);
+});
+
+document.getElementById('message-input').addEventListener('keypress',(e)=>{
+  if(e.key==='Enter' && !e.shiftKey){
+    e.preventDefault();
+    document.getElementById('send-button').click();
+  }
+});
+</script> 
 </body>
 </html>
