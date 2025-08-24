@@ -1,11 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
 import Head from 'next/head'
-import '../styles/globals.css'
 
 const STEP_LABELS = ['基本情報', '転職理由', '絶対条件', 'あるといいな', 'いままで', 'これから']
 
 export default function Home() {
-  // ===== UI / 状態 =====
   const [messages, setMessages] = useState([
     {
       type: 'ai',
@@ -13,7 +11,7 @@ export default function Home() {
         'こんにちは！\n担当エージェントとの面談がスムーズに進むように、HOAPのAIエージェントに少しだけ話を聞かせてね。\n\nいくつか質問をしていくね。\n担当エージェントとの面談でしっかりヒアリングするから、今日は自分の転職について改めて整理する感じで、気楽に話してね！\n\nまずはじめに「求職者番号」を教えて！',
     },
   ])
-  const [currentStep, setCurrentStep] = useState(0) // 0..5
+  const [currentStep, setCurrentStep] = useState(0)
   const [candidateNumber, setCandidateNumber] = useState('')
   const [qualification, setQualification] = useState('')
   const [workplace, setWorkplace] = useState('')
@@ -30,7 +28,10 @@ export default function Home() {
     listRef.current?.lastElementChild?.scrollIntoView({ behavior: 'smooth' })
   }, [messages])
 
-  // ====== Step0（フロント固定） ======
+  const addAI = (content) => setMessages((m) => [...m, { type: 'ai', content }])
+  const addUser = (content) => setMessages((m) => [...m, { type: 'user', content }])
+
+  // Step0（番号→職種→勤務先）をフロントで強制制御
   const step0Guard = async (text) => {
     if (!isNumberConfirmed) {
       const m = String(text).match(/\d{3,}/)
@@ -60,23 +61,15 @@ export default function Home() {
     return false
   }
 
-  // ===== メッセージ追加 =====
-  const addAI = (content) => setMessages((m) => [...m, { type: 'ai', content }])
-  const addUser = (content) => setMessages((m) => [...m, { type: 'user', content }])
-
-  // ===== 送信 =====
   const onSend = async () => {
     const outgoing = input.trim()
     if (!outgoing || loading) return
     addUser(outgoing)
-    setInput('') // 必ず消す
+    setInput('')
     setLoading(true)
-
     try {
-      // Step0はフロントで強制制御
       const handled = await step0Guard(outgoing)
       if (handled) return
-      // Step1以降はAPIへ
       const res = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -90,7 +83,6 @@ export default function Home() {
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data?.message || 'API error')
-
       addAI(data.response)
       if (typeof data.step === 'number') setCurrentStep(data.step)
     } catch (e) {
@@ -109,7 +101,6 @@ export default function Home() {
         <meta name="viewport" content="width=device-width, initial-scale=1" />
       </Head>
 
-      {/* ヘッダー */}
       <header className="bg-white/90 backdrop-blur-sm border-b border-pink-100 sticky top-0 z-10 shadow-sm">
         <div className="max-w-4xl mx-auto px-4 py-3">
           <div className="flex items-center justify-between">
@@ -120,16 +111,13 @@ export default function Home() {
               <p className="text-slate-600 text-xs">キャリア相談・一次ヒアリング</p>
             </div>
             <div className="text-right">
-              <div className="text-xs text-slate-500">
-                Step <span>{currentStep + 1}</span>/6
-              </div>
+              <div className="text-xs text-slate-500">Step <span>{currentStep + 1}</span>/6</div>
               <div className="text-xs bg-gradient-to-r from-pink-500 via-purple-500 to-blue-500 bg-clip-text text-transparent font-semibold">
                 {STEP_LABELS[currentStep]}
               </div>
             </div>
           </div>
 
-          {/* ステータスバー */}
           <div className="flex flex-wrap gap-2 mt-3 text-xs">
             <Badge label={`番号：${candidateNumber || '未入力'}`} />
             <Badge label={`職種：${qualification || '未入力'}`} />
@@ -139,7 +127,6 @@ export default function Home() {
             <Badge label={`Want：0件`} />
           </div>
 
-          {/* 進捗 */}
           <div className="mt-3 bg-gradient-to-r from-pink-100 to-blue-100 rounded-full h-1">
             <div
               className="bg-gradient-to-r from-pink-500 via-purple-500 to-blue-500 h-1 rounded-full transition-all duration-500"
@@ -149,7 +136,6 @@ export default function Home() {
         </div>
       </header>
 
-      {/* メッセージ */}
       <main className="max-w-4xl mx-auto px-4 py-6 pb-28">
         <div ref={listRef} className="space-y-6">
           {messages.map((m, i) => (
@@ -165,7 +151,6 @@ export default function Home() {
         </div>
       </main>
 
-      {/* 入力欄 */}
       <footer className="fixed bottom-0 left-0 right-0 bg-white/95 backdrop-blur-md border-t border-pink-100/50 shadow-xl">
         <div className="max-w-4xl mx-auto px-4 py-3">
           <div className="flex items-end gap-3">
