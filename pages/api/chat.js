@@ -108,19 +108,50 @@ export default async function handler(req, res) {
     const { message, conversationHistory = [], currentStep = 0, candidateNumber = '', isNumberConfirmed = false, sessionId = 'default' } = req.body
     const session = getSession(sessionId)
 
-    // Step0: 番号確認
-    if (currentStep === 0) {
-      if (!isNumberConfirmed) {
-        const num = (message.match(/\d+/) || [null])[0]
-        if (num) {
-          session.candidateNumber = num
-          return res.json({ response: `求職者番号：${num} ですね！\n他の情報もお聞かせください。\n②今の職種③今どこで働いてる？`, candidateNumber: num, isNumberConfirmed: true, step: 0 })
-        }
-        return res.json({ response: `すみません、最初に求職者番号を教えていただけますか？\n①求職者番号②今の職種③今どこで働いてる？\nの順でお願いします。`, step: 0 })
-      }
-      session.qualification = message
-      return res.json({ response: 'ありがとう！\n\nはじめに、今回の転職理由を教えてほしいな。きっかけってどんなことだった？\nしんどいと思ったこと、これはもう無理って思ったこと、逆にこういうことに挑戦したい！って思ったこと、何でもOKだよ◎', step: 1 })
+   // --- Step0: 求職者番号 → 職種 → 勤務先 を順に確定 ---
+if (currentStep === 0) {
+  if (!isNumberConfirmed) {
+    const num = (message.match(/\d+/) || [null])[0]
+    if (num) {
+      session.candidateNumber = num
+      return res.json({
+        response: `求職者番号：${num} ですね！\n次に「今の職種」を教えてください。`,
+        candidateNumber: num,
+        isNumberConfirmed: true,
+        step: 0
+      })
     }
+    return res.json({
+      response: `すみません、最初に求職者番号を教えてください。\n①求職者番号`,
+      step: 0
+    })
+  }
+
+  // ここから番号は確定済み。職種→勤務先を順に集める
+  if (!session.qualification) {
+    session.qualification = message.trim()
+    return res.json({
+      response: `ありがとう！\n次に「今どこで働いてる？」（施設名や業態）を教えてください。`,
+      step: 0
+    })
+  }
+
+  if (!session.workplace) {
+    session.workplace = message.trim()
+    return res.json({
+      response:
+        'OK！\n\nはじめに、今回の転職理由を教えてほしいな。きっかけってどんなことだった？\nしんどいと思ったこと、これはもう無理って思ったこと、逆にこういうことに挑戦したい！って思ったこと、何でもOKだよ◎',
+      step: 1
+    })
+  }
+
+  // 念のため（両方埋まってたらStep1へ）
+  return res.json({
+    response:
+      'はじめに、今回の転職理由を教えてほしいな。きっかけってどんなことだった？',
+    step: 1
+  })
+}
 
     const systemPrompt = 'あなたはHOAPのAIキャリアエージェント。登録済みの正式ラベルにのみ整合。候補提示は2〜3件。給与・待遇/職場環境・設備/職場の安定性は候補提示禁止で共感のみ。'
 
