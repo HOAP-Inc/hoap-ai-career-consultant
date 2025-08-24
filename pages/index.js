@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
 import Head from 'next/head'
-import '../styles/globals.css'
 
 const steps = [
   { label: '基本情報' },
@@ -36,7 +35,7 @@ export default function Home() {
   const [candidateNumber, setCandidateNumber] = useState('')
   const [qualification, setQualification] = useState('')   // 職種
   const [workplace, setWorkplace] = useState('')           // 勤務先/業態
-  const [transferReason, setTransferReason] = useState('') // 転職理由（確定or自由文）
+  const [transferReason, setTransferReason] = useState('') // 転職理由
   const [mustCount, setMustCount] = useState(0)
   const [wantCount, setWantCount] = useState(0)
 
@@ -74,13 +73,11 @@ export default function Home() {
       if (!res.ok) throw new Error('API error')
       const data = await res.json()
 
-      // サーバーからの文面
       setMessages((m) => [...m, { type: 'ai', content: data.response }])
 
-      // Step進行
       if (typeof data.step === 'number') setCurrentStep(data.step)
 
-      // サーバーが持っているセッションの鏡を受け取れたらUIに反映（ある版とない版に対応）
+      // セッションミラーが返ってきたらUIに反映
       if (data.sessionData) {
         const s = data.sessionData
         if (s.candidateNumber) { setCandidateNumber(s.candidateNumber); setIsNumberConfirmed(true) }
@@ -91,22 +88,19 @@ export default function Home() {
         if (Array.isArray(s.wantConditions)) setWantCount(s.wantConditions.length)
       }
 
-      // 旧APIの個別返却にも対応
+      // 旧APIの個別返却にも互換
       if (typeof data.candidateNumber === 'string' && data.candidateNumber) {
         setCandidateNumber(data.candidateNumber)
         setIsNumberConfirmed(true)
       }
       if (typeof data.isNumberConfirmed === 'boolean') setIsNumberConfirmed(data.isNumberConfirmed)
 
-      // Step0のとき、サーバーがセッション返さない版でも最低限のUIを埋める
+      // Step0のとき、最低限のUI埋め（セッション返却がない版の保険）
       if (currentStep === 0 && isNumberConfirmed) {
-        // ②職種 or ③勤務先の入力として扱う（簡易）
         if (!qualification) setQualification(outgoing)
         else if (!workplace) setWorkplace(outgoing)
       }
-      // Step1で自由文の転職理由だけ返す構成の時
       if (currentStep === 1 && !transferReason) {
-        // 候補選択でなく自由文だったケースに備えて軽く保持（厳密版はsessionDataで上書きされる）
         setTransferReason(outgoing.length > 120 ? outgoing.slice(0, 120) + '…' : outgoing)
       }
     } catch (e) {
@@ -128,7 +122,7 @@ export default function Home() {
         <meta name='viewport' content='width=device-width, initial-scale=1' />
       </Head>
 
-      {/* ちょいデザイン */}
+      {/* ちょいデザイン（グローバルCSSは _app.js で読み込み済み） */}
       <style jsx global>{`
         .gradient-bg { background: linear-gradient(135deg, #fdf2f8 0%, #faf5ff 50%, #eff6ff 100%); }
         .gradient-text { background: linear-gradient(135deg, #ec4899 0%, #8b5cf6 50%, #3b82f6 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
@@ -163,7 +157,7 @@ export default function Home() {
             />
           </div>
 
-          {/* ▼ ステータス行（ここが新規） */}
+          {/* ▼ ステータス行 */}
           <div className="mt-3 flex flex-wrap gap-2">
             <StatusChip label="番号" value={candidateNumber || '未入力'} ok={!!candidateNumber} />
             <StatusChip label="職種" value={qualification || '未入力'} ok={!!qualification} />
