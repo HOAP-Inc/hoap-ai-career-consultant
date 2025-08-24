@@ -1,14 +1,14 @@
 import { useEffect, useRef, useState } from 'react'
 import Head from 'next/head'
 
-/** 6段フロー（固定） */
+/** 固定フロー（6段） */
 const steps = [
-  { label: '基本情報' },            // Step0
-  { label: '転職理由' },            // Step1
-  { label: '絶対条件 (Must)' },     // Step2
-  { label: 'あるといいな (Want)' }, // Step3
-  { label: 'いままで (Can)' },      // Step4
-  { label: 'これから (Will)' },     // Step5
+  { label: '基本情報' },              // Step0
+  { label: '転職理由' },              // Step1
+  { label: '絶対条件 (Must)' },       // Step2
+  { label: 'あるといいな (Want)' },   // Step3
+  { label: 'いままで (Can)' },        // Step4
+  { label: 'これから (Will)' },       // Step5
 ]
 
 function StatusChip({ label, value, ok }) {
@@ -21,6 +21,7 @@ function StatusChip({ label, value, ok }) {
 }
 
 export default function Home() {
+  // ===== 初期メッセージ（矛盾なし：最初は番号だけ聞く） =====
   const [messages, setMessages] = useState([
     {
       type: 'ai',
@@ -54,8 +55,8 @@ export default function Home() {
   const [sessionId] = useState(() => Math.random().toString(36).slice(2))
 
   // ===== refs =====
-  const listRef = useRef(null)     // スクロール用
-  const textareaRef = useRef(null) // 入力欄
+  const listRef = useRef(null)      // スクロール
+  const textareaRef = useRef(null)  // 入力欄
 
   useEffect(() => {
     listRef.current?.lastElementChild?.scrollIntoView({ behavior: 'smooth' })
@@ -70,13 +71,12 @@ export default function Home() {
     if (!outgoing || loading) return
 
     addUser(outgoing)
-    setInput('') // ★送信後に必ずクリア
-    // IME確定後にカーソル残す
+    setInput('')                              // ★送信後に必ずクリア
     requestAnimationFrame(() => textareaRef.current?.focus())
 
     setLoading(true)
     try {
-      // Step0 はフロントで完全制御（番号 → 職種 → 勤務先）
+      // Step0 はフロントで完全に強制制御（番号 → 職種 → 勤務先）
       if (currentStep === 0) {
         if (!isNumberConfirmed) {
           const num = (outgoing.match(/\d+/) || [])[0]
@@ -99,7 +99,7 @@ export default function Home() {
         }
         if (!workplace) {
           setWorkplace(outgoing)
-          // Step1へ進行：固定セリフ
+          // Step1へ進行（固定セリフ）
           addAI(
 `ありがとう！
 
@@ -112,7 +112,7 @@ export default function Home() {
         }
       }
 
-      // Step1〜5はAPIへ（サーバ側でタグ付け・制御）
+      // Step1〜5 は API に任せる（タグ付け/進行はサーバー）
       const res = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -123,6 +123,9 @@ export default function Home() {
           candidateNumber,
           isNumberConfirmed,
           sessionId,
+          // 参考情報（サーバ側で使いたければ）
+          qualification,
+          workplace,
         }),
       })
       if (!res.ok) throw new Error('API error')
@@ -130,12 +133,10 @@ export default function Home() {
 
       addAI(data.response)
 
-      // サーバーが次ステップを指示した場合のみ進める（未入力での先送り防止）
-      if (typeof data.step === 'number') {
-        setCurrentStep(data.step)
-      }
+      // 次ステップの指示がある時だけ進める（未入力での先送りを防ぐ）
+      if (typeof data.step === 'number') setCurrentStep(data.step)
 
-      // サーバ側のセッションから反映（転職理由/タグ/テキスト等）
+      // サーバーからのセッション反映
       if (data.sessionData) {
         const s = data.sessionData
         if (s.transferReason) setTransferReason(s.transferReason)
