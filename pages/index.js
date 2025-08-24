@@ -20,7 +20,7 @@ function StatusChip({ label, value, ok }) {
 }
 
 export default function Home() {
-  // ========= 状態 =========
+  // ========== 状態 ==========
   const [messages, setMessages] = useState([
     {
       type: 'ai',
@@ -34,7 +34,7 @@ export default function Home() {
 まずはじめに「求職者番号」を教えて！`,
     },
   ])
-  const [currentStep, setCurrentStep] = useState(0) // Step0=基本情報(フロント強制制御)
+  const [currentStep, setCurrentStep] = useState(0) // 0=基本情報（フロント強制）
   const [candidateNumber, setCandidateNumber] = useState('')
   const [qualification, setQualification] = useState('') // ②今の職種
   const [workplace, setWorkplace] = useState('')         // ③今どこで働いてる？
@@ -43,41 +43,31 @@ export default function Home() {
   const [wantCount, setWantCount] = useState(0)
   const [isNumberConfirmed, setIsNumberConfirmed] = useState(false)
 
-  const [input, setInput] = useState('')
-  const [inputKey, setInputKey] = useState(0)  // ← 送信後に再マウントして確実クリア
-  const inputRef = useRef(null)
+  const [input, setInput] = useState('')          // 完全 Controlled
   const [loading, setLoading] = useState(false)
   const [sessionId] = useState(() => Math.random().toString(36).slice(2))
+
   const listRef = useRef(null)
 
-  // ========= 画面スクロール追従 =========
+  // ========== スクロール追従 ==========
   useEffect(() => {
     listRef.current?.lastElementChild?.scrollIntoView({ behavior: 'smooth' })
   }, [messages, loading])
 
-  // ========= メッセージ追加 =========
-  const addAI  = (text) => setMessages((m) => [...m, { type: 'ai',  content: text }])
-  const addUser= (text) => setMessages((m) => [...m, { type: 'user', content: text }])
+  const addAI   = (text) => setMessages((m) => [...m, { type: 'ai',  content: text }])
+  const addUser = (text) => setMessages((m) => [...m, { type: 'user', content: text }])
 
-  // ========= 送信 =========
-  const clearInputHard = () => {
-    setInput('')
-    // 念のためDOM側もクリア（IMEやモバイルでの残留対策）
-    if (inputRef.current) inputRef.current.value = ''
-    // 再マウントで完全初期化
-    setInputKey((k) => k + 1)
-  }
-
+  // ========== 送信 ==========
   const onSend = async () => {
-    const outgoing = (inputRef.current?.value ?? input).trim()
+    const outgoing = input.trim()
     if (!outgoing || loading) return
 
     addUser(outgoing)
-    clearInputHard()
+    setInput('') // ← Controlled なのでこれだけで確実に空になる
     setLoading(true)
 
     try {
-      // ---- Step0: フロントで1問ずつ強制制御 ----
+      // ---- Step0: フロントで1問ずつ固定制御 ----
       if (currentStep === 0) {
         // ①番号
         if (!isNumberConfirmed) {
@@ -104,21 +94,21 @@ export default function Home() {
         if (!workplace) {
           setWorkplace(outgoing)
 
-          // 念のための未入力ブロック
+          // 念のためブロック
           if (!candidateNumber || !qualification || !outgoing) {
             addAI('まだ未入力があるよ。番号・職種・勤務先の3つを順番に埋めよう！')
             setLoading(false)
             return
           }
 
-          // ここで初めてサーバーへ（Step1開始）
+          // Step1 へ移行（ここで初めてサーバー）
           const res = await fetch('/api/chat', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
               message: '基本情報の入力が完了',
               conversationHistory: messages.concat({ type: 'user', content: outgoing }),
-              currentStep: 1,              // ← Step1に明示遷移
+              currentStep: 1,
               candidateNumber,
               isNumberConfirmed: true,
               sessionId,
@@ -127,7 +117,6 @@ export default function Home() {
           if (!res.ok) throw new Error('API error')
           const data = await res.json()
 
-          // セリフ：指定どおり
           addAI(
             data.response ||
 `ありがとう！
@@ -147,7 +136,7 @@ export default function Home() {
         }
       }
 
-      // ---- Step1以降：サーバー制御 ----
+      // ---- Step1以降はサーバー制御 ----
       const res = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -180,7 +169,7 @@ export default function Home() {
       if (currentStep === 1 && !transferReason) {
         setTransferReason(outgoing.length > 120 ? outgoing.slice(0, 120) + '…' : outgoing)
       }
-    } catch (e) {
+    } catch {
       addAI('すみません、エラーが発生しました。もう一度お試しください。')
     } finally {
       setLoading(false)
@@ -283,9 +272,7 @@ export default function Home() {
           <div className='flex items-end gap-3'>
             <div className='flex-1 relative'>
               <textarea
-                key={inputKey}
-                ref={inputRef}
-                defaultValue={input}
+                value={input}
                 onChange={(e) => setInput(e.target.value)}
                 placeholder={!isNumberConfirmed && currentStep === 0 ? '求職者番号を入力してください...' : 'メッセージを入力...'}
                 className='w-full bg-white border border-pink-200 rounded-xl px-4 py-3 text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-purple-400 focus:border-transparent resize-none min-h-[52px] max-h-32 shadow-sm'
