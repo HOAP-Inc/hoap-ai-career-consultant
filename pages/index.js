@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import Head from 'next/head'
+import '../styles/globals.css'
 
 const steps = [
   { label: '基本情報' },
@@ -7,33 +8,53 @@ const steps = [
   { label: '絶対条件' },
   { label: '絶対NG' },
   { label: 'これまで' },
-  { label: 'これから' }
+  { label: 'これから' },
 ]
+
+// ステータス用の小さいチップ
+function StatusChip({ label, value, ok }) {
+  return (
+    <div className="flex items-center gap-1 text-xs px-2 py-1 rounded-full border shadow-sm select-none
+      bg-white/80 border-pink-100 text-slate-700">
+      <span className="text-slate-400">{label}：</span>
+      <span className={`${ok ? 'font-medium text-slate-800' : 'text-slate-400'}`}>
+        {value}
+      </span>
+    </div>
+  )
+}
 
 export default function Home() {
   const [messages, setMessages] = useState([
     {
       type: 'ai',
       content:
-        'こんにちは！\n担当エージェントとの面談がスムーズに進むように、HOAPのAIエージェントに少しだけ話を聞かせてね。\n\nこれから順番に質問していくよ。\n今回は【①求職者番号 → ②今の職種 → ③いま働いてる場所】の順で確認する。\n\nまずは ①求職者番号 だけ送ってね！'
-    }
+        'こんにちは！\n担当エージェントとの面談がスムーズに進むように、HOAPのAIエージェントに少しだけ話を聞かせてね。\n\nいくつか質問をしていくね。\n担当エージェントとの面談でしっかりヒアリングするから、今日は自分の転職について改めて整理する感じで、気楽に話してね！\n\nまず3つ教えて！\n①求職者番号②今の職種③今どこで働いてる？',
+    },
   ])
   const [currentStep, setCurrentStep] = useState(0)
   const [candidateNumber, setCandidateNumber] = useState('')
+  const [qualification, setQualification] = useState('')   // 職種
+  const [workplace, setWorkplace] = useState('')           // 勤務先/業態
+  const [transferReason, setTransferReason] = useState('') // 転職理由（確定or自由文）
+  const [mustCount, setMustCount] = useState(0)
+  const [wantCount, setWantCount] = useState(0)
+
   const [isNumberConfirmed, setIsNumberConfirmed] = useState(false)
   const [sessionId] = useState(() => Math.random().toString(36).slice(2))
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
+
   const listRef = useRef(null)
 
   useEffect(() => {
     listRef.current?.lastElementChild?.scrollIntoView({ behavior: 'smooth' })
-  }, [messages])
+  }, [messages, loading])
 
   const onSend = async () => {
     if (!input.trim() || loading) return
     const outgoing = input.trim()
-    setMessages(m => [...m, { type: 'user', content: outgoing }])
+    setMessages((m) => [...m, { type: 'user', content: outgoing }])
     setInput('')
     setLoading(true)
 
@@ -47,18 +68,52 @@ export default function Home() {
           currentStep,
           candidateNumber,
           isNumberConfirmed,
-          sessionId
-        })
+          sessionId,
+        }),
       })
       if (!res.ok) throw new Error('API error')
       const data = await res.json()
 
-      setMessages(m => [...m, { type: 'ai', content: data.response }])
+      // サーバーからの文面
+      setMessages((m) => [...m, { type: 'ai', content: data.response }])
+
+      // Step進行
       if (typeof data.step === 'number') setCurrentStep(data.step)
-      if (typeof data.candidateNumber === 'string') setCandidateNumber(data.candidateNumber)
+
+      // サーバーが持っているセッションの鏡を受け取れたらUIに反映（ある版とない版に対応）
+      if (data.sessionData) {
+        const s = data.sessionData
+        if (s.candidateNumber) { setCandidateNumber(s.candidateNumber); setIsNumberConfirmed(true) }
+        if (s.qualification) setQualification(s.qualification)
+        if (s.workplace) setWorkplace(s.workplace)
+        if (s.transferReason) setTransferReason(s.transferReason)
+        if (Array.isArray(s.mustConditions)) setMustCount(s.mustConditions.length)
+        if (Array.isArray(s.wantConditions)) setWantCount(s.wantConditions.length)
+      }
+
+      // 旧APIの個別返却にも対応
+      if (typeof data.candidateNumber === 'string' && data.candidateNumber) {
+        setCandidateNumber(data.candidateNumber)
+        setIsNumberConfirmed(true)
+      }
       if (typeof data.isNumberConfirmed === 'boolean') setIsNumberConfirmed(data.isNumberConfirmed)
-    } catch {
-      setMessages(m => [...m, { type: 'ai', content: 'すみません、エラーが発生しました。もう一度お試しください。' }])
+
+      // Step0のとき、サーバーがセッション返さない版でも最低限のUIを埋める
+      if (currentStep === 0 && isNumberConfirmed) {
+        // ②職種 or ③勤務先の入力として扱う（簡易）
+        if (!qualification) setQualification(outgoing)
+        else if (!workplace) setWorkplace(outgoing)
+      }
+      // Step1で自由文の転職理由だけ返す構成の時
+      if (currentStep === 1 && !transferReason) {
+        // 候補選択でなく自由文だったケースに備えて軽く保持（厳密版はsessionDataで上書きされる）
+        setTransferReason(outgoing.length > 120 ? outgoing.slice(0, 120) + '…' : outgoing)
+      }
+    } catch (e) {
+      setMessages((m) => [
+        ...m,
+        { type: 'ai', content: 'すみません、エラーが発生しました。もう一度お試しください。' },
+      ])
     } finally {
       setLoading(false)
     }
@@ -73,6 +128,7 @@ export default function Home() {
         <meta name='viewport' content='width=device-width, initial-scale=1' />
       </Head>
 
+      {/* ちょいデザイン */}
       <style jsx global>{`
         .gradient-bg { background: linear-gradient(135deg, #fdf2f8 0%, #faf5ff 50%, #eff6ff 100%); }
         .gradient-text { background: linear-gradient(135deg, #ec4899 0%, #8b5cf6 50%, #3b82f6 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
@@ -80,6 +136,7 @@ export default function Home() {
         @keyframes slideIn { from { opacity: 0; transform: translateY(10px);} to { opacity: 1; transform: translateY(0);} }
       `}</style>
 
+      {/* ヘッダー */}
       <header className='bg-white/90 backdrop-blur-sm border-b border-pink-100 sticky top-0 z-10 shadow-sm'>
         <div className='max-w-4xl mx-auto px-6 py-4'>
           <div className='flex items-center justify-between'>
@@ -97,26 +154,42 @@ export default function Home() {
               </div>
             </div>
           </div>
+
+          {/* 進捗バー */}
           <div className='mt-4 bg-gradient-to-r from-pink-100 to-blue-100 rounded-full h-1'>
-            <div className='bg-gradient-to-r from-pink-500 via-purple-500 to-blue-500 h-1 rounded-full transition-all duration-500 shadow-sm' style={{ width: `${progress}%` }} />
+            <div
+              className='bg-gradient-to-r from-pink-500 via-purple-500 to-blue-500 h-1 rounded-full transition-all duration-500 shadow-sm'
+              style={{ width: `${progress}%` }}
+            />
+          </div>
+
+          {/* ▼ ステータス行（ここが新規） */}
+          <div className="mt-3 flex flex-wrap gap-2">
+            <StatusChip label="番号" value={candidateNumber || '未入力'} ok={!!candidateNumber} />
+            <StatusChip label="職種" value={qualification || '未入力'} ok={!!qualification} />
+            <StatusChip label="勤務先" value={workplace || '未入力'} ok={!!workplace} />
+            <StatusChip label="転職理由" value={transferReason ? '設定済み' : '未設定'} ok={!!transferReason} />
+            <StatusChip label="Must" value={`${mustCount}件`} ok={mustCount > 0} />
+            <StatusChip label="Want" value={`${wantCount}件`} ok={wantCount > 0} />
           </div>
         </div>
       </header>
 
+      {/* メッセージリスト */}
       <main className='max-w-4xl mx-auto px-6 py-8 pb-32'>
         <div ref={listRef} className='space-y-6'>
           {messages.map((m, i) => (
             <div key={i} className={`flex ${m.type === 'user' ? 'justify-end' : 'justify-start'} message-enter`}>
               <div className={`flex max-w-xs lg:max-w-2xl ${m.type === 'user' ? 'flex-row-reverse' : 'flex-row'} items-start gap-3`}>
                 <div className={`flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center overflow-hidden ${m.type === 'user' ? 'bg-gradient-to-r from-pink-400 via-purple-400 to-blue-400 text-white shadow-md' : 'bg-gradient-to-r from-gray-100 to-gray-200 shadow-md border-2 border-white'}`}>
-                  {m.type === 'user'
-                    ? (
-                      <svg width={18} height={18} viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth={2}>
-                        <path d='M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2'></path>
-                        <circle cx='12' cy='7' r='4'></circle>
-                      </svg>
-                    )
-                    : (<span className='text-xl'>🤖</span>)}
+                  {m.type === 'user' ? (
+                    <svg width={18} height={18} viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth={2}>
+                      <path d='M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2'></path>
+                      <circle cx='12' cy='7' r='4'></circle>
+                    </svg>
+                  ) : (
+                    <span className='text-xl'>🤖</span>
+                  )}
                 </div>
                 <div className={`${m.type === 'user' ? 'bg-gradient-to-r from-pink-500 via-purple-500 to-blue-500 text-white ml-auto shadow-lg' : 'bg-white/90 backdrop-blur-sm text-slate-700 border border-pink-100/50'} rounded-2xl px-4 py-3 shadow-sm`}>
                   <div className='text-sm whitespace-pre-wrap leading-relaxed'>{m.content}</div>
@@ -124,6 +197,7 @@ export default function Home() {
               </div>
             </div>
           ))}
+
           {loading && (
             <div className='flex justify-start'>
               <div className='flex items-start gap-3'>
@@ -142,19 +216,19 @@ export default function Home() {
         </div>
       </main>
 
+      {/* 入力欄 */}
       <footer className='fixed bottom-0 left-0 right-0 bg-white/95 backdrop-blur-md border-t border-pink-100/50 shadow-xl'>
         <div className='max-w-4xl mx-auto px-6 py-4'>
           <div className='flex items-end gap-3'>
             <div className='flex-1 relative'>
               <textarea
                 value={input}
-                onChange={e => setInput(e.target.value)}
+                onChange={(e) => setInput(e.target.value)}
                 placeholder={!isNumberConfirmed && currentStep === 0 ? '求職者番号を入力してください...' : 'メッセージを入力...'}
                 className='w-full bg-white border border-pink-200 rounded-xl px-4 py-3 text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-purple-400 focus:border-transparent resize-none min-h-[52px] max-h-32 shadow-sm'
                 rows={1}
-                onKeyDown={e => {
-                  // 送信は Ctrl/Cmd + Enter のみ
-                  if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && !e.shiftKey) {
                     e.preventDefault()
                     onSend()
                   }
