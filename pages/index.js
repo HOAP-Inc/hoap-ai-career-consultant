@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import Head from 'next/head'
 
 const steps = [
@@ -10,11 +10,9 @@ const steps = [
   { label: 'これから' },
 ]
 
-// ステータス用チップ
 function StatusChip({ label, value, ok }) {
   return (
-    <div className="flex items-center gap-1 text-xs px-2 py-1 rounded-full border shadow-sm select-none
-      bg-white/80 border-pink-100 text-slate-700">
+    <div className="flex items-center gap-1 text-xs px-2 py-1 rounded-full border shadow-sm select-none bg-white/80 border-pink-100 text-slate-700">
       <span className="text-slate-400">{label}：</span>
       <span className={`${ok ? 'font-medium text-slate-800' : 'text-slate-400'}`}>{value}</span>
     </div>
@@ -22,7 +20,7 @@ function StatusChip({ label, value, ok }) {
 }
 
 export default function Home() {
-  // ====== 会話・UI状態 ======
+  // ========= 状態 =========
   const [messages, setMessages] = useState([
     {
       type: 'ai',
@@ -36,46 +34,56 @@ export default function Home() {
 まずはじめに「求職者番号」を教えて！`,
     },
   ])
-  const [currentStep, setCurrentStep] = useState(0) // 0=基本情報（フロント固定制御）
+  const [currentStep, setCurrentStep] = useState(0) // Step0=基本情報(フロント強制制御)
   const [candidateNumber, setCandidateNumber] = useState('')
-  const [qualification, setQualification] = useState('')   // ②今の職種
-  const [workplace, setWorkplace] = useState('')           // ③今どこで働いてる？
+  const [qualification, setQualification] = useState('') // ②今の職種
+  const [workplace, setWorkplace] = useState('')         // ③今どこで働いてる？
   const [transferReason, setTransferReason] = useState('')
   const [mustCount, setMustCount] = useState(0)
   const [wantCount, setWantCount] = useState(0)
-
   const [isNumberConfirmed, setIsNumberConfirmed] = useState(false)
-  const [input, setInput] = useState('')   // ← state 管理に統一
+
+  const [input, setInput] = useState('')
+  const [inputKey, setInputKey] = useState(0)  // ← 送信後に再マウントして確実クリア
+  const inputRef = useRef(null)
   const [loading, setLoading] = useState(false)
   const [sessionId] = useState(() => Math.random().toString(36).slice(2))
-
-  // ====== スクロール追従 ======
   const listRef = useRef(null)
+
+  // ========= 画面スクロール追従 =========
   useEffect(() => {
     listRef.current?.lastElementChild?.scrollIntoView({ behavior: 'smooth' })
   }, [messages, loading])
 
-  // ====== ユーティリティ ======
-  const addAI = (text) => setMessages((m) => [...m, { type: 'ai', content: text }])
-  const addUser = (text) => setMessages((m) => [...m, { type: 'user', content: text }])
+  // ========= メッセージ追加 =========
+  const addAI  = (text) => setMessages((m) => [...m, { type: 'ai',  content: text }])
+  const addUser= (text) => setMessages((m) => [...m, { type: 'user', content: text }])
 
-  // ====== 送信 ======
+  // ========= 送信 =========
+  const clearInputHard = () => {
+    setInput('')
+    // 念のためDOM側もクリア（IMEやモバイルでの残留対策）
+    if (inputRef.current) inputRef.current.value = ''
+    // 再マウントで完全初期化
+    setInputKey((k) => k + 1)
+  }
+
   const onSend = async () => {
-    const outgoing = input.trim()
+    const outgoing = (inputRef.current?.value ?? input).trim()
     if (!outgoing || loading) return
 
     addUser(outgoing)
-    setInput('')        // ← クリアはこれだけ
+    clearInputHard()
     setLoading(true)
 
     try {
-      // ---- Step0 はフロントで厳密制御（1個ずつ） ----
+      // ---- Step0: フロントで1問ずつ強制制御 ----
       if (currentStep === 0) {
-        // ①求職者番号 未確定
+        // ①番号
         if (!isNumberConfirmed) {
           const num = (outgoing.match(/\d+/) || [])[0]
           if (!num) {
-            addAI(`ごめん！最初に「求職者番号」を数字で教えてね。`)
+            addAI('ごめん！最初に「求職者番号」を数字で教えてね。')
             setLoading(false)
             return
           }
@@ -85,22 +93,20 @@ export default function Home() {
           setLoading(false)
           return
         }
-
-        // ②今の職種 未入力
+        // ②職種
         if (!qualification) {
           setQualification(outgoing)
-          addAI(`OK！次は ③「いま働いてる場所」（施設名や業態）を教えて！`)
+          addAI('OK！次は ③「いま働いてる場所」（施設名や業態）を教えて！')
           setLoading(false)
           return
         }
-
-        // ③今どこで働いてる？ 未入力
+        // ③勤務先
         if (!workplace) {
           setWorkplace(outgoing)
 
-          // 未入力があればブロック（保険）
+          // 念のための未入力ブロック
           if (!candidateNumber || !qualification || !outgoing) {
-            addAI(`まだ未入力があるよ。番号・職種・勤務先の3つを順番に埋めよう！`)
+            addAI('まだ未入力があるよ。番号・職種・勤務先の3つを順番に埋めよう！')
             setLoading(false)
             return
           }
@@ -110,9 +116,9 @@ export default function Home() {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-              message: '基本情報の入力が完了しました。',
+              message: '基本情報の入力が完了',
               conversationHistory: messages.concat({ type: 'user', content: outgoing }),
-              currentStep: 0,
+              currentStep: 1,              // ← Step1に明示遷移
               candidateNumber,
               isNumberConfirmed: true,
               sessionId,
@@ -120,13 +126,17 @@ export default function Home() {
           })
           if (!res.ok) throw new Error('API error')
           const data = await res.json()
+
+          // セリフ：指定どおり
           addAI(
             data.response ||
-            `ありがとう！\nはじめに、今回の転職理由を教えてほしいな。きっかけってどんなことだった？`
-          )
-          if (typeof data.step === 'number') setCurrentStep(data.step) // 通常は1に遷移
+`ありがとう！
 
-          // 以降の画面用にセッション受け取り
+はじめに、今回の転職理由を教えてほしいな。きっかけってどんなことだった？
+しんどいと思ったこと、これはもう無理って思ったこと、逆にこういうことに挑戦したい！って思ったこと、何でもOKだよ◎`
+          )
+
+          if (typeof data.step === 'number') setCurrentStep(data.step)
           if (data.sessionData) {
             const s = data.sessionData
             if (Array.isArray(s.mustConditions)) setMustCount(s.mustConditions.length)
@@ -135,12 +145,9 @@ export default function Home() {
           setLoading(false)
           return
         }
-
-        setLoading(false)
-        return
       }
 
-      // ---- Step1以降はサーバー制御 ----
+      // ---- Step1以降：サーバー制御 ----
       const res = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -157,7 +164,6 @@ export default function Home() {
       const data = await res.json()
 
       addAI(data.response)
-
       if (typeof data.step === 'number') setCurrentStep(data.step)
 
       if (data.sessionData) {
@@ -170,11 +176,11 @@ export default function Home() {
         if (Array.isArray(s.wantConditions)) setWantCount(s.wantConditions.length)
       }
 
-      // サーバー未実装時の保険：自由文の転職理由を軽く保持
+      // 保険：自由文を軽く保持
       if (currentStep === 1 && !transferReason) {
         setTransferReason(outgoing.length > 120 ? outgoing.slice(0, 120) + '…' : outgoing)
       }
-    } catch {
+    } catch (e) {
       addAI('すみません、エラーが発生しました。もう一度お試しください。')
     } finally {
       setLoading(false)
@@ -190,7 +196,6 @@ export default function Home() {
         <meta name='viewport' content='width=device-width, initial-scale=1' />
       </Head>
 
-      {/* ちょいデザイン */}
       <style jsx global>{`
         .gradient-bg { background: linear-gradient(135deg, #fdf2f8 0%, #faf5ff 50%, #eff6ff 100%); }
         .gradient-text { background: linear-gradient(135deg, #ec4899 0%, #8b5cf6 50%, #3b82f6 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
@@ -216,20 +221,18 @@ export default function Home() {
               </div>
             </div>
           </div>
-
-          {/* 進捗バー */}
+          {/* 進捗 */}
           <div className='mt-4 bg-gradient-to-r from-pink-100 to-blue-100 rounded-full h-1'>
             <div
               className='bg-gradient-to-r from-pink-500 via-purple-500 to-blue-500 h-1 rounded-full transition-all duration-500 shadow-sm'
               style={{ width: `${progress}%` }}
             />
           </div>
-
-          {/* ステータス行 */}
+          {/* ステータス */}
           <div className="mt-3 flex flex-wrap gap-2">
-            <StatusChip label="番号" value={candidateNumber || '未入力'} ok={!!candidateNumber} />
-            <StatusChip label="職種" value={qualification || '未入力'} ok={!!qualification} />
-            <StatusChip label="勤務先" value={workplace || '未入力'} ok={!!workplace} />
+            <StatusChip label="番号"   value={candidateNumber || '未入力'} ok={!!candidateNumber} />
+            <StatusChip label="職種"   value={qualification   || '未入力'} ok={!!qualification} />
+            <StatusChip label="勤務先" value={workplace      || '未入力'} ok={!!workplace} />
             <StatusChip label="転職理由" value={transferReason ? '設定済み' : '未設定'} ok={!!transferReason} />
             <StatusChip label="Must" value={`${mustCount}件`} ok={mustCount > 0} />
             <StatusChip label="Want" value={`${wantCount}件`} ok={wantCount > 0} />
@@ -237,7 +240,7 @@ export default function Home() {
         </div>
       </header>
 
-      {/* メッセージリスト */}
+      {/* チャット */}
       <main className='max-w-4xl mx-auto px-6 py-8 pb-32'>
         <div ref={listRef} className='space-y-6'>
           {messages.map((m, i) => (
@@ -280,7 +283,9 @@ export default function Home() {
           <div className='flex items-end gap-3'>
             <div className='flex-1 relative'>
               <textarea
-                value={input}
+                key={inputKey}
+                ref={inputRef}
+                defaultValue={input}
                 onChange={(e) => setInput(e.target.value)}
                 placeholder={!isNumberConfirmed && currentStep === 0 ? '求職者番号を入力してください...' : 'メッセージを入力...'}
                 className='w-full bg-white border border-pink-200 rounded-xl px-4 py-3 text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-purple-400 focus:border-transparent resize-none min-h-[52px] max-h-32 shadow-sm'
