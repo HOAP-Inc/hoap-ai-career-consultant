@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import Head from 'next/head'
 
 const steps = [
@@ -45,39 +45,27 @@ export default function Home() {
   const [wantCount, setWantCount] = useState(0)
 
   const [isNumberConfirmed, setIsNumberConfirmed] = useState(false)
-  const [input, setInput] = useState('')
+  const [input, setInput] = useState('')   // ← state 管理に統一
   const [loading, setLoading] = useState(false)
   const [sessionId] = useState(() => Math.random().toString(36).slice(2))
 
-  // ====== 参照 ======
-  const listRef = useRef(null)
-  const inputRef = useRef(null)
-
   // ====== スクロール追従 ======
+  const listRef = useRef(null)
   useEffect(() => {
     listRef.current?.lastElementChild?.scrollIntoView({ behavior: 'smooth' })
   }, [messages, loading])
 
   // ====== ユーティリティ ======
-  const addAI = (text) =>
-    setMessages((m) => [...m, { type: 'ai', content: text }])
-
-  const addUser = (text) =>
-    setMessages((m) => [...m, { type: 'user', content: text }])
-
-  const hardClearInput = () => {
-    setInput('')
-    if (inputRef.current) inputRef.current.value = ''
-  }
+  const addAI = (text) => setMessages((m) => [...m, { type: 'ai', content: text }])
+  const addUser = (text) => setMessages((m) => [...m, { type: 'user', content: text }])
 
   // ====== 送信 ======
   const onSend = async () => {
-    const raw = inputRef.current ? inputRef.current.value : input
-    const outgoing = (raw || '').trim()
+    const outgoing = input.trim()
     if (!outgoing || loading) return
 
     addUser(outgoing)
-    hardClearInput()
+    setInput('')        // ← クリアはこれだけ
     setLoading(true)
 
     try {
@@ -110,7 +98,7 @@ export default function Home() {
         if (!workplace) {
           setWorkplace(outgoing)
 
-          // 未入力が一つでもあればここでブロック（保険）
+          // 未入力があればブロック（保険）
           if (!candidateNumber || !qualification || !outgoing) {
             addAI(`まだ未入力があるよ。番号・職種・勤務先の3つを順番に埋めよう！`)
             setLoading(false)
@@ -148,7 +136,6 @@ export default function Home() {
           return
         }
 
-        // ここまでで return してるはず（保険）
         setLoading(false)
         return
       }
@@ -187,7 +174,7 @@ export default function Home() {
       if (currentStep === 1 && !transferReason) {
         setTransferReason(outgoing.length > 120 ? outgoing.slice(0, 120) + '…' : outgoing)
       }
-    } catch (e) {
+    } catch {
       addAI('すみません、エラーが発生しました。もう一度お試しください。')
     } finally {
       setLoading(false)
@@ -293,7 +280,6 @@ export default function Home() {
           <div className='flex items-end gap-3'>
             <div className='flex-1 relative'>
               <textarea
-                ref={inputRef}
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 placeholder={!isNumberConfirmed && currentStep === 0 ? '求職者番号を入力してください...' : 'メッセージを入力...'}
