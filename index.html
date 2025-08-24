@@ -1,336 +1,293 @@
 <!DOCTYPE html>
-<html lang="ja">
+<html lang='ja'>
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>HOAP AI キャリアコンサルタント</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <style>
-        .gradient-bg {
-            background: linear-gradient(135deg, #fdf2f8 0%, #faf5ff 50%, #eff6ff 100%);
-        }
-        .gradient-text {
-            background: linear-gradient(135deg, #ec4899 0%, #8b5cf6 50%, #3b82f6 100%);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            background-clip: text;
-        }
-        .message-enter {
-            animation: slideIn 0.3s ease-out;
-        }
-        @keyframes slideIn {
-            from { opacity: 0; transform: translateY(10px); }
-            to { opacity: 1; transform: translateY(0); }
-        }
-        .typing {
-            display: inline-block;
-            animation: pulse 1.5s ease-in-out infinite;
-        }
-        @keyframes pulse {
-            0%, 100% { opacity: 1; }
-            50% { opacity: 0.5; }
-        }
-    </style>
+  <meta charset='UTF-8'>
+  <meta name='viewport' content='width=device-width, initial-scale=1.0'>
+  <title>HOAP AI キャリアコンサルタント</title>
+  <script src='https://cdn.tailwindcss.com'></script>
+  <style>
+    .gradient-bg { background: linear-gradient(135deg, #fdf2f8 0%, #faf5ff 50%, #eff6ff 100%); }
+    .gradient-text {
+      background: linear-gradient(135deg, #ec4899 0%, #8b5cf6 50%, #3b82f6 100%);
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
+    }
+    .message-enter { animation: slideIn .25s ease-out; }
+    @keyframes slideIn { from { opacity: 0; transform: translateY(8px) } to { opacity: 1; transform: translateY(0) } }
+    .typing { display: inline-block; animation: pulse 1.5s ease-in-out infinite; }
+    @keyframes pulse { 0%, 100% { opacity: 1 } 50% { opacity: .5 } }
+  </style>
 </head>
-<body class="gradient-bg min-h-screen text-slate-800">
-    <!-- Header -->
-    <div class="bg-white/90 backdrop-blur-sm border-b border-pink-100 sticky top-0 z-10 shadow-sm">
-        <div class="max-w-4xl mx-auto px-6 py-4">
-            <div class="flex items-center justify-between">
-                <div>
-                    <h1 class="text-2xl font-bold gradient-text">
-                        HOAP AI エージェント
-                    </h1>
-                    <p class="text-slate-600 text-sm">キャリア相談・一次ヒアリング</p>
-                </div>
-                <div class="text-right">
-                    <div class="text-sm text-slate-500">Step <span id="current-step">1</span>/6</div>
-                    <div class="text-xs gradient-text font-medium">
-                        <span id="step-label">基本情報</span>
-                        <span id="number-required" class="block text-red-400 text-xs mt-1">※求職者番号必須</span>
-                    </div>
-                </div>
-            </div>
-            
-            <!-- Progress Bar -->
-            <div class="mt-4 bg-gradient-to-r from-pink-100 to-blue-100 rounded-full h-1">
-                <div id="progress-bar"
-                     class="bg-gradient-to-r from-pink-500 via-purple-500 to-blue-500 h-1 rounded-full transition-all duration-500 shadow-sm"
-                     style="width: 16.67%">
-                </div>
-            </div>
+<body class='gradient-bg min-h-screen text-slate-800'>
+
+  <!-- Header -->
+  <div class='bg-white/90 backdrop-blur-sm border-b border-pink-100 sticky top-0 z-10 shadow-sm'>
+    <div class='max-w-4xl mx-auto px-6 py-4 flex justify-between items-center'>
+      <div>
+        <h1 class='text-2xl font-bold gradient-text'>HOAP AI エージェント</h1>
+        <p class='text-slate-600 text-sm'>キャリア相談・一次ヒアリング</p>
+      </div>
+      <div class='text-right'>
+        <div class='text-sm text-slate-500'>Step <span id='current-step'>1</span>/6</div>
+        <div class='text-xs gradient-text font-medium'>
+          <span id='step-label'>基本情報</span>
+          <span id='number-required' class='block text-red-400 text-xs mt-1'>※求職者番号必須</span>
         </div>
+      </div>
     </div>
-
-    <!-- Chat Area -->
-    <div class="max-w-4xl mx-auto px-6 py-8 pb-32">
-        <div id="messages" class="space-y-6">
-            <!-- Initial message -->
-            <div class="flex justify-start">
-                <div class="flex max-w-xs lg:max-w-2xl items-start gap-3">
-                    <div class="flex-shrink-0 w-10 h-10 rounded-full bg-gradient-to-r from-gray-100 to-gray-200 shadow-md border-2 border-white flex items-center justify-center">
-                        <span class="text-xl">🤖</span>
-                    </div>
-                    <div class="bg-white/90 backdrop-blur-sm text-slate-700 border border-pink-100/50 rounded-2xl px-4 py-3 shadow-sm">
-                        <div class="text-sm whitespace-pre-wrap leading-relaxed">こんにちは！
-担当エージェントとの面談がスムーズに進むように、HOAPのAIエージェントに少しだけ話を聞かせてね。
-
-いくつか質問をしていくね。
-担当エージェントとの面談でしっかりヒアリングするから、今日は自分の転職について改めて整理する感じで、気楽に話してね！
-
-まず3つ教えて！
-①求職者番号②今の職種③今どこで働いてる？</div>
-                    </div>
-                </div>
-            </div>
-        </div>
+    <div class='mt-2 bg-gradient-to-r from-pink-100 to-blue-100 rounded-full h-1'>
+      <div id='progress-bar'
+        class='bg-gradient-to-r from-pink-500 via-purple-500 to-blue-500 h-1 rounded-full transition-all duration-500'
+        style='width: 16.67%'></div>
     </div>
+  </div>
 
-    <!-- Input Area -->
-    <div class="fixed bottom-0 left-0 right-0 bg-white/95 backdrop-blur-md border-t border-pink-100/50 shadow-xl">
-        <div class="max-w-4xl mx-auto px-6 py-4">
-            <div class="flex items-end gap-3">
-                <div class="flex-1 relative">
-                    <textarea
-                        id="message-input"
-                        placeholder="求職者番号を入力してください..."
-                        class="w-full bg-white border border-pink-200 rounded-xl px-4 py-3 text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-purple-400 focus:border-transparent resize-none min-h-[52px] max-h-32 shadow-sm"
-                        rows="1"></textarea>
-                </div>
-                <button
-                    id="send-button"
-                    class="bg-gradient-to-r from-pink-500 via-purple-500 to-blue-500 hover:from-pink-600 hover:via-purple-600 hover:to-blue-600 disabled:from-gray-300 disabled:to-gray-400 disabled:cursor-not-allowed text-white rounded-xl p-3 transition-all duration-200 shadow-lg hover:shadow-xl transform hover:scale-105"
-                >
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <line x1="22" y1="2" x2="11" y2="13"></line>
-                        <polygon points="22,2 15,22 11,13 2,9"></polygon>
-                    </svg>
-                </button>
+  <!-- Chat Area -->
+  <div class='max-w-4xl mx-auto px-6 py-8 pb-32'>
+    <div id='messages' class='space-y-6'>
+      <div class='flex justify-start'>
+        <div class='flex max-w-xs lg:max-w-2xl items-start gap-3'>
+          <div class='flex-shrink-0 w-10 h-10 rounded-full bg-gradient-to-r from-gray-100 to-gray-200 shadow-md border-2 border-white flex items-center justify-center'>
+            <span class='text-xl'>🤖</span>
+          </div>
+          <div class='bg-white/90 backdrop-blur-sm text-slate-700 border border-pink-100/50 rounded-2xl px-4 py-3 shadow-sm'>
+            <div class='text-sm whitespace-pre-wrap leading-relaxed'>
+              こんにちは  
+              担当との面談をスムーズにするために、AIが先に少しだけ聞くね。<br><br>
+              まず三つ教えて  
+              ①求職者番号 ②今の職種 ③今どこで働いてる
             </div>
+          </div>
         </div>
+      </div>
     </div>
+  </div>
 
-   <script>
-// 状態
-let currentStep = 0;
-let candidateNumber = '';
-let isNumberConfirmed = false;
-let sessionData = {
-  candidateNumber: '',
-  qualification: '',
-  workplace: '',
-  transferReason: '',
-  mustConditions: [],
-  wantConditions: [],
-  canDo: '',
-  willDo: ''
-};
-
-const steps = [
-  { label: '基本情報', description: '資格・現職' },
-  { label: '転職理由', description: 'きっかけ' },
-  { label: '絶対条件', description: 'Must条件' },
-  { label: '希望条件', description: 'Want条件' },
-  { label: '経験', description: 'これまで' },
-  { label: '挑戦', description: 'これから' }
-];
-
-// UIユーティリティ
-function updateProgressBar() {
-  const progress = ((currentStep + 1) / 6) * 100;
-  document.getElementById('progress-bar').style.width = `${progress}%`;
-  document.getElementById('current-step').textContent = currentStep + 1;
-  document.getElementById('step-label').textContent = steps[currentStep].label;
-
-  const numberRequired = document.getElementById('number-required');
-  if (currentStep === 0 && !isNumberConfirmed) numberRequired.style.display = 'block';
-  else numberRequired.style.display = 'none';
-}
-
-function addMessage(type, content) {
-  const messages = document.getElementById('messages');
-  const div = document.createElement('div');
-  div.className = `flex ${type === 'user' ? 'justify-end' : 'justify-start'} message-enter`;
-  div.innerHTML = `
-    <div class="flex max-w-xs lg:max-w-2xl ${type === 'user' ? 'flex-row-reverse' : 'flex-row'} items-start gap-3">
-      <div class="flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center overflow-hidden ${
-        type === 'user'
-          ? 'bg-gradient-to-r from-pink-400 via-purple-400 to-blue-400 text-white shadow-md'
-          : 'bg-gradient-to-r from-gray-100 to-gray-200 shadow-md border-2 border-white'
-      }">
-        ${type === 'user'
-          ? '<svg width=\'18\' height=\'18\' viewBox=\'0 0 24 24\' fill=\'none\' stroke=\'currentColor\' stroke-width=\'2\'><path d=\'M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2\'></path><circle cx=\'12\' cy=\'7\' r=\'4\'></circle></svg>'
-          : '<span class=\'text-xl\'>🤖</span>'}
+  <!-- Input -->
+  <div class='fixed bottom-0 left-0 right-0 bg-white/95 backdrop-blur-md border-t border-pink-100/50 shadow-xl'>
+    <div class='max-w-4xl mx-auto px-6 py-4 flex items-end gap-3'>
+      <div class='flex-1 relative'>
+        <textarea id='message-input' placeholder='求職者番号を入力してください...'
+          class='w-full bg-white border border-pink-200 rounded-xl px-4 py-3 text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-purple-400 resize-none min-h-[52px] max-h-32 shadow-sm'></textarea>
       </div>
-      <div class="rounded-2xl px-4 py-3 shadow-sm ${
-        type === 'user'
-          ? 'bg-gradient-to-r from-pink-500 via-purple-500 to-blue-500 text-white ml-auto shadow-lg'
-          : 'bg-white/90 backdrop-blur-sm text-slate-700 border border-pink-100/50'
-      }">
-        <div class="text-sm whitespace-pre-wrap leading-relaxed">${content}</div>
-      </div>
-    </div>`;
-  messages.appendChild(div);
-  div.scrollIntoView({ behavior: 'smooth', block: 'end' });
-}
+      <button id='send-button'
+        class='bg-gradient-to-r from-pink-500 via-purple-500 to-blue-500 text-white rounded-xl p-3 shadow-lg'>
+        <svg width='20' height='20' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2'>
+          <line x1='22' y1='2' x2='11' y2='13'></line>
+          <polygon points='22,2 15,22 11,13 2,9'></polygon>
+        </svg>
+      </button>
+    </div>
+  </div>
 
-function showTyping() {
-  const messages = document.getElementById('messages');
-  const div = document.createElement('div');
-  div.id = 'typing-indicator';
-  div.className = 'flex justify-start';
-  div.innerHTML = `
-    <div class="flex items-start gap-3">
-      <div class="flex-shrink-0 w-10 h-10 rounded-full bg-gradient-to-r from-gray-100 to-gray-200 shadow-md border-2 border-white flex items-center justify-center">
-        <span class="text-xl">🤖</span>
-      </div>
-      <div class="bg-white/90 backdrop-blur-sm border border-pink-100/50 rounded-2xl px-4 py-3 shadow-sm">
-        <div class="flex items-center gap-2 text-slate-500">
-          <div class="typing">●</div>
-          <div class="typing" style="animation-delay: 0.2s">●</div>
-          <div class="typing" style="animation-delay: 0.4s">●</div>
-          <span class="text-sm ml-2">回答を準備中...</span>
-        </div>
-      </div>
-    </div>`;
-  messages.appendChild(div);
-  div.scrollIntoView({ behavior: 'smooth', block: 'end' });
-}
-function hideTyping() {
-  const t = document.getElementById('typing-indicator');
-  if (t) t.remove();
-}
+  <!-- Script -->
+  <script>
+    // 状態
+    let currentStep = 0;
+    let candidateNumber = '';
+    let isNumberConfirmed = false;
+    const sessionData = {
+      candidateNumber: '',
+      qualification: '',
+      workplace: '',
+      transferReason: '',
+      mustConditions: [],
+      wantConditions: [],
+      canDo: '',
+      willDo: ''
+    };
 
-function updatePlaceholder() {
-  const input = document.getElementById('message-input');
-  if (currentStep === 0 && !isNumberConfirmed) input.placeholder = '求職者番号を入力してください...';
-  else input.placeholder = 'メッセージを入力...';
-}
+    const steps = [
+      { label: '基本情報' }, { label: '転職理由' },
+      { label: '絶対条件' }, { label: '希望条件' },
+      { label: '経験' }, { label: '挑戦' }
+    ];
 
-// メイン処理（デモ用の最短フロー）
-async function processMessage(message) {
-  showTyping();
-  await new Promise(r => setTimeout(r, 500));
+    // UI
+    function updateProgressBar() {
+      const progress = ((currentStep + 1) / 6) * 100;
+      document.getElementById('progress-bar').style.width = `${progress}%`;
+      document.getElementById('current-step').textContent = currentStep + 1;
+      document.getElementById('step-label').textContent = steps[currentStep].label;
+      document.getElementById('number-required').style.display = (currentStep === 0 && !isNumberConfirmed) ? 'block' : 'none';
+    }
 
-  let response = '';
-  let bump = false;
+    function addMessage(type, content) {
+      const messages = document.getElementById('messages');
+      const div = document.createElement('div');
+      div.className = `flex ${type === 'user' ? 'justify-end' : 'justify-start'} message-enter`;
+      div.innerHTML = `
+        <div class='flex max-w-xs lg:max-w-2xl ${type === 'user' ? 'flex-row-reverse' : 'flex-row'} items-start gap-3'>
+          <div class='flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center ${
+            type === 'user'
+              ? 'bg-gradient-to-r from-pink-400 via-purple-400 to-blue-400 text-white'
+              : 'bg-gradient-to-r from-gray-100 to-gray-200 border-2 border-white'
+          }'>${type === 'user' ? '<svg width=\'18\' height=\'18\' viewBox=\'0 0 24 24\' stroke=\'currentColor\'><circle cx=\'12\' cy=\'7\' r=\'4\'></circle></svg>' : '🤖'}</div>
+          <div class='rounded-2xl px-4 py-3 ${
+            type === 'user'
+              ? 'bg-gradient-to-r from-pink-500 via-purple-500 to-blue-500 text-white ml-auto'
+              : 'bg-white/90 text-slate-700 border border-pink-100/50'
+          }'><div class='text-sm whitespace-pre-wrap leading-relaxed'>${content}</div></div>
+        </div>`;
+      messages.appendChild(div);
+      div.scrollIntoView({ behavior: 'smooth', block: 'end' });
+    }
 
-  // Step0: 求職者番号→職種・勤務先
-  if (currentStep === 0) {
-    if (!isNumberConfirmed) {
-      const m = message.match(/\d+/);
-      if (m) {
-        candidateNumber = m[0];
-        sessionData.candidateNumber = candidateNumber;
-        isNumberConfirmed = true;
-        response =
-          `求職者番号：${candidateNumber} を受け取ったよ。\n` +
-          '続けて、今の職種と勤務先を教えてね。';
-      } else {
-        response =
-          '最初に求職者番号を教えてね。\n' +
-          '例）12345\n' +
-          'そのあとで職種と勤務先を聞くよ。';
+    function showTyping() {
+      const messages = document.getElementById('messages');
+      const div = document.createElement('div');
+      div.id = 'typing-indicator';
+      div.className = 'flex justify-start';
+      div.innerHTML = `
+        <div class='flex items-start gap-3'>
+          <div class='flex-shrink-0 w-10 h-10 rounded-full bg-gradient-to-r from-gray-100 to-gray-200 border-2 border-white flex items-center justify-center'>🤖</div>
+          <div class='bg-white/90 border border-pink-100/50 rounded-2xl px-4 py-3'>
+            <div class='flex items-center gap-2 text-slate-500'>
+              <div class='typing'>●</div>
+              <div class='typing' style='animation-delay:.2s'>●</div>
+              <div class='typing' style='animation-delay:.4s'>●</div>
+              <span class='text-sm ml-2'>回答を準備中...</span>
+            </div>
+          </div>
+        </div>`;
+      messages.appendChild(div);
+      div.scrollIntoView({ behavior: 'smooth', block: 'end' });
+    }
+    function hideTyping() { const t = document.getElementById('typing-indicator'); if (t) t.remove(); }
+
+    function updatePlaceholder() {
+      const input = document.getElementById('message-input');
+      input.placeholder = (currentStep === 0 && !isNumberConfirmed) ? '求職者番号を入力してください...' : 'メッセージを入力...';
+    }
+
+    // 会話メイン（指定どおりの文面）
+    async function processMessage(message) {
+      showTyping();
+      await new Promise(r => setTimeout(r, 400));
+
+      let response = '';
+      let bump = false;
+
+      if (currentStep === 0) {
+        if (!isNumberConfirmed) {
+          const m = message.match(/\d+/);
+          if (m) {
+            candidateNumber = m[0];
+            sessionData.candidateNumber = candidateNumber;
+            isNumberConfirmed = true;
+            response = `求職者番号：${candidateNumber} を受け取ったよ。
+続けて、今の職種と勤務先を教えてね。`;
+          } else {
+            response = `最初に求職者番号を教えてね。
+例 12345`;
+          }
+        } else {
+          sessionData.qualification = message;
+          currentStep = 1; bump = true;
+          response =
+`ありがとう！
+
+まずはじめに、今回の転職理由を教えてほしいな。 
+きっかけってどんなことだった？
+しんどいと思ったこと、これはもう無理って思ったこと、
+逆にこういうことに挑戦したい！って思ったこと、何でもOKだよ◎`;
+        }
       }
-    } else {
-      sessionData.qualification = message;
-      currentStep = 1;
-      bump = true;
-      response =
-        'ありがとう。\n\n' +
-        'はじめに、今回の転職理由を教えてほしいな。\n' +
-        'きっかけってどんなことだった？\n' +
-        'しんどかったことや、挑戦したいこと、なんでもOK。';
-    }
-  }
-  // Step1: 転職理由 → Step2
-  else if (currentStep === 1) {
-    sessionData.transferReason = message;
-    currentStep = 2;
-    bump = true;
-    response =
-      '了解。\n\n' +
-      'じゃあ次。\n' +
-      '今回の転職で、これだけは絶対ゆずれない条件を教えて。';
-  }
-  // Step2: 絶対条件 → 追加か次へ
-  else if (currentStep === 2) {
-    if (/なし|ない/i.test(message)) {
-      currentStep = 3;
-      bump = true;
-      response =
-        'OK。では、あったらうれしい条件を教えて。';
-    } else {
-      sessionData.mustConditions.push(message);
-      response =
-        `受け取った：${message}\n` +
-        '他にも絶対条件があれば続けてどうぞ。なければ「なし」。';
-    }
-  }
-  // Step3: 希望条件 → Step4
-  else if (currentStep === 3) {
-    if (!/なし|ない/i.test(message)) sessionData.wantConditions.push(message);
-    currentStep = 4;
-    bump = true;
-    response =
-      '質問はあと2つ。\n' +
-      'これまでやってきたことで、これからも活かしたいことは？';
-  }
-  // Step4: Can → Step5
-  else if (currentStep === 4) {
-    sessionData.canDo = message;
-    currentStep = 5;
-    bump = true;
-    response =
-      'ラスト。\n' +
-      '今回の転職で叶えたい挑戦や、やってみたいことは？';
-  }
-  // Step5: Will → 完了
-  else if (currentStep === 5) {
-    sessionData.willDo = message;
-    currentStep = 6;
-    bump = true;
-    response =
-      '今日はここまで、ありがとう。\n' +
-      '次回の面談に引き継ぐ内容はこれ。\n' +
-      '📋 収集データ\n' +
-      `求職者番号: ${sessionData.candidateNumber}\n` +
-      `転職理由: ${sessionData.transferReason}\n` +
-      `絶対条件: ${sessionData.mustConditions.length ? sessionData.mustConditions.join(', ') : '未設定'}\n` +
-      `希望条件: ${sessionData.wantConditions.length ? sessionData.wantConditions.join(', ') : '未設定'}\n` +
-      `活かしたい経験: ${sessionData.canDo}\n` +
-      `挑戦したいこと: ${sessionData.willDo}`;
-  }
+      else if (currentStep === 1) {
+        sessionData.transferReason = message;
+        currentStep = 2; bump = true;
+        response =
+`了解！
 
-  hideTyping();
-  addMessage('ai', response);
-  if (bump) {
+じゃあ次の質問！
+今回の転職でこれだけは絶対譲れない！というのを教えて！
+仕事内容でも、制度でも、条件でもOK◎
+
+例えば・・・
+絶対土日休みじゃないと困る！
+絶対オンコールはできない！
+
+後から あるといいな についても聞くから、今は 絶対 だけ教えてね。`;
+      }
+      else if (currentStep === 2) {
+        if (/なし|ない/i.test(message)) {
+          currentStep = 3; bump = true;
+          response =
+`ありがとう！
+それじゃあ次に、こうだったらいいな、というのを聞いていくね。
+これも仕事内容でも、制度でも、条件面でもOK◎
+
+例えば・・・
+マイカー通勤ができると嬉しいな
+できれば夜勤がないといいな
+
+って感じ！`;
+        } else {
+          sessionData.mustConditions.push(message);
+          response =
+`受け取った：${message}
+他にも絶対条件があれば続けてどうぞ。なければ なし と入力。`;
+        }
+      }
+      else if (currentStep === 3) {
+        if (!/なし|ない/i.test(message)) sessionData.wantConditions.push(message);
+        currentStep = 4; bump = true;
+        response =
+`質問は残り2つ！
+あと少しいくよ。
+
+次に教えて欲しいのは これまでやってきたこと。
+次回の面談で深掘りするから、ざっくりでOK。
+これからも活かしたいことを教えてね。`;
+      }
+      else if (currentStep === 4) {
+        sessionData.canDo = message;
+        currentStep = 5; bump = true;
+        response =
+`これが最後の質問👏
+今回の転職で叶えたい挑戦や、夢はある？`;
+      }
+      else if (currentStep === 5) {
+        sessionData.willDo = message;
+        currentStep = 6; bump = true;
+        response =
+`今日はたくさん話してくれてありがとう！
+ここまでの内容を担当エージェントに引き継ぐね。
+次回の面談で一緒に詰めていこう！
+
+📋 収集データ
+求職者番号: ${sessionData.candidateNumber}
+転職理由: ${sessionData.transferReason}
+絶対条件: ${sessionData.mustConditions.length ? sessionData.mustConditions.join(', ') : '未設定'}
+希望条件: ${sessionData.wantConditions.length ? sessionData.wantConditions.join(', ') : '未設定'}
+活かしたい経験: ${sessionData.canDo}
+挑戦したいこと: ${sessionData.willDo}`;
+      }
+
+      hideTyping();
+      addMessage('ai', response);
+      if (bump) { updateProgressBar(); updatePlaceholder(); }
+    }
+
+    // 送信イベント
+    document.getElementById('send-button').addEventListener('click', async () => {
+      const input = document.getElementById('message-input');
+      const text = input.value.trim();
+      if (!text) return;
+      addMessage('user', text);
+      input.value = '';
+      await processMessage(text);
+    });
+
+    document.getElementById('message-input').addEventListener('keypress', (e) => {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        document.getElementById('send-button').click();
+      }
+    });
+
+    // 初期化
     updateProgressBar();
     updatePlaceholder();
-  }
-}
-
-// 送信イベント
-document.getElementById('send-button').addEventListener('click', async () => {
-  const input = document.getElementById('message-input');
-  const text = input.value.trim();
-  if (!text) return;
-  addMessage('user', text);
-  input.value = '';
-  await processMessage(text);
-});
-
-document.getElementById('message-input').addEventListener('keypress', (e) => {
-  if (e.key === 'Enter' && !e.shiftKey) {
-    e.preventDefault();
-    document.getElementById('send-button').click();
-  }
-});
-
-// 初期表示
-updateProgressBar();
-updatePlaceholder();
-</script>
+  </script>
 </body>
 </html>
-```
