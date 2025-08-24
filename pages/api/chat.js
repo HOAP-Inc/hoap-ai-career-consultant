@@ -16,10 +16,6 @@ const transferReasonFlow = {
       "教育体制が整備されている職場で働きたい",
       "経営者が医療職のところで働きたい",
       "経営者が医療職ではないところで働きたい"
-    ],
-    "deepDrill": [
-      ["経営方針で特に合わないと感じる部分は？", "組織の体制で困ってることがある？", "評価や教育面で不満がある？"],
-      ["それって改善されそうにない感じ？", "他のスタッフも同じように感じてる？", "具体的にはどんな場面で一番感じる？"]
     ]
   },
   "働く仲間に関すること": {
@@ -31,10 +27,6 @@ const transferReasonFlow = {
       "ロールモデルとなる上司や先輩がほしい",
       "職種関係なく一体感がある仲間と働きたい",
       "お局がいない職場で働きたい"
-    ],
-    "deepDrill": [
-      ["具体的にはどんな人間関係で困ってるの？", "上司や先輩との関係？それとも同僚との関係？", "職場の雰囲気が悪いってこと？"],
-      ["それって毎日続いてる感じ？", "相談できる人はいない状況？", "チームワークの面でも困ってることある？"]
     ]
   },
   "仕事内容・キャリアに関すること": {
@@ -45,10 +37,6 @@ const transferReasonFlow = {
       "スキルアップしたい",
       "患者・利用者への貢献実感を感じられる仕事に携われる",
       "昇進・昇格の機会がある"
-    ],
-    "deepDrill": [
-      ["今の仕事内容で物足りなさを感じてる？", "キャリアアップの機会がない？", "やりがいを感じられない？"],
-      ["どんな仕事だったらやりがいを感じられそう？", "スキルアップの機会が欲しい？", "もっと責任のある仕事をしたい？"]
     ]
   },
   "労働条件に関すること": {
@@ -61,10 +49,6 @@ const transferReasonFlow = {
       "社会保険を完備している職場で働きたい",
       "診療時間内で自己研鑽できる職場で働きたい",
       "前残業のない職場で働きたい"
-    ],
-    "deepDrill": [
-      ["具体的にはどの辺りが一番きつい？", "時間的なこと？それとも休みの取りづらさ？", "勤務条件で特に困ってることは？"],
-      ["それがずっと続いてる状況？", "改善の見込みはなさそう？", "他にも労働条件で困ってることある？"]
     ]
   },
   "プライベートに関すること": {
@@ -73,39 +57,23 @@ const transferReasonFlow = {
       "家庭との両立に理解のある職場で働きたい",
       "勤務時間外でイベントがない職場で働きたい", 
       "プライベートでも仲良くしている職場で働きたい"
-    ],
-    "deepDrill": [
-      ["家庭との両立で困ってることがある？", "プライベートの時間が取れない？", "職場のイベントが負担？"],
-      ["それって改善の余地はなさそう？", "他にも両立で困ってることある？", "理想的な働き方はどんな感じ？"]
     ]
   },
   "職場環境・設備": {
     "keywords": ["設備", "環境", "施設", "器械", "機器", "システム", "IT", "デジタル", "古い", "新しい", "最新", "設置", "導入", "整備"],
-    "internal_options": [],
-    "deepDrill": [
-      ["どんな設備や環境で困ってる？", "古い機器で作業効率が悪い？", "IT環境が整っていない？"],
-      ["それって業務に支障が出てる？", "改善の要望は出したことある？", "他にも設備面で困ることある？"]
-    ]
+    "internal_options": []
   },
   "職場の安定性": {
     "keywords": ["安定", "将来性", "経営状況", "倒産", "リストラ", "不安", "継続", "持続", "成長", "発展", "将来", "先行き"],
-    "internal_options": [],
-    "deepDrill": [
-      ["経営状況で不安に感じることがある？", "将来性に疑問を感じてる？", "職場の安定性が心配？"],
-      ["それって具体的にはどんなことで感じる？", "他のスタッフも同じように不安がってる？", "改善される見込みはなさそう？"]
-    ]
+    "internal_options": []
   },
   "給与・待遇": {
     "keywords": ["給料", "給与", "年収", "月収", "手取り", "賞与", "ボーナス", "昇給", "手当", "待遇", "福利厚生", "安い", "低い", "上がらない", "生活できない", "お金"],
-    "internal_options": [],
-    "deepDrill": [
-      ["給与面で特に困ってることは？", "昇給の見込みがない？", "福利厚生が充実してない？"],
-      ["それって生活に支障が出るレベル？", "他と比較して低いと感じる？", "改善の交渉はしたことある？"]
-    ]
+    "internal_options": []
   }
 };
 
-// mustwant辞書
+// mustWant辞書（正確なtag_label）
 const mustWantItems = [
   "急性期病棟", "回復期病棟", "慢性期・療養型病院", "一般病院", "地域包括ケア病棟", "療養病棟", 
   "緩和ケア病棟（ホスピス）", "クリニック", "精神科病院", "訪問看護ステーション", 
@@ -136,6 +104,83 @@ const mustWantItems = [
   "院長・分院長候補", "担当制"
 ];
 
+// 共感セリフのバリエーション
+const empathyResponses = {
+  "経営・組織に関すること": [
+    "経営方針って職場選びで重要だよね！",
+    "組織の体制は働きやすさに直結するもんね！",
+    "評価制度がしっかりしてないと不安になるよね！"
+  ],
+  "働く仲間に関すること": [
+    "人間関係って本当に大事だよね！",
+    "職場の人間関係でしんどい思いしてるんだね！",
+    "毎日顔を合わせる人たちだから重要だよね！"
+  ],
+  "仕事内容・キャリアに関すること": [
+    "やりがいって仕事を続ける上で大切だもんね！",
+    "キャリアアップできないと将来が不安だよね！",
+    "自分の成長を感じられない仕事は辛いよね！"
+  ],
+  "労働条件に関すること": [
+    "働き方の条件は本当に重要だもんね！",
+    "それは体調にも影響するから大変だね！",
+    "労働環境が悪いと続けるのが辛いよね！"
+  ],
+  "プライベートに関すること": [
+    "家庭との両立って本当に大変だよね！",
+    "プライベートの時間も大切にしたいもんね！",
+    "ワークライフバランスは重要だよね！"
+  ],
+  "職場環境・設備": [
+    "働く環境って作業効率にも影響するもんね！",
+    "古い設備だと仕事がやりにくいよね！"
+  ],
+  "職場の安定性": [
+    "職場の将来性は気になるよね！",
+    "経営が不安定だと心配になるもんね！"
+  ],
+  "給与・待遇": [
+    "お給料のことは生活に直結するもんね！",
+    "待遇面での不満があると続けるのが辛いよね！"
+  ]
+};
+
+// 深掘り質問（カテゴリ別）
+const deepDrillQuestions = {
+  "経営・組織に関すること": [
+    ["経営方針で特に合わないと感じる部分は？", "組織の体制で困ってることがある？", "評価や教育面で不満がある？"],
+    ["それって改善されそうにない感じ？", "他のスタッフも同じように感じてる？", "具体的にはどんな場面で一番感じる？"]
+  ],
+  "働く仲間に関すること": [
+    ["具体的にはどんな人間関係で困ってるの？", "上司や先輩との関係？それとも同僚との関係？", "職場の雰囲気が悪いってこと？"],
+    ["それって毎日続いてる感じ？", "相談できる人はいない状況？", "チームワークの面でも困ってることある？"]
+  ],
+  "仕事内容・キャリアに関すること": [
+    ["今の仕事内容で物足りなさを感じてる？", "キャリアアップの機会がない？", "やりがいを感じられない？"],
+    ["どんな仕事だったらやりがいを感じられそう？", "スキルアップの機会が欲しい？", "もっと責任のある仕事をしたい？"]
+  ],
+  "労働条件に関すること": [
+    ["具体的にはどの辺りが一番きつい？", "時間的なこと？それとも休みの取りづらさ？", "勤務条件で特に困ってることは？"],
+    ["それがずっと続いてる状況？", "改善の見込みはなさそう？", "他にも労働条件で困ってることある？"]
+  ],
+  "プライベートに関すること": [
+    ["家庭との両立で困ってることがある？", "プライベートの時間が取れない？", "職場のイベントが負担？"],
+    ["それって改善の余地はなさそう？", "他にも両立で困ってることある？", "理想的な働き方はどんな感じ？"]
+  ],
+  "職場環境・設備": [
+    ["どんな設備や環境で困ってる？", "古い機器で作業効率が悪い？", "IT環境が整っていない？"],
+    ["それって業務に支障が出てる？", "改善の要望は出したことある？", "他にも設備面で困ることある？"]
+  ],
+  "職場の安定性": [
+    ["経営状況で不安に感じることがある？", "将来性に疑問を感じてる？", "職場の安定性が心配？"],
+    ["それって具体的にはどんなことで感じる？", "他のスタッフも同じように不安がってる？", "改善される見込みはなさそう？"]
+  ],
+  "給与・待遇": [
+    ["給与面で特に困ってることは？", "昇給の見込みがない？", "福利厚生が充実してない？"],
+    ["それって生活に支障が出るレベル？", "他と比較して低いと感じる？", "改善の交渉はしたことある？"]
+  ]
+};
+
 // セッションデータ管理
 const sessions = new Map();
 
@@ -146,6 +191,7 @@ function getSession(sessionId) {
       qualification: '',
       workplace: '',
       transferReason: '',
+      transferReasonRaw: '',
       mustConditions: [],
       wantConditions: [],
       canDo: '',
@@ -153,7 +199,9 @@ function getSession(sessionId) {
       deepDrillCount: 0,
       currentCategory: null,
       awaitingSelection: false,
-      selectionOptions: []
+      selectionOptions: [],
+      currentStep2Processing: false,
+      currentStep3Processing: false
     });
   }
   return sessions.get(sessionId);
@@ -223,14 +271,22 @@ export default async function handler(req, res) {
       // 選択肢への回答チェック
       if (session.awaitingSelection) {
         const selectedOption = session.selectionOptions.find(opt => 
-          message.toLowerCase().includes(opt.toLowerCase().substring(0, 15))
+          message.toLowerCase().includes(opt.toLowerCase().substring(0, 15)) ||
+          message.includes('1') && session.selectionOptions[0] === opt ||
+          message.includes('2') && session.selectionOptions[1] === opt ||
+          message.includes('3') && session.selectionOptions[2] === opt
         );
+        
         if (selectedOption) {
           session.transferReason = selectedOption;
           session.awaitingSelection = false;
           session.selectionOptions = [];
+          
+          // カテゴリに応じた柔軟な共感
+          const categoryEmpathy = getRandomFromArray(empathyResponses[session.currentCategory] || ["それは大事だよね！"], 1)[0];
+          
           return res.json({
-            response: `なるほど、それは大事だよね！つまり「${selectedOption}」ってことだね！
+            response: `${categoryEmpathy}つまり『${selectedOption}』ってことだね！
 
 ありがとう！
 
@@ -243,11 +299,14 @@ export default async function handler(req, res) {
 「絶対オンコールはできない！」
 
 後から『あるといいな』『ないといいな』についても聞くから、今は『絶対！』というものだけ教えてね。`,
-            step: 2
+            step: 2,
+            taggedData: {
+              transferReason: selectedOption
+            }
           });
         } else {
           return res.json({
-            response: "選択肢の中から選んでいただけますか？",
+            response: "選択肢の中から選んでいただけますか？番号でも、内容でも、どちらでもOKです！",
             step: 1
           });
         }
@@ -276,6 +335,7 @@ export default async function handler(req, res) {
 
       if (topCategories.length === 0) {
         // 未マッチ処理
+        session.transferReasonRaw = message;
         return res.json({
           response: `なるほど、その気持ちよくわかる！大事な転職のきっかけだね◎
 
@@ -290,7 +350,11 @@ export default async function handler(req, res) {
 「絶対オンコールはできない！」
 
 後から『あるといいな』『ないといいな』についても聞くから、今は『絶対！』というものだけ教えてね。`,
-          step: 2
+          step: 2,
+          taggedData: {
+            transferReason: null,
+            transferReasonRaw: message
+          }
         });
       }
 
@@ -300,6 +364,7 @@ export default async function handler(req, res) {
 
       // 禁止カテゴリ（候補が空）の処理
       if (options.length === 0) {
+        session.transferReasonRaw = message;
         return res.json({
           response: `なるほど、その気持ちよくわかる！大事な転職のきっかけだね◎
 
@@ -314,7 +379,11 @@ export default async function handler(req, res) {
 「絶対オンコールはできない！」
 
 後から『あるといいな』『ないといいな』についても聞くから、今は『絶対！』というものだけ教えてね。`,
-          step: 2
+          step: 2,
+          taggedData: {
+            transferReason: null,
+            transferReasonRaw: message
+          }
         });
       }
 
@@ -324,8 +393,11 @@ export default async function handler(req, res) {
         session.currentCategory = selectedCategory;
         
         // カテゴリ別深掘り質問を取得
-        const deepDrillQuestions = categoryData.deepDrill[session.deepDrillCount - 1];
-        const selectedQuestion = getRandomFromArray(deepDrillQuestions, 1)[0];
+        const drillQuestions = deepDrillQuestions[selectedCategory] || [
+          ["それについてもう少し詳しく教えて", "具体的にはどんな？"],
+          ["他にも関連することはある？", "それはなぜ？"]
+        ];
+        const selectedQuestion = getRandomFromArray(drillQuestions[session.deepDrillCount - 1], 1)[0];
         
         return res.json({
           response: selectedQuestion,
@@ -352,8 +424,9 @@ ${optionsList}
       }
     }
 
-    // Step2: 絶対希望（mustWant辞書マッチング）
+    // Step2: 絶対希望（Must条件）
     if (currentStep === 2) {
+      // 「ない」チェック
       if (message.toLowerCase().includes('ない') || message.toLowerCase().includes('なし')) {
         return res.json({
           response: `ありがとう！
@@ -369,13 +442,45 @@ ${optionsList}
         });
       }
 
-      // mustWant辞書マッチング
+      // 選択処理中の回答チェック
+      if (session.awaitingSelection) {
+        const selectedOption = session.selectionOptions.find(opt => 
+          message.toLowerCase().includes(opt.toLowerCase()) ||
+          message.includes('1') && session.selectionOptions[0] === opt ||
+          message.includes('2') && session.selectionOptions[1] === opt ||
+          message.includes('3') && session.selectionOptions[2] === opt
+        );
+        
+        if (selectedOption) {
+          session.mustConditions.push(selectedOption);
+          session.awaitingSelection = false;
+          session.selectionOptions = [];
+          
+          return res.json({
+            response: `そっか、『${selectedOption}』が絶対ってことだね！
+
+他にも絶対条件はある？`,
+            step: 2,
+            taggedData: {
+              mustConditions: session.mustConditions
+            }
+          });
+        }
+      }
+
+      // mustWant辞書マッチング（厳密）
       const matchedItems = mustWantItems.filter(item => {
-        return message.toLowerCase().includes(item.toLowerCase()) || 
-               item.toLowerCase().includes(message.toLowerCase());
+        const itemLower = item.toLowerCase();
+        const messageLower = message.toLowerCase();
+        return messageLower.includes(itemLower) || 
+               itemLower.includes(messageLower) ||
+               // 部分マッチング（より柔軟に）
+               messageLower.split(' ').some(word => itemLower.includes(word)) ||
+               itemLower.split(' ').some(word => messageLower.includes(word));
       });
 
       if (matchedItems.length === 0) {
+        // 未マッチ処理
         return res.json({
           response: `そっか、わかった！大事な希望だね◎
 
@@ -388,15 +493,21 @@ ${optionsList}
       if (topMatches.length === 1) {
         session.mustConditions.push(topMatches[0]);
         return res.json({
-          response: `そっか、${topMatches[0]}が絶対ってことだね！
+          response: `そっか、『${topMatches[0]}』が絶対ってことだね！
 
 他にも絶対条件はある？`,
-          step: 2
+          step: 2,
+          taggedData: {
+            mustConditions: session.mustConditions
+          }
         });
       } else {
         const optionsList = topMatches.map((opt, index) => 
           `${index + 1}. ${opt}`
         ).join('\n');
+        
+        session.awaitingSelection = true;
+        session.selectionOptions = topMatches;
         
         return res.json({
           response: `この中だとどれが一番近い？
@@ -409,8 +520,9 @@ ${optionsList}
       }
     }
 
-    // Step3: 希望条件（Step2とほぼ同じロジック）
+    // Step3: 希望条件（Want条件）
     if (currentStep === 3) {
+      // 「ない」チェック
       if (message.toLowerCase().includes('ない') || message.toLowerCase().includes('なし')) {
         return res.json({
           response: `質問は残り2つ！
@@ -423,13 +535,45 @@ ${optionsList}
         });
       }
 
-      // mustWant辞書マッチング
+      // 選択処理中の回答チェック
+      if (session.awaitingSelection) {
+        const selectedOption = session.selectionOptions.find(opt => 
+          message.toLowerCase().includes(opt.toLowerCase()) ||
+          message.includes('1') && session.selectionOptions[0] === opt ||
+          message.includes('2') && session.selectionOptions[1] === opt ||
+          message.includes('3') && session.selectionOptions[2] === opt
+        );
+        
+        if (selectedOption) {
+          session.wantConditions.push(selectedOption);
+          session.awaitingSelection = false;
+          session.selectionOptions = [];
+          
+          return res.json({
+            response: `了解！『${selectedOption}』だと嬉しいってことだね！
+
+他にもあったらいいなっていうのはある？`,
+            step: 3,
+            taggedData: {
+              wantConditions: session.wantConditions
+            }
+          });
+        }
+      }
+
+      // mustWant辞書マッチング（Step2と同じロジック）
       const matchedItems = mustWantItems.filter(item => {
-        return message.toLowerCase().includes(item.toLowerCase()) || 
-               item.toLowerCase().includes(message.toLowerCase());
+        const itemLower = item.toLowerCase();
+        const messageLower = message.toLowerCase();
+        return messageLower.includes(itemLower) || 
+               itemLower.includes(messageLower) ||
+               // 部分マッチング（より柔軟に）
+               messageLower.split(' ').some(word => itemLower.includes(word)) ||
+               itemLower.split(' ').some(word => messageLower.includes(word));
       });
 
       if (matchedItems.length === 0) {
+        // 未マッチ処理
         return res.json({
           response: `了解！気持ちは受け取ったよ◎
 
@@ -442,15 +586,21 @@ ${optionsList}
       if (topMatches.length === 1) {
         session.wantConditions.push(topMatches[0]);
         return res.json({
-          response: `了解！${topMatches[0]}だと嬉しいってことだね！
+          response: `了解！『${topMatches[0]}』だと嬉しいってことだね！
 
 他にもあったらいいなっていうのはある？`,
-          step: 3
+          step: 3,
+          taggedData: {
+            wantConditions: session.wantConditions
+          }
         });
       } else {
         const optionsList = topMatches.map((opt, index) => 
           `${index + 1}. ${opt}`
         ).join('\n');
+        
+        session.awaitingSelection = true;
+        session.selectionOptions = topMatches;
         
         return res.json({
           response: `この中だとどれが一番近い？
@@ -485,7 +635,7 @@ ${optionsList}
 
 📋 **収集データ**
 求職者番号: ${session.candidateNumber}
-転職理由: ${session.transferReason || '未設定'}
+転職理由: ${session.transferReason || session.transferReasonRaw || '未設定'}
 絶対条件: ${session.mustConditions.length > 0 ? session.mustConditions.join(', ') : '未設定'}
 希望条件: ${session.wantConditions.length > 0 ? session.wantConditions.join(', ') : '未設定'}
 活かしたい経験: ${session.canDo}
@@ -498,7 +648,7 @@ ${optionsList}
     // Step6: 完了
     if (currentStep >= 6) {
       return res.json({
-        response: "ヒアリングは完了しました。ありがとうございました！",
+        response: "ヒアリング完了です！お疲れ様でした✨",
         step: 6,
         sessionData: session
       });
