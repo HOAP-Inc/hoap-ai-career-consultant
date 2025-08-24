@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import Head from 'next/head'
 
 /** 固定フロー（6段） */
@@ -21,7 +21,7 @@ function StatusChip({ label, value, ok }) {
 }
 
 export default function Home() {
-  // 初期メッセージ
+  // 初期メッセージ（番号→所有資格→勤務先の順だけで進む）
   const [messages, setMessages] = useState([
     {
       type: 'ai',
@@ -36,10 +36,11 @@ export default function Home() {
     },
   ])
 
-  // ステート
+  // ====== 状態 ======
   const [currentStep, setCurrentStep] = useState(0) // 0..5
   const [candidateNumber, setCandidateNumber] = useState('')
-  const [qualification, setQualification] = useState('')
+  const [qualification, setQualification] = useState('')  // 所有資格（タグ）
+  const [unknownQualification, setUnknownQualification] = useState('') // マスタ外
   const [workplace, setWorkplace] = useState('')
 
   const [transferReason, setTransferReason] = useState('')
@@ -52,19 +53,29 @@ export default function Home() {
 
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
-  const [isComposing, setIsComposing] = useState(false) // ★ IME中フラグ
+  const [isComposing, setIsComposing] = useState(false) // IME中フラグ
   const [sessionId] = useState(() => Math.random().toString(36).slice(2))
 
-  // refs
-  const listRef = useRef(null)      // スクロール
-  const textareaRef = useRef(null)  // 入力欄
+  // 資格マスタ
+  const [qualMaster, setQualMaster] = useState<string[]>([])
+  useEffect(() => {
+    // 公開ディレクトリから取得（ハードコード禁止）
+    fetch('/tags/qualifications.json')
+      .then(r => r.json())
+      .then((arr) => Array.isArray(arr) ? setQualMaster(arr) : setQualMaster([]))
+      .catch(() => setQualMaster([]))
+  }, [])
+
+  // ====== refs ======
+  const listRef = useRef<HTMLDivElement | null>(null)
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null)
 
   useEffect(() => {
     listRef.current?.lastElementChild?.scrollIntoView({ behavior: 'smooth' })
   }, [messages, loading])
 
-  const addAI = (text) => setMessages((m) => [...m, { type: 'ai', content: text }])
-  const addUser = (text) => setMessages((m) => [...m, { type: 'user', content: text }])
+  const addAI = (text: string) => setMessages((m) => [...m, { type: 'ai', content: text }])
+  const addUser = (text: string) => setMessages((m) => [...m, { type: 'user', content: text }])
 
   // 入力欄を確実に空にする
   const hardClearInput = () => {
@@ -75,21 +86,45 @@ export default function Home() {
     }
   }
 
+  // サジェスト（部分一致）
+  const qualSuggestions = useMemo(() => {
+    const t = input.replace(/\s/g, '')
+    if (!t) return []
+    const lower = t.toLowerCase()
+    // 部分一致 → 先頭一致優先
+    const starts = qualMaster.filter(q => q.toLowerCase().startsWith(lower))
+    const includes = qualMaster.filter(q => !starts.includes(q) && q.toLowerCase().includes(lower))
+    return [...starts, ...includes].slice(0, 5)
+  }, [input, qualMaster])
+
+  const pickQualTag = (text: string) => {
+    const norm = text.replace(/\s/g, '')
+    // 完全一致
+    const exact = qualMaster.find(q => q === norm)
+    if (exact) return { tag: exact, unknown: '' }
+    // 部分一致が1件に絞れたらそれを採用
+    const cands = qualMaster.filter(q => q.includes(norm))
+    if (cands.length === 1) return { tag: cands[0], unknown: '' }
+    // 未確定
+    return { tag: '', unknown: norm }
+  }
+
   // 送信
   const onSend = async () => {
-    // 直近のDOM値を参照（IME絡みのズレ対策）
+    // IMEのズレ対策：DOMの値を優先
     const outgoing = (textareaRef.current?.value ?? input).trim()
     if (!outgoing || loading || isComposing) return
 
     addUser(outgoing)
-    hardClearInput() // ★必ず消す
+    hardClearInput() // 送信直後に必ずクリア
 
     setLoading(true)
     try {
-      // Step0 はフロントで強制（番号 → 職種 → 勤務先）
+      // ===== Step0 はフロント強制（番号 → 所有資格 → 勤務先） =====
       if (currentStep === 0) {
+        // ① 番号
         if (!isNumberConfirmed) {
-          const num = (outgoing.match(/\d+/) || [])[0]
+          const num = (outgoing.match(/\d{3,}/) || [])[0]
           if (!num) {
             addAI('ごめん！最初に「求職者番号」を数字で教えてね。')
             setLoading(false)
@@ -97,19 +132,57 @@ export default function Home() {
           }
           setCandidateNumber(num)
           setIsNumberConfirmed(true)
-          addAI(`求職者番号：${num} だね！\n次は ②「今の職種」を教えて！`)
+          addAI(`求職者番号：${num} だね！\n次は ②「所有資格」（例：正看護師／歯科衛生士／理学療法士...）を教えて！`)
           setLoading(false)
           return
         }
-        if (!qualification) {
-          setQualification(outgoing)
+        // ② 所有資格（マスタ照合）
+        if (!qualification && !unknownQualification) {
+          const { tag, unknown } = pickQualTag(outgoing)
+          if (!tag) {
+            // 候補提示
+            if (qualSuggestions.length > 0) {
+              addAI(`候補はこのあたり？\n${qualSuggestions.map((q, i) => `${i + 1}. ${q}`).join('\n')}\n\n番号か正式名称で答えてね。`)
+            } else {
+              addAI(`ごめん！資格が見つからない…\n主な例：${(qualMaster.slice(0, 10)).join(' / ')}\nこの中にある？正式名称で教えてね。`)
+            }
+            setUnknownQualification(unknown) // 保留
+            setLoading(false)
+            return
+          }
+          setQualification(tag)
+          setUnknownQualification('')
           addAI('OK！次は ③「いま働いてる場所」（施設名や業態）を教えて！')
           setLoading(false)
           return
         }
+        // ②で候補提示後に番号で返ってきたケース
+        if (!qualification && unknownQualification) {
+          const choice = Number(outgoing)
+          if (!Number.isNaN(choice) && choice >= 1 && choice <= qualSuggestions.length) {
+            const chosen = qualSuggestions[choice - 1]
+            setQualification(chosen)
+            setUnknownQualification('')
+            addAI('OK！次は ③「いま働いてる場所」（施設名や業態）を教えて！')
+            setLoading(false)
+            return
+          }
+          // 直接正式名称で再返信が来た場合
+          const { tag } = pickQualTag(outgoing)
+          if (tag) {
+            setQualification(tag)
+            setUnknownQualification('')
+            addAI('OK！次は ③「いま働いてる場所」（施設名や業態）を教えて！')
+            setLoading(false)
+            return
+          }
+          addAI('資格名の確認ができない…候補から番号で選ぶか、正式名称で教えて！')
+          setLoading(false)
+          return
+        }
+        // ③ 勤務先 → Step1へ
         if (!workplace) {
           setWorkplace(outgoing)
-          // Step1へ
           addAI(
 `ありがとう！
 
@@ -122,7 +195,7 @@ export default function Home() {
         }
       }
 
-      // Step1〜5 はAPI
+      // ===== Step1〜5 は API（タグ付け＆進行はサーバで厳密制御） =====
       const res = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -142,8 +215,10 @@ export default function Home() {
 
       addAI(data.response)
 
+      // サーバがOK出した時だけ進む（未入力で先送りさせない）
       if (typeof data.step === 'number') setCurrentStep(data.step)
 
+      // サーバ側のセッション反映
       if (data.sessionData) {
         const s = data.sessionData
         if (s.transferReason) setTransferReason(s.transferReason)
@@ -202,7 +277,7 @@ export default function Home() {
           {/* ステータス行 */}
           <div className="mt-3 flex flex-wrap gap-2">
             <StatusChip label="番号" value={candidateNumber || '未入力'} ok={!!candidateNumber} />
-            <StatusChip label="職種" value={qualification || '未入力'} ok={!!qualification} />
+            <StatusChip label="所有資格" value={qualification || (unknownQualification ? `未確定: ${unknownQualification}` : '未入力')} ok={!!qualification} />
             <StatusChip label="勤務先" value={workplace || '未入力'} ok={!!workplace} />
             <StatusChip label="転職理由" value={transferReason ? '設定済み' : '未設定'} ok={!!transferReason} />
             <StatusChip label="Must" value={`${mustCount}件`} ok={mustCount > 0} />
@@ -259,15 +334,24 @@ export default function Home() {
                 ref={textareaRef}
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
-                onCompositionStart={() => setIsComposing(true)}        // ★ IME開始
-                onCompositionEnd={() => setIsComposing(false)}          // ★ IME終了
-                placeholder={!isNumberConfirmed && currentStep === 0 ? '求職者番号を入力してください...' : 'メッセージを入力...'}
+                onCompositionStart={() => setIsComposing(true)}
+                onCompositionEnd={() => setIsComposing(false)}
+                placeholder={
+                  currentStep === 0 && !isNumberConfirmed
+                    ? '求職者番号（数字）'
+                    : currentStep === 0 && !qualification && !unknownQualification
+                    ? '所有資格（例：正看護師／歯科衛生士／理学療法士 など）'
+                    : currentStep === 0 && !workplace
+                    ? 'いま働いてる場所（施設名や業態）'
+                    : 'メッセージを入力...'
+                }
                 className='w-full bg-white border border-pink-200 rounded-xl px-4 py-3 text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-purple-400 focus:border-transparent resize-none min-h-[52px] max-h-32 shadow-sm'
                 rows={1}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter') {
-                    // ★ 変換中Enterは送信しない（各ブラウザ対策）
-                    if (isComposing || e.isComposing || e.nativeEvent.isComposing || e.keyCode === 229) return
+                    // 変換中Enterは送信しない（各ブラウザ対策）
+                    // @ts-ignore
+                    if (isComposing || e.isComposing || e.nativeEvent?.isComposing || e.keyCode === 229) return
                     if (!e.shiftKey) {
                       e.preventDefault()
                       onSend()
@@ -275,9 +359,29 @@ export default function Home() {
                   }
                 }}
               />
+              {/* 簡易サジェスト */}
+              {currentStep === 0 && isNumberConfirmed && !qualification && (qualSuggestions.length > 0) && (
+                <div className="absolute z-10 mt-1 w-full bg-white border border-pink-100 rounded-xl shadow-sm">
+                  {qualSuggestions.map((q) => (
+                    <button
+                      key={q}
+                      type="button"
+                      onClick={() => {
+                        setQualification(q)
+                        setUnknownQualification('')
+                        setMessages((m) => [...m, { type: 'ai', content: 'OK！次は ③「いま働いてる場所」（施設名や業態）を教えて！' }])
+                        hardClearInput()
+                      }}
+                      className="w-full text-left px-3 py-2 text-sm hover:bg-pink-50"
+                    >
+                      {q}
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
             <button
-              onClick={() => { if (!isComposing) onSend() }}             // ★ IME中クリック送信もブロック
+              onClick={() => { if (!isComposing) onSend() }}
               disabled={loading}
               className='bg-gradient-to-r from-pink-500 via-purple-500 to-blue-500 hover:from-pink-600 hover:via-purple-600 hover:to-blue-600 disabled:from-gray-300 disabled:to-gray-400 disabled:cursor-not-allowed text-white rounded-xl p-3 transition-all duration-200 shadow-lg hover:shadow-xl transform hover:scale-105'
             >
