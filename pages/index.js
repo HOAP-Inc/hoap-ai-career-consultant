@@ -21,7 +21,7 @@ function StatusChip({ label, value, ok }) {
 }
 
 export default function Home() {
-  // ===== 初期メッセージ（矛盾なし：最初は番号だけ聞く） =====
+  // 初期メッセージ
   const [messages, setMessages] = useState([
     {
       type: 'ai',
@@ -36,7 +36,7 @@ export default function Home() {
     },
   ])
 
-  // ===== 状態 =====
+  // ステート
   const [currentStep, setCurrentStep] = useState(0) // 0..5
   const [candidateNumber, setCandidateNumber] = useState('')
   const [qualification, setQualification] = useState('')
@@ -52,9 +52,10 @@ export default function Home() {
 
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
+  const [isComposing, setIsComposing] = useState(false) // ★ IME中フラグ
   const [sessionId] = useState(() => Math.random().toString(36).slice(2))
 
-  // ===== refs =====
+  // refs
   const listRef = useRef(null)      // スクロール
   const textareaRef = useRef(null)  // 入力欄
 
@@ -65,18 +66,27 @@ export default function Home() {
   const addAI = (text) => setMessages((m) => [...m, { type: 'ai', content: text }])
   const addUser = (text) => setMessages((m) => [...m, { type: 'user', content: text }])
 
-  // ===== 送信 =====
+  // 入力欄を確実に空にする
+  const hardClearInput = () => {
+    setInput('')
+    if (textareaRef.current) {
+      textareaRef.current.value = '' // DOMも空に
+      requestAnimationFrame(() => textareaRef.current?.focus())
+    }
+  }
+
+  // 送信
   const onSend = async () => {
-    const outgoing = input.trim()
-    if (!outgoing || loading) return
+    // 直近のDOM値を参照（IME絡みのズレ対策）
+    const outgoing = (textareaRef.current?.value ?? input).trim()
+    if (!outgoing || loading || isComposing) return
 
     addUser(outgoing)
-    setInput('')                              // ★送信後に必ずクリア
-    requestAnimationFrame(() => textareaRef.current?.focus())
+    hardClearInput() // ★必ず消す
 
     setLoading(true)
     try {
-      // Step0 はフロントで完全に強制制御（番号 → 職種 → 勤務先）
+      // Step0 はフロントで強制（番号 → 職種 → 勤務先）
       if (currentStep === 0) {
         if (!isNumberConfirmed) {
           const num = (outgoing.match(/\d+/) || [])[0]
@@ -99,7 +109,7 @@ export default function Home() {
         }
         if (!workplace) {
           setWorkplace(outgoing)
-          // Step1へ進行（固定セリフ）
+          // Step1へ
           addAI(
 `ありがとう！
 
@@ -112,7 +122,7 @@ export default function Home() {
         }
       }
 
-      // Step1〜5 は API に任せる（タグ付け/進行はサーバー）
+      // Step1〜5 はAPI
       const res = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -123,7 +133,6 @@ export default function Home() {
           candidateNumber,
           isNumberConfirmed,
           sessionId,
-          // 参考情報（サーバ側で使いたければ）
           qualification,
           workplace,
         }),
@@ -133,10 +142,8 @@ export default function Home() {
 
       addAI(data.response)
 
-      // 次ステップの指示がある時だけ進める（未入力での先送りを防ぐ）
       if (typeof data.step === 'number') setCurrentStep(data.step)
 
-      // サーバーからのセッション反映
       if (data.sessionData) {
         const s = data.sessionData
         if (s.transferReason) setTransferReason(s.transferReason)
@@ -252,19 +259,25 @@ export default function Home() {
                 ref={textareaRef}
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
+                onCompositionStart={() => setIsComposing(true)}        // ★ IME開始
+                onCompositionEnd={() => setIsComposing(false)}          // ★ IME終了
                 placeholder={!isNumberConfirmed && currentStep === 0 ? '求職者番号を入力してください...' : 'メッセージを入力...'}
                 className='w-full bg-white border border-pink-200 rounded-xl px-4 py-3 text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-purple-400 focus:border-transparent resize-none min-h-[52px] max-h-32 shadow-sm'
                 rows={1}
                 onKeyDown={(e) => {
-                  if (e.key === 'Enter' && !e.isComposing && !e.shiftKey) {
-                    e.preventDefault()
-                    onSend()
+                  if (e.key === 'Enter') {
+                    // ★ 変換中Enterは送信しない（各ブラウザ対策）
+                    if (isComposing || e.isComposing || e.nativeEvent.isComposing || e.keyCode === 229) return
+                    if (!e.shiftKey) {
+                      e.preventDefault()
+                      onSend()
+                    }
                   }
                 }}
               />
             </div>
             <button
-              onClick={onSend}
+              onClick={() => { if (!isComposing) onSend() }}             // ★ IME中クリック送信もブロック
               disabled={loading}
               className='bg-gradient-to-r from-pink-500 via-purple-500 to-blue-500 hover:from-pink-600 hover:via-purple-600 hover:to-blue-600 disabled:from-gray-300 disabled:to-gray-400 disabled:cursor-not-allowed text-white rounded-xl p-3 transition-all duration-200 shadow-lg hover:shadow-xl transform hover:scale-105'
             >
