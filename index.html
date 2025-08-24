@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
-<title>HOAP AI キャリアエージェント（番号必須・Step1は深掘り/候補のみ）</title>
+<title>HOAP AI キャリアエージェント</title>
 <script src="https://cdn.tailwindcss.com"></script>
 <style>
   .gradient-bg{background:linear-gradient(135deg,#fdf2f8 0%,#faf5ff 50%,#eff6ff 100%)}
@@ -54,16 +54,21 @@
   <!-- Chat -->
   <div class="max-w-4xl mx-auto px-6 py-8 pb-32">
     <div id="messages" class="space-y-6">
+      <!-- 初期メッセージ -->
       <div class="flex justify-start">
         <div class="flex max-w-xs lg:max-w-2xl items-start gap-3">
           <div class="flex-shrink-0 w-10 h-10 rounded-full bg-gradient-to-r from-gray-100 to-gray-200 shadow-md border-2 border-white flex items-center justify-center">🤖</div>
           <div class="bg-white/90 backdrop-blur-sm text-slate-700 border border-pink-100/50 rounded-2xl px-4 py-3 shadow-sm">
-            <div class="text-sm whitespace-pre-wrap leading-relaxed">
-              こんにちは！<br>
-              担当エージェントとの面談がスムーズに進むように、少しだけ話してね。<br><br>
-              まず3つ教えて！<br>
-              ①求職者番号 ②今の職種 ③今どこで働いてる？<br>
-              ※一度に書いてOK（例：<span class="text-slate-500">12345 看護師 総合病院</span>）
+            <div class="text-sm whitespace-pre-wrap leading-relaxed text-left">
+こんにちは！
+担当エージェントとの面談がスムーズに進むように、HOAPのAIエージェントに少しだけ話を聞かせてね。
+
+いくつか質問をしていくね。
+担当エージェントとの面談でしっかりヒアリングするから、今日は自分の転職について改めて整理する感じで、気楽に話してね！
+
+まず3つ教えて！
+①求職者番号（※半角数字）②今の職種③今どこで働いてる？
+※一度に書いてもOK（例：12345 看護師 総合病院）
             </div>
           </div>
         </div>
@@ -97,7 +102,7 @@
   </div>
 
   <script>
-    /***** データ：正式ラベルのみ *****/
+    /***** データ（正式ラベルのみ） *****/
     const REASON_FLOW = {"転職理由_分類フロー":[
       {"カテゴリ":"経営・組織に関すること","キーワード":["理念","方針","価値観","経営","運営","マネジメント","方向性","ビジョン","ミッション","考え方","姿勢","経営陣","トップ","風通し","意見","発言","評価制度","評価","昇給","昇格","公平","基準","教育体制","研修","マニュアル","OJT","フォロー","教育","サポート","経営者","医療職","現場理解","売上","数字"],"内部候補":["MVV・経営理念に共感できる職場で働きたい","風通しがよく意見が言いやすい職場で働きたい","評価制度が導入されている職場で働きたい","教育体制が整備されている職場で働きたい","経営者が医療職のところで働きたい","経営者が医療職ではないところで働きたい"]},
       {"カテゴリ":"働く仲間に関すること","キーワード":["人間関係","職場の雰囲気","上司","先輩","同僚","チームワーク","いじめ","パワハラ","セクハラ","陰口","派閥","お局","理不尽","相談できない","孤立","コミュニケーション","ロールモデル","尊敬","憧れ","見習いたい","価値観","温度感","やる気","信頼","品格","一貫性","目標","手本","職種","連携","助け合い","壁","分断","古株","権力","圧","支配"],"内部候補":["人間関係のトラブルが少ない職場で働きたい","同じ価値観を持つ仲間と働きたい","尊敬できる上司・経営者と働きたい","ロールモデルとなる上司や先輩がほしい","職種関係なく一体感がある仲間と働きたい","お局がいない職場で働きたい"]},
@@ -109,7 +114,7 @@
       {"カテゴリ":"給与・待遇","キーワード":["給料","給与","年収","月収","手取り","賞与","ボーナス","昇給","手当","待遇","福利厚生","安い","低い","上がらない","生活できない","お金"],"内部候補":[]}
     ]};
 
-    // must/want 辞書（必要部分）
+    // must/want（必要要素のみ・正式表記）
     const MUSTWANT = {
       "categories": {
         "勤務条件": {
@@ -121,18 +126,18 @@
     };
     const MW_FLAT = (()=>{ const out=[]; const c=MUSTWANT.categories; Object.values(c).forEach(sub=>Object.values(sub).forEach(arr=>out.push(...arr))); return out;})();
 
-    // ★ 同義語→正式ラベル（最低限）
+    // 同義語→正式ラベル寄せ
     const SYNONYMS = {
-      "オンコールなし": "オンコールなし・免除可",
-      "オンコール免除": "オンコールなし・免除可",
-      "オンコールNG": "オンコールなし・免除可",
-      "夜間呼び出しなし": "オンコールなし・免除可",
-      "直行直帰": "直行直帰OK",
-      "車通勤": "車通勤可",
-      "駐車場あり": "駐車場完備",
-      "土日休み": "土日祝休み",
-      "夜勤なし": "日勤のみ可",   // 厳密タグは「夜勤なし」ではないので寄せる
-      "残業なし": "残業ほぼなし"
+      "オンコールなし":"オンコールなし・免除可",
+      "オンコール免除":"オンコールなし・免除可",
+      "オンコールNG":"オンコールなし・免除可",
+      "夜間呼び出しなし":"オンコールなし・免除可",
+      "直行直帰":"直行直帰OK",
+      "車通勤":"車通勤可",
+      "駐車場あり":"駐車場完備",
+      "土日休み":"土日祝休み",
+      "夜勤なし":"日勤のみ可",
+      "残業なし":"残業ほぼなし"
     };
 
     /***** 状態 *****/
@@ -156,7 +161,7 @@
       row.innerHTML=`
         <div class="flex max-w-xs lg:max-w-2xl ${type==='user'?'flex-row-reverse':'flex-row'} items-start gap-3">
           <div class="flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center ${type==='user'?'bg-gradient-to-r from-pink-400 via-purple-400 to-blue-400 text-white':'bg-gradient-to-r from-gray-100 to-gray-200 border-2 border-white'}">
-            ${type==='user' ? '<svg width="18" height="18" viewBox="0 0 24 24" stroke="currentColor"><circle cx="12" cy="7" r="4"></circle></svg>' : '🤖'}
+            ${type==='user' ? '👤' : '🤖'}
           </div>
           <div class="rounded-2xl px-4 py-3 ${type==='user'?'bg-gradient-to-r from-pink-500 via-purple-500 to-blue-500 text-white ml-auto':'bg-white/90 text-slate-700 border border-pink-100/50'}">
             <div class="text-sm whitespace-pre-wrap leading-relaxed">${content}</div>
@@ -206,7 +211,7 @@
 
     /***** 解析 *****/
     function parseInitialThree(text){
-      const num=text.match(/\d{2,}/);
+      const num=text.match(/\d{2,}/); // 半角数字のみ
       const result={number:null,qual:null,work:null};
       if(num) result.number=num[0];
       const rest=(num?text.replace(num[0],''):text).trim();
@@ -228,7 +233,7 @@
         options: rec['内部候補']
       })).sort((a,b)=>b.score-a.score);
       if(items.length===0 || items[0].score===0) return [];
-      // プライベート優先（差が小さければ優先）
+      // プライベート優先（差が小さいとき）
       const privWords=["家庭","育児","子育て","両立","ライフステージ","子ども","家族","介護"];
       const priHit=countMatches(joined,privWords)>0;
       if(priHit){
@@ -299,33 +304,50 @@
     async function processMessage(raw){
       const message=String(raw||'').trim(); if(!message) return;
 
-      // 候補表示中でも、選択を強制しない（自然文で続けられる）
+      // 候補表示中でも選択を強制しない
       if(awaitingKind && pendingOptions.length){
         const typed=pendingOptions.find(o=>message.includes(o));
         if(typed){ onPick(typed); return; }
       }
 
-      // Step0：3つ（番号が無いと進まない）
+      // Step0：3つ（番号を保持・半角必須）
       if(currentStep===0){
         const parsed=parseInitialThree(message);
-        if(!parsed.number){ addMessage('ai','最初に「求職者番号」だけ教えてね！（数字でOK）'); return; }
-        session.candidateNumber=parsed.number; isNumberConfirmed=true;
-        if(parsed.qual) session.qualification=parsed.qual;
-        if(parsed.work) session.workplace=parsed.work;
+
+        // 今回メッセージに番号が含まれていたら確定
+        if(parsed.number){ session.candidateNumber=parsed.number; isNumberConfirmed=true; }
+        // 分割入力OK：埋まっていないところだけ補完
+        if(parsed.qual && !session.qualification) session.qualification=parsed.qual;
+        if(parsed.work && !session.workplace)      session.workplace=parsed.work;
+
         updateChips();
 
-        if(!session.qualification){ addMessage('ai',`求職者番号：${session.candidateNumber} 受け取ったよ。今の職種は？`); return; }
-        if(!session.workplace){ addMessage('ai',`OK、今の職種は『${session.qualification}』ね。今どこで働いてる？`); return; }
+        // まだ番号未確定なら番号だけ要求
+        if(!isNumberConfirmed){
+          addMessage('ai','最初に「求職者番号（半角）」だけ教えてね！');
+          return;
+        }
 
+        // 不足分だけ順番に聞く
+        if(!session.qualification){
+          addMessage('ai',`求職者番号：${session.candidateNumber} 受け取ったよ。今の職種は？`);
+          return;
+        }
+        if(!session.workplace){
+          addMessage('ai',`OK、今の職種は『${session.qualification}』ね。今どこで働いてる？`);
+          return;
+        }
+
+        // 3つ揃ったらStep1へ
         addMessage('ai','ありがとう！');
         currentStep=1; updateProgressBar();
         addMessage('ai','はじめに、今回の転職理由を教えてほしいな。きっかけってどんなことだった？\nしんどいと思ったこと、これはもう無理って思ったこと、逆にこういうことに挑戦したい！って思ったこと、何でもOKだよ◎');
         return;
       }
 
-      // Step1：転職理由（★ここは「深掘り or 候補」だけ／“他はある？”禁止）
+      // Step1：転職理由（深掘り→3発目で候補／“他はある？”は禁止）
       if(currentStep===1){
-        reasonHistory.push(message); // 履歴ベース判定
+        reasonHistory.push(message);
         addMessage('ai', pick(EMPATHY.reason));
 
         const tops=pickReasonCategoryFromHistory();
@@ -337,7 +359,6 @@
 
         if(deepDrill<2){ deepDrill++; addMessage('ai', pick(DRILL.reason)); return; }
 
-        // 3回目→候補提示（内部候補が空 or 未マッチは通過）
         const opts = (chosen && chosen.options) ? chosen.options.slice(0,3) : [];
         if(!opts.length){
           addMessage('ai','ありがとう！');
@@ -354,6 +375,7 @@
         }
         showOptions(opts,'reason'); return;
       }
+
       if(currentStep===1.1){
         if(!window.__tie){ currentStep=1; return processMessage(message); }
         const pickAB = /^a\b/i.test(message) ? window.__tie.a : (/^b\b/i.test(message) ? window.__tie.b : null);
