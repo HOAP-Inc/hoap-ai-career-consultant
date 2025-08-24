@@ -110,425 +110,226 @@
         </div>
     </div>
 
-    <script>
-        // アプリケーション状態
-        let currentStep = 0;
-        let candidateNumber = '';
-        let isNumberConfirmed = false;
-        let sessionData = {
-            candidateNumber: '',
-            qualification: '',
-            workplace: '',
-            transferReason: '',
-            mustConditions: [],
-            wantConditions: [],
-            canDo: '',
-            willDo: ''
-        };
-        let deepDrillCount = 0;
-        let awaitingSelection = false;
-        let selectionOptions = [];
+   <script>
+// 状態
+let currentStep = 0;
+let candidateNumber = '';
+let isNumberConfirmed = false;
+let sessionData = {
+  candidateNumber: '',
+  qualification: '',
+  workplace: '',
+  transferReason: '',
+  mustConditions: [],
+  wantConditions: [],
+  canDo: '',
+  willDo: ''
+};
 
-        const steps = [
-            { label: '基本情報', description: '資格・現職' },
-            { label: '転職理由', description: 'きっかけ' },
-            { label: '絶対条件', description: 'Must条件' },
-            { label: '希望条件', description: 'Want条件' },
-            { label: '経験', description: 'これまで' },
-            { label: '挑戦', description: 'これから' }
-        ];
+const steps = [
+  { label: '基本情報', description: '資格・現職' },
+  { label: '転職理由', description: 'きっかけ' },
+  { label: '絶対条件', description: 'Must条件' },
+  { label: '希望条件', description: 'Want条件' },
+  { label: '経験', description: 'これまで' },
+  { label: '挑戦', description: 'これから' }
+];
 
-        // 転職理由データ
-        const transferReasonFlow = {
-            "経営・組織に関すること": {
-                "keywords": ["理念", "方針", "価値観", "経営", "運営", "マネジメント", "方向性", "ビジョン", "ミッション", "考え方", "姿勢", "経営陣", "トップ", "風通し", "意見", "発言", "評価制度", "評価", "昇給", "昇格", "公平", "基準", "教育体制", "研修", "マニュアル", "OJT", "フォロー", "教育", "サポート", "経営者", "医療職", "現場理解", "売上", "数字"],
-                "internal_options": [
-                    "MVV・経営理念に共感できる職場で働きたい",
-                    "風通しがよく意見が言いやすい職場で働きたい", 
-                    "評価制度が導入されている職場で働きたい",
-                    "教育体制が整備されている職場で働きたい",
-                    "経営者が医療職のところで働きたい",
-                    "経営者が医療職ではないところで働きたい"
-                ]
-            },
-            "働く仲間に関すること": {
-                "keywords": ["人間関係", "職場の雰囲気", "上司", "先輩", "同僚", "チームワーク", "いじめ", "パワハラ", "セクハラ", "陰口", "派閥", "お局", "理不尽", "相談できない", "孤立", "コミュニケーション", "ロールモデル", "尊敬", "憧れ", "見習いたい", "価値観", "温度感", "やる気", "信頼", "品格", "一貫性", "目標", "手本", "職種", "連携", "助け合い", "壁", "分断", "古株", "権力", "圧", "支配"],
-                "internal_options": [
-                    "人間関係のトラブルが少ない職場で働きたい",
-                    "同じ価値観を持つ仲間と働きたい", 
-                    "尊敬できる上司・経営者と働きたい",
-                    "ロールモデルとなる上司や先輩がほしい",
-                    "職種関係なく一体感がある仲間と働きたい",
-                    "お局がいない職場で働きたい"
-                ]
-            },
-            "仕事内容・キャリアに関すること": {
-                "keywords": ["スキルアップ", "成長", "挑戦", "やりがい", "業務内容", "専門性", "研修", "教育", "キャリア", "昇進", "昇格", "資格取得", "経験", "学べる", "新しい", "幅を広げる", "経験", "強み", "活かす", "資格", "得意", "未経験", "分野", "患者", "利用者", "貢献", "実感", "書類", "件数", "役立つ", "ありがとう", "責任", "役職", "機会", "道筋", "登用"],
-                "internal_options": [
-                    "今までの経験や自分の強みを活かしたい",
-                    "未経験の仕事／分野に挑戦したい",
-                    "スキルアップしたい",
-                    "患者・利用者への貢献実感を感じられる仕事に携われる",
-                    "昇進・昇格の機会がある"
-                ]
-            },
-            "労働条件に関すること": {
-                "keywords": ["残業", "夜勤", "休日", "有給", "働き方", "時間", "シフト", "勤務時間", "連勤", "休憩", "オンコール", "呼び出し", "副業", "兼業", "社会保険", "保険", "健保", "厚生年金", "診療時間", "自己研鑽", "勉強", "学習", "研修時間", "直行直帰", "事務所", "立ち寄り", "朝礼", "日報", "定時", "サービス残業", "申請制", "人員配置", "希望日", "半休", "時間有休", "承認", "就業規則", "兼業", "許可", "健康保険", "雇用保険", "労災", "手続き", "始業前", "準備", "清掃", "打刻"],
-                "internal_options": [
-                    "直行直帰ができる職場で働きたい",
-                    "残業のない職場で働きたい", 
-                    "希望通りに有給が取得できる職場で働きたい",
-                    "副業OKな職場で働きたい",
-                    "社会保険を完備している職場で働きたい",
-                    "診療時間内で自己研鑽できる職場で働きたい",
-                    "前残業のない職場で働きたい"
-                ]
-            },
-            "プライベートに関すること": {
-                "keywords": ["家庭", "育児", "子育て", "両立", "ライフステージ", "子ども", "家族", "介護", "保育園", "送迎", "学校行事", "通院", "発熱", "中抜け", "時短", "イベント", "飲み会", "BBQ", "社員旅行", "早朝清掃", "強制", "業務外", "就業後", "休日", "オフ", "プライベート", "仲良く", "交流", "ごはん", "趣味"],
-                "internal_options": [
-                    "家庭との両立に理解のある職場で働きたい",
-                    "勤務時間外でイベントがない職場で働きたい", 
-                    "プライベートでも仲良くしている職場で働きたい"
-                ]
-            },
-            "職場環境・設備": {
-                "keywords": ["設備", "環境", "施設", "器械", "機器", "システム", "IT", "デジタル", "古い", "新しい", "最新", "設置", "導入", "整備"],
-                "internal_options": []
-            },
-            "職場の安定性": {
-                "keywords": ["安定", "将来性", "経営状況", "倒産", "リストラ", "不安", "継続", "持続", "成長", "発展", "将来", "先行き"],
-                "internal_options": []
-            },
-            "給与・待遇": {
-                "keywords": ["給料", "給与", "年収", "月収", "手取り", "賞与", "ボーナス", "昇給", "手当", "待遇", "福利厚生", "安い", "低い", "上がらない", "生活できない", "お金"],
-                "internal_options": []
-            }
-        };
+// UIユーティリティ
+function updateProgressBar() {
+  const progress = ((currentStep + 1) / 6) * 100;
+  document.getElementById('progress-bar').style.width = `${progress}%`;
+  document.getElementById('current-step').textContent = currentStep + 1;
+  document.getElementById('step-label').textContent = steps[currentStep].label;
 
-        // mustwant辞書
-        const mustWantDict = {
-            "サービス形態": {
-                "医療": ["急性期病棟", "回復期病棟", "慢性期・療養型病院", "一般病院", "地域包括ケア病棟", "療養病棟", "緩和ケア病棟（ホスピス）", "クリニック", "精神科病院", "訪問看護ステーション", "精神科特化型訪問看護ステーション", "機能強化型訪問看護ステーション", "訪問リハビリテーション", "訪問栄養指導"],
-                "介護": ["通所介護（デイサービス）", "認知症対応型通所介護（認知症専門デイサービス）", "地域密着型通所介護（定員18名以下）", "通所リハビリテーション（デイケア）", "訪問介護", "定期巡回・随時対応型訪問介護看護", "訪問入浴", "小規模多機能型居宅介護", "看護小規模多機能型居宅介護", "特別養護老人ホーム", "地域密着型特別養護老人ホーム（定員29名以下）", "介護老人保健施設", "介護付き有料老人ホーム", "ショートステイ（短期入所生活介護）", "サービス付き高齢者向け住宅（サ高住）", "住宅型有料老人ホーム", "軽費老人ホーム（ケアハウス）", "健康型有料老人ホーム", "シニア向け分譲マンション"],
-                "障害福祉": ["放課後等デイサービス", "生活介護（障害者の日中活動）", "就労継続支援A型", "就労継続支援B型", "短期入所（障害者向けショートステイ）"],
-                "歯科": ["歯科クリニック", "訪問歯科", "歯科口腔外科（病院内診療科）", "大学病院歯科・歯学部附属病院", "歯科技工所", "院内ラボ"],
-                "その他": ["保育園", "幼稚園", "企業（産業保健・企業内看護など）"]
-            },
-            "勤務条件": {
-                "休日": ["4週8休以上", "育児支援あり", "年間休日120日以上", "週1日からOK", "週2日からOK", "土日祝休み", "家庭都合休OK", "月1シフト提出", "毎週～隔週シフト提出", "有給消化率ほぼ100%", "長期休暇あり", "週休2日", "週休3日"],
-                "勤務時間": ["日勤のみ可", "夜勤専従あり", "2交替制", "3交替制", "午前のみ勤務", "午後のみ勤務", "残業ほぼなし", "オンコールなし・免除可", "緊急訪問なし", "時差出勤導入", "フレックスタイム制度あり", "残業月20時間以内", "スキマ時間勤務", "時短勤務相談可"],
-                "アクセス": ["駅近（5分以内）", "車通勤可", "バイク通勤可", "自転車通勤可", "駐車場完備", "直行直帰OK"],
-                "給与・賞与": ["年収300万以上", "年収350万以上", "年収400万以上", "年収450万以上", "年収500万以上", "年収550万以上", "年収600万以上", "年収650万以上", "年収700万以上", "賞与あり", "退職金あり"],
-                "福利厚生": ["寮あり・社宅あり", "託児所・保育支援あり", "社会保険完備", "交通費支給", "扶養控除内考慮", "復職支援", "住宅手当", "副業OK", "日・祝日給与UP", "引越し手当", "緊急訪問時の手当・代休あり", "スマホ・タブレット貸与あり", "電動アシスト自転車・バイク・車貸与", "社割あり", "ハラスメント相談窓口あり"],
-                "教育体制・研修制度": ["研修制度あり", "資格取得支援あり", "セミナー参加費補助あり", "マニュアル完備", "動画マニュアルあり", "評価制度あり", "メンター制度あり", "独立・開業支援あり", "院長・分院長候補", "担当制"]
-            }
-        };
-
-        // ユーティリティ関数
-        function flattenMustWantDict() {
-            const allItems = [];
-            Object.values(mustWantDict).forEach(mainCategory => {
-                Object.values(mainCategory).forEach(subItems => {
-                    if (Array.isArray(subItems)) {
-                        allItems.push(...subItems);
-                    }
-                });
-            });
-            return allItems;
-        }
-
-        function updateProgressBar() {
-            const progress = ((currentStep + 1) / 6) * 100;
-            document.getElementById('progress-bar').style.width = `${progress}%`;
-            document.getElementById('current-step').textContent = currentStep + 1;
-            document.getElementById('step-label').textContent = steps[currentStep].label;
-            
-            const numberRequired = document.getElementById('number-required');
-            if (currentStep === 0 && !isNumberConfirmed) {
-                numberRequired.style.display = 'block';
-            } else {
-                numberRequired.style.display = 'none';
-            }
-        }
-
-        function addMessage(type, content) {
-            const messagesContainer = document.getElementById('messages');
-            const messageDiv = document.createElement('div');
-            messageDiv.className = `flex ${type === 'user' ? 'justify-end' : 'justify-start'} message-enter`;
-            
-            messageDiv.innerHTML = `
-                <div class="flex max-w-xs lg:max-w-2xl ${type === 'user' ? 'flex-row-reverse' : 'flex-row'} items-start gap-3">
-                    <div class="flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center overflow-hidden ${
-                        type === 'user' 
-                            ? 'bg-gradient-to-r from-pink-400 via-purple-400 to-blue-400 text-white shadow-md' 
-                            : 'bg-gradient-to-r from-gray-100 to-gray-200 shadow-md border-2 border-white'
-                    }">
-                        ${type === 'user' ? 
-                            '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>' : 
-                            '<span class="text-xl">🤖</span>'
-                        }
-                    </div>
-                    <div class="rounded-2xl px-4 py-3 shadow-sm ${
-                        type === 'user'
-                            ? 'bg-gradient-to-r from-pink-500 via-purple-500 to-blue-500 text-white ml-auto shadow-lg'
-                            : 'bg-white/90 backdrop-blur-sm text-slate-700 border border-pink-100/50'
-                    }">
-                        <div class="text-sm whitespace-pre-wrap leading-relaxed">${content}</div>
-                    </div>
-                </div>
-            `;
-            
-            messagesContainer.appendChild(messageDiv);
-            messageDiv.scrollIntoView({ behavior: 'smooth', block: 'end' });
-        }
-
-        function showTyping() {
-            const messagesContainer = document.getElementById('messages');
-            const typingDiv = document.createElement('div');
-            typingDiv.id = 'typing-indicator';
-            typingDiv.className = 'flex justify-start';
-            
-            typingDiv.innerHTML = `
-                <div class="flex items-start gap-3">
-                    <div class="flex-shrink-0 w-10 h-10 rounded-full bg-gradient-to-r from-gray-100 to-gray-200 shadow-md border-2 border-white flex items-center justify-center">
-                        <span class="text-xl">🤖</span>
-                    </div>
-                    <div class="bg-white/90 backdrop-blur-sm border border-pink-100/50 rounded-2xl px-4 py-3 shadow-sm">
-                        <div class="flex items-center gap-2 text-slate-500">
-                            <div class="typing">●</div>
-                            <div class="typing" style="animation-delay: 0.2s">●</div>
-                            <div class="typing" style="animation-delay: 0.4s">●</div>
-                            <span class="text-sm ml-2">回答を準備中...</span>
-                        </div>
-                    </div>
-                </div>
-            `;
-            
-            messagesContainer.appendChild(typingDiv);
-            typingDiv.scrollIntoView({ behavior: 'smooth', block: 'end' });
-        }
-
-        function hideTyping() {
-            const typingIndicator = document.getElementById('typing-indicator');
-            if (typingIndicator) {
-                typingIndicator.remove();
-            }
-        }
-
-        // メッセージ処理メイン関数
-        async function processMessage(message) {
-            showTyping();
-            
-            // 少し待機（リアルな感じを出すため）
-            await new Promise(resolve => setTimeout(resolve, 800));
-            
-            let response = '';
-            let shouldUpdateStep = false;
-
-            // Step0: 求職者番号チェック
-            if (currentStep === 0) {
-                if (!isNumberConfirmed) {
-                    const numberMatch = message.match(/\d+/);
-                    if (numberMatch) {
-                        const extractedNumber = numberMatch[0];
-                        candidateNumber = extractedNumber;
-                        sessionData.candidateNumber = extractedNumber;
-                        isNumberConfirmed = true;
-                        response = `求職者番号：${extractedNumber} ですね！
-他の情報もお聞かせください。
-②今の職種③今どこで働いてる？`;
-                    } else {
-                        response = `すみません、最初に求職者番号を教えていただけますか？
-①求職者番号②今の職種③今どこで働いてる？
-の順でお願いします。`;
-                    }
-                } else {
-                    sessionData.qualification = message;
-                    currentStep = 1;
-                    shouldUpdateStep = true;
-                    response = `ありがとう！
-
-はじめに、今回の転職理由を教えてほしいな。きっかけってどんなことだった？
-しんどいと思ったこと、これはもう無理って思ったこと、逆にこういうことに挑戦したい！って思ったこと、何でもOKだよ◎`;
-                }
-            }
-            // Step1: 転職理由
-            else if (currentStep === 1) {
-                if (awaitingSelection) {
-                    const selectedOption = selectionOptions.find(opt => message.includes(opt));
-                    if (selectedOption) {
-                        sessionData.transferReason = selectedOption;
-                        awaitingSelection = false;
-                        selectionOptions = [];
-                        currentStep = 2;
-                        shouldUpdateStep = true;
-                        response = `なるほど、それは大事だよね！つまり「${selectedOption}」ってことだね！
-
-ありがとう！
-
-じゃあ次の質問！
-今回の転職でこれだけは絶対譲れない！というのを教えて！
-仕事内容でも、制度でも、条件でもOK◎
-
-例えば・・・
-「絶対土日休みじゃないと困る！」
-「絶対オンコールはできない！」
-
-後から『あるといいな』『ないといいな』についても聞くから、今は『絶対！』というものだけ教えてね。`;
-                    } else {
-                        response = "選択肢の中から選んでいただけますか？";
-                    }
-                } else {
-                    // キーワードマッチング
-                    const keywordMatches = {};
-                    Object.keys(transferReasonFlow).forEach(category => {
-                        const keywords = transferReasonFlow[category].keywords;
-                        let matchCount = 0;
-                        keywords.forEach(keyword => {
-                            if (message.toLowerCase().includes(keyword.toLowerCase())) {
-                                matchCount++;
-                            }
-                        });
-                        if (matchCount > 0) {
-                            keywordMatches[category] = matchCount;
-                        }
-                    });
-
-                    const maxMatches = Math.max(...Object.values(keywordMatches), 0);
-                    const topCategories = Object.keys(keywordMatches).filter(cat => keywordMatches[cat] === maxMatches);
-
-                    if (topCategories.length === 0) {
-                        // 未マッチ処理
-                        currentStep = 2;
-                        shouldUpdateStep = true;
-                        response = `なるほど、その気持ちよくわかる！大事な転職のきっかけだね◎
-
-ありがとう！
-
-じゃあ次の質問！
-今回の転職でこれだけは絶対譲れない！というのを教えて！
-仕事内容でも、制度でも、条件でもOK◎
-
-例えば・・・
-「絶対土日休みじゃないと困る！」
-「絶対オンコールはできない！」
-
-後から『あるといいな』『ないといいな』についても聞くから、今は『絶対！』というものだけ教えてね。`;
-                    } else {
-                        const selectedCategory = topCategories[0];
-                        const options = transferReasonFlow[selectedCategory].internal_options;
-
-                        if (options.length === 0) {
-                            // 内部候補が空
-                            currentStep = 2;
-                            shouldUpdateStep = true;
-                            response = `なるほど、その気持ちよくわかる！大事な転職のきっかけだね◎
-
-ありがとう！
-
-じゃあ次の質問！
-今回の転職でこれだけは絶対譲れない！というのを教えて！
-仕事内容でも、制度でも、条件でもOK◎
-
-例えば・・・
-「絶対土日休みじゃないと困る！」
-「絶対オンコールはできない！」
-
-後から『あるといいな』『ないといいな』についても聞くから、今は『絶対！』というものだけ教えてね。;                         } else {                             // 深掘りまたは候補提示                             if (deepDrillCount < 2) {                                 deepDrillCount++;                                 const drillQuestions = [                                     "それについてもう少し詳しく教えて",                                     "具体的にはどんな？"                                 ];                                 response = drillQuestions[deepDrillCount - 1];                             } else {                                 // 候補提示                                 const candidateOptions = options.slice(0, 3);                                 const optionsList = candidateOptions.map(opt => 『${opt}』).join('／');                                 awaitingSelection = true;                                 selectionOptions = candidateOptions;                                 response = この中だとどれが一番近い？${optionsList};                             }                         }                     }                 }             }             // Step2: 絶対希望             else if (currentStep === 2) {                 if (message.toLowerCase().includes('ない') || message.toLowerCase().includes('なし')) {                     currentStep = 3;                     shouldUpdateStep = true;                     response = ありがとう！
-それじゃあ次に、こうだったらいいな、というのを聞いていくね。
-これも仕事内容でも、制度でも、条件面でも、条件でもOK◎
-例えば・・・
-「マイカー通勤ができると嬉しいな」
-「できれば夜勤がないといいな」
-って感じ！;                 } else if (awaitingSelection) {                     const selectedOption = selectionOptions.find(opt => message.includes(opt));                     if (selectedOption) {                         sessionData.mustConditions.push(selectedOption);                         awaitingSelection = false;                         selectionOptions = [];                         response = そっか、${selectedOption}が絶対ってことだね！
-他にも絶対条件はある？`;
-} else {
-response = "選択肢の中から選んでいただけますか？";
+  const numberRequired = document.getElementById('number-required');
+  if (currentStep === 0 && !isNumberConfirmed) numberRequired.style.display = 'block';
+  else numberRequired.style.display = 'none';
 }
-} else {
-// mustwant辞書マッチング
-const allItems = flattenMustWantDict();
-const matchedItems = allItems.filter(item => {
-return message.toLowerCase().includes(item.toLowerCase()) ||
-item.toLowerCase().includes(message.toLowerCase().split(' ')[0]);
-});
-                if (matchedItems.length === 0) {
-                    response = `そっか、わかった！大事な希望だね◎
-他にも絶対条件はある？;                     } else {                         const topMatches = matchedItems.slice(0, 3);                         if (topMatches.length === 1) {                             sessionData.mustConditions.push(topMatches[0]);                             response = そっか、${topMatches[0]}が絶対ってことだね！
-他にも絶対条件はある？;                         } else {                             const optionsList = topMatches.map(opt => 『${opt}』).join('／');                             awaitingSelection = true;                             selectionOptions = topMatches;                             response = この中だとどれが一番近い？${optionsList};                         }                     }                 }             }             // Step3: 希望条件             else if (currentStep === 3) {                 if (message.toLowerCase().includes('ない') || message.toLowerCase().includes('なし')) {                     currentStep = 4;                     shouldUpdateStep = true;                     response = 質問は残り2つ！
-あと少しだから、頑張って😆✨️
-次に教えて欲しいのは『これまでやってきたこと』
-ここは次回担当エージェントがしっかりヒアリングしていくから、ざっくりでOKだよ。
-これまでやってきたことで、これからも活かしたいことを教えてね。;                 } else if (awaitingSelection) {                     const selectedOption = selectionOptions.find(opt => message.includes(opt));                     if (selectedOption) {                         sessionData.wantConditions.push(selectedOption);                         awaitingSelection = false;                         selectionOptions = [];                         response = 了解！${selectedOption}だと嬉しいってことだね！
-他にもあったらいいなっていうのはある？`;
-} else {
-response = "選択肢の中から選んでいただけますか？";
+
+function addMessage(type, content) {
+  const messages = document.getElementById('messages');
+  const div = document.createElement('div');
+  div.className = `flex ${type === 'user' ? 'justify-end' : 'justify-start'} message-enter`;
+  div.innerHTML = `
+    <div class="flex max-w-xs lg:max-w-2xl ${type === 'user' ? 'flex-row-reverse' : 'flex-row'} items-start gap-3">
+      <div class="flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center overflow-hidden ${
+        type === 'user'
+          ? 'bg-gradient-to-r from-pink-400 via-purple-400 to-blue-400 text-white shadow-md'
+          : 'bg-gradient-to-r from-gray-100 to-gray-200 shadow-md border-2 border-white'
+      }">
+        ${type === 'user'
+          ? '<svg width=\'18\' height=\'18\' viewBox=\'0 0 24 24\' fill=\'none\' stroke=\'currentColor\' stroke-width=\'2\'><path d=\'M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2\'></path><circle cx=\'12\' cy=\'7\' r=\'4\'></circle></svg>'
+          : '<span class=\'text-xl\'>🤖</span>'}
+      </div>
+      <div class="rounded-2xl px-4 py-3 shadow-sm ${
+        type === 'user'
+          ? 'bg-gradient-to-r from-pink-500 via-purple-500 to-blue-500 text-white ml-auto shadow-lg'
+          : 'bg-white/90 backdrop-blur-sm text-slate-700 border border-pink-100/50'
+      }">
+        <div class="text-sm whitespace-pre-wrap leading-relaxed">${content}</div>
+      </div>
+    </div>`;
+  messages.appendChild(div);
+  div.scrollIntoView({ behavior: 'smooth', block: 'end' });
 }
-} else {
-// mustwant辞書マッチング
-const allItems = flattenMustWantDict();
-const matchedItems = allItems.filter(item => {
-return message.toLowerCase().includes(item.toLowerCase()) ||
-item.toLowerCase().includes(message.toLowerCase().split(' ')[0]);
-});
-                if (matchedItems.length === 0) {
-                    response = `了解！気持ちは受け取ったよ◎
-他にもあったらいいなっていうのはある？;                     } else {                         const topMatches = matchedItems.slice(0, 3);                         if (topMatches.length === 1) {                             sessionData.wantConditions.push(topMatches[0]);                             response = 了解！${topMatches[0]}だと嬉しいってことだね！
-他にもあったらいいなっていうのはある？;                         } else {                             const optionsList = topMatches.map(opt => 『${opt}』).join('／');                             awaitingSelection = true;                             selectionOptions = topMatches;                             response = この中だとどれが一番近い？${optionsList};                         }                     }                 }             }             // Step4: Can（これまでやってきたこと）             else if (currentStep === 4) {                 sessionData.canDo = message;                 currentStep = 5;                 shouldUpdateStep = true;                 response = いいね！
-これが最後の質問👏
-今回の転職で叶えたい挑戦や、夢はある？;             }             // Step5: Will（挑戦したいこと）             else if (currentStep === 5) {                 sessionData.willDo = message;                 currentStep = 6;                 shouldUpdateStep = true;                 response = 今日はたくさん話してくれてありがとう！
-ここまでの内容を担当エージェントに引き継ぐね。
-次回の面談で一緒に詰めていこう！
-📋 収集データ
-求職者番号: ${sessionData.candidateNumber}
-転職理由: ${sessionData.transferReason || '未設定'}
-絶対条件: ${sessionData.mustConditions.length > 0 ? sessionData.mustConditions.join(', ') : '未設定'}
-希望条件: ${sessionData.wantConditions.length > 0 ? sessionData.wantConditions.join(', ') : '未設定'}
-活かしたい経験: ${sessionData.canDo}
-挑戦したいこと: ${sessionData.willDo}`;
+
+function showTyping() {
+  const messages = document.getElementById('messages');
+  const div = document.createElement('div');
+  div.id = 'typing-indicator';
+  div.className = 'flex justify-start';
+  div.innerHTML = `
+    <div class="flex items-start gap-3">
+      <div class="flex-shrink-0 w-10 h-10 rounded-full bg-gradient-to-r from-gray-100 to-gray-200 shadow-md border-2 border-white flex items-center justify-center">
+        <span class="text-xl">🤖</span>
+      </div>
+      <div class="bg-white/90 backdrop-blur-sm border border-pink-100/50 rounded-2xl px-4 py-3 shadow-sm">
+        <div class="flex items-center gap-2 text-slate-500">
+          <div class="typing">●</div>
+          <div class="typing" style="animation-delay: 0.2s">●</div>
+          <div class="typing" style="animation-delay: 0.4s">●</div>
+          <span class="text-sm ml-2">回答を準備中...</span>
+        </div>
+      </div>
+    </div>`;
+  messages.appendChild(div);
+  div.scrollIntoView({ behavior: 'smooth', block: 'end' });
 }
-        hideTyping();
-        addMessage('ai', response);
-        
-        if (shouldUpdateStep) {
-            updateProgressBar();
-            updatePlaceholder();
-        }
+function hideTyping() {
+  const t = document.getElementById('typing-indicator');
+  if (t) t.remove();
+}
+
+function updatePlaceholder() {
+  const input = document.getElementById('message-input');
+  if (currentStep === 0 && !isNumberConfirmed) input.placeholder = '求職者番号を入力してください...';
+  else input.placeholder = 'メッセージを入力...';
+}
+
+// メイン処理（デモ用の最短フロー）
+async function processMessage(message) {
+  showTyping();
+  await new Promise(r => setTimeout(r, 500));
+
+  let response = '';
+  let bump = false;
+
+  // Step0: 求職者番号→職種・勤務先
+  if (currentStep === 0) {
+    if (!isNumberConfirmed) {
+      const m = message.match(/\d+/);
+      if (m) {
+        candidateNumber = m[0];
+        sessionData.candidateNumber = candidateNumber;
+        isNumberConfirmed = true;
+        response =
+          `求職者番号：${candidateNumber} を受け取ったよ。\n` +
+          '続けて、今の職種と勤務先を教えてね。';
+      } else {
+        response =
+          '最初に求職者番号を教えてね。\n' +
+          '例）12345\n' +
+          'そのあとで職種と勤務先を聞くよ。';
+      }
+    } else {
+      sessionData.qualification = message;
+      currentStep = 1;
+      bump = true;
+      response =
+        'ありがとう。\n\n' +
+        'はじめに、今回の転職理由を教えてほしいな。\n' +
+        'きっかけってどんなことだった？\n' +
+        'しんどかったことや、挑戦したいこと、なんでもOK。';
     }
-
-    function updatePlaceholder() {
-        const input = document.getElementById('message-input');
-        if (currentStep === 0 && !isNumberConfirmed) {
-            input.placeholder = "求職者番号を入力してください...";
-        } else {
-            input.placeholder = "メッセージを入力...";
-        }
+  }
+  // Step1: 転職理由 → Step2
+  else if (currentStep === 1) {
+    sessionData.transferReason = message;
+    currentStep = 2;
+    bump = true;
+    response =
+      '了解。\n\n' +
+      'じゃあ次。\n' +
+      '今回の転職で、これだけは絶対ゆずれない条件を教えて。';
+  }
+  // Step2: 絶対条件 → 追加か次へ
+  else if (currentStep === 2) {
+    if (/なし|ない/i.test(message)) {
+      currentStep = 3;
+      bump = true;
+      response =
+        'OK。では、あったらうれしい条件を教えて。';
+    } else {
+      sessionData.mustConditions.push(message);
+      response =
+        `受け取った：${message}\n` +
+        '他にも絶対条件があれば続けてどうぞ。なければ「なし」。';
     }
+  }
+  // Step3: 希望条件 → Step4
+  else if (currentStep === 3) {
+    if (!/なし|ない/i.test(message)) sessionData.wantConditions.push(message);
+    currentStep = 4;
+    bump = true;
+    response =
+      '質問はあと2つ。\n' +
+      'これまでやってきたことで、これからも活かしたいことは？';
+  }
+  // Step4: Can → Step5
+  else if (currentStep === 4) {
+    sessionData.canDo = message;
+    currentStep = 5;
+    bump = true;
+    response =
+      'ラスト。\n' +
+      '今回の転職で叶えたい挑戦や、やってみたいことは？';
+  }
+  // Step5: Will → 完了
+  else if (currentStep === 5) {
+    sessionData.willDo = message;
+    currentStep = 6;
+    bump = true;
+    response =
+      '今日はここまで、ありがとう。\n' +
+      '次回の面談に引き継ぐ内容はこれ。\n' +
+      '📋 収集データ\n' +
+      `求職者番号: ${sessionData.candidateNumber}\n` +
+      `転職理由: ${sessionData.transferReason}\n` +
+      `絶対条件: ${sessionData.mustConditions.length ? sessionData.mustConditions.join(', ') : '未設定'}\n` +
+      `希望条件: ${sessionData.wantConditions.length ? sessionData.wantConditions.join(', ') : '未設定'}\n` +
+      `活かしたい経験: ${sessionData.canDo}\n` +
+      `挑戦したいこと: ${sessionData.willDo}`;
+  }
 
-    // イベントリスナー
-    document.getElementById('send-button').addEventListener('click', async () => {
-        const input = document.getElementById('message-input');
-        const message = input.value.trim();
-        
-        if (!message) return;
-        
-        addMessage('user', message);
-        input.value = '';
-        
-        await processMessage(message);
-    });
-
-    document.getElementById('message-input').addEventListener('keypress', (e) => {
-        if (e.key === 'Enter' && !e.shiftKey) {
-            e.preventDefault();
-            document.getElementById('send-button').click();
-        }
-    });
-
-    // 初期化
+  hideTyping();
+  addMessage('ai', response);
+  if (bump) {
     updateProgressBar();
     updatePlaceholder();
+  }
+}
+
+// 送信イベント
+document.getElementById('send-button').addEventListener('click', async () => {
+  const input = document.getElementById('message-input');
+  const text = input.value.trim();
+  if (!text) return;
+  addMessage('user', text);
+  input.value = '';
+  await processMessage(text);
+});
+
+document.getElementById('message-input').addEventListener('keypress', (e) => {
+  if (e.key === 'Enter' && !e.shiftKey) {
+    e.preventDefault();
+    document.getElementById('send-button').click();
+  }
+});
+
+// 初期表示
+updateProgressBar();
+updatePlaceholder();
 </script>
 </body>
 </html>
