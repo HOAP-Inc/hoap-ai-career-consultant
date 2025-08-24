@@ -101,7 +101,7 @@
     </div>
   </div>
 <script>
-// --- メッセージ表示（ユーザー／AI共通） ---
+// --- 超シンプル：表示と送信だけ（会話は全部GPTが担当） ---
 function addMessage(type, content){
   const wrap=document.getElementById('messages');
   const row=document.createElement('div');
@@ -127,17 +127,16 @@ function addMessage(type, content){
   row.scrollIntoView({behavior:'smooth',block:'end'});
 }
 
-// --- GPT呼び出し用 ---
+// 履歴（そのまま投げる）
 window.chatHistory = window.chatHistory || [];
 
+// GPTに投げるだけ。進行・ルールはGPTが全て決める
 async function processMessage(raw){
   const message = String(raw||'').trim();
   if(!message) return;
 
-  // ユーザー発話を表示
   addMessage('user', message);
 
-  // API呼び出し
   try{
     const res = await fetch('/api/chat', {
       method: 'POST',
@@ -145,13 +144,10 @@ async function processMessage(raw){
       body: JSON.stringify({ message, history: window.chatHistory })
     });
 
-    let data = {};
-    try { data = await res.json(); } catch {}
-
-    const reply = (data && data.reply) ? data.reply : '（応答が取れなかった…）';
+    const data = await res.json();
+    const reply = data?.reply || '（応答が取れなかった…）';
     addMessage('ai', reply);
 
-    // 履歴に積む
     window.chatHistory.push({ role:'user', content: message });
     window.chatHistory.push({ role:'assistant', content: reply });
 
@@ -160,7 +156,7 @@ async function processMessage(raw){
   }
 }
 
-// --- イベントリスナー ---
+// 入出力イベント
 document.getElementById('send-button').addEventListener('click', async ()=>{
   const input=document.getElementById('message-input');
   const msg=input.value.trim();
@@ -168,13 +164,12 @@ document.getElementById('send-button').addEventListener('click', async ()=>{
   input.value='';
   await processMessage(msg);
 });
-
 document.getElementById('message-input').addEventListener('keypress',(e)=>{
   if(e.key==='Enter' && !e.shiftKey){
     e.preventDefault();
     document.getElementById('send-button').click();
   }
 });
-</script> 
+</script>
 </body>
 </html>
