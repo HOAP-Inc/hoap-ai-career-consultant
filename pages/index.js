@@ -39,8 +39,8 @@ export default function Home() {
   // ====== 状態 ======
   const [currentStep, setCurrentStep] = useState(0) // 0..5
   const [candidateNumber, setCandidateNumber] = useState('')
-  const [qualification, setQualification] = useState('')  // 所有資格（タグ）
-  const [unknownQualification, setUnknownQualification] = useState('') // マスタ外
+  const [qualification, setQualification] = useState('')            // 所有資格（タグ確定）
+  const [unknownQualification, setUnknownQualification] = useState('') // マスタ外の仮
   const [workplace, setWorkplace] = useState('')
 
   const [transferReason, setTransferReason] = useState('')
@@ -56,26 +56,25 @@ export default function Home() {
   const [isComposing, setIsComposing] = useState(false) // IME中フラグ
   const [sessionId] = useState(() => Math.random().toString(36).slice(2))
 
-  // 資格マスタ
-  const [qualMaster, setQualMaster] = useState<string[]>([])
+  // 資格マスタ（public/tags/qualifications.json からロード）
+  const [qualMaster, setQualMaster] = useState([])
   useEffect(() => {
-    // 公開ディレクトリから取得（ハードコード禁止）
     fetch('/tags/qualifications.json')
       .then(r => r.json())
-      .then((arr) => Array.isArray(arr) ? setQualMaster(arr) : setQualMaster([]))
+      .then(arr => Array.isArray(arr) ? setQualMaster(arr) : setQualMaster([]))
       .catch(() => setQualMaster([]))
   }, [])
 
   // ====== refs ======
-  const listRef = useRef<HTMLDivElement | null>(null)
-  const textareaRef = useRef<HTMLTextAreaElement | null>(null)
+  const listRef = useRef(null)
+  const textareaRef = useRef(null)
 
   useEffect(() => {
     listRef.current?.lastElementChild?.scrollIntoView({ behavior: 'smooth' })
   }, [messages, loading])
 
-  const addAI = (text: string) => setMessages((m) => [...m, { type: 'ai', content: text }])
-  const addUser = (text: string) => setMessages((m) => [...m, { type: 'user', content: text }])
+  const addAI = (text) => setMessages((m) => [...m, { type: 'ai', content: text }])
+  const addUser = (text) => setMessages((m) => [...m, { type: 'user', content: text }])
 
   // 入力欄を確実に空にする
   const hardClearInput = () => {
@@ -91,27 +90,22 @@ export default function Home() {
     const t = input.replace(/\s/g, '')
     if (!t) return []
     const lower = t.toLowerCase()
-    // 部分一致 → 先頭一致優先
-    const starts = qualMaster.filter(q => q.toLowerCase().startsWith(lower))
-    const includes = qualMaster.filter(q => !starts.includes(q) && q.toLowerCase().includes(lower))
+    const starts = qualMaster.filter(q => String(q).toLowerCase().startsWith(lower))
+    const includes = qualMaster.filter(q => !starts.includes(q) && String(q).toLowerCase().includes(lower))
     return [...starts, ...includes].slice(0, 5)
   }, [input, qualMaster])
 
-  const pickQualTag = (text: string) => {
+  const pickQualTag = (text) => {
     const norm = text.replace(/\s/g, '')
-    // 完全一致
     const exact = qualMaster.find(q => q === norm)
     if (exact) return { tag: exact, unknown: '' }
-    // 部分一致が1件に絞れたらそれを採用
-    const cands = qualMaster.filter(q => q.includes(norm))
+    const cands = qualMaster.filter(q => String(q).includes(norm))
     if (cands.length === 1) return { tag: cands[0], unknown: '' }
-    // 未確定
     return { tag: '', unknown: norm }
   }
 
   // 送信
   const onSend = async () => {
-    // IMEのズレ対策：DOMの値を優先
     const outgoing = (textareaRef.current?.value ?? input).trim()
     if (!outgoing || loading || isComposing) return
 
@@ -140,13 +134,12 @@ export default function Home() {
         if (!qualification && !unknownQualification) {
           const { tag, unknown } = pickQualTag(outgoing)
           if (!tag) {
-            // 候補提示
             if (qualSuggestions.length > 0) {
               addAI(`候補はこのあたり？\n${qualSuggestions.map((q, i) => `${i + 1}. ${q}`).join('\n')}\n\n番号か正式名称で答えてね。`)
             } else {
               addAI(`ごめん！資格が見つからない…\n主な例：${(qualMaster.slice(0, 10)).join(' / ')}\nこの中にある？正式名称で教えてね。`)
             }
-            setUnknownQualification(unknown) // 保留
+            setUnknownQualification(unknown)
             setLoading(false)
             return
           }
@@ -156,7 +149,7 @@ export default function Home() {
           setLoading(false)
           return
         }
-        // ②で候補提示後に番号で返ってきたケース
+        // ②の候補提示後に番号で返ってきた
         if (!qualification && unknownQualification) {
           const choice = Number(outgoing)
           if (!Number.isNaN(choice) && choice >= 1 && choice <= qualSuggestions.length) {
@@ -167,7 +160,6 @@ export default function Home() {
             setLoading(false)
             return
           }
-          // 直接正式名称で再返信が来た場合
           const { tag } = pickQualTag(outgoing)
           if (tag) {
             setQualification(tag)
@@ -214,11 +206,8 @@ export default function Home() {
       const data = await res.json()
 
       addAI(data.response)
-
-      // サーバがOK出した時だけ進む（未入力で先送りさせない）
       if (typeof data.step === 'number') setCurrentStep(data.step)
 
-      // サーバ側のセッション反映
       if (data.sessionData) {
         const s = data.sessionData
         if (s.transferReason) setTransferReason(s.transferReason)
@@ -351,7 +340,7 @@ export default function Home() {
                   if (e.key === 'Enter') {
                     // 変換中Enterは送信しない（各ブラウザ対策）
                     // @ts-ignore
-                    if (isComposing || e.isComposing || e.nativeEvent?.isComposing || e.keyCode === 229) return
+                    if (isComposing || e.isComposing || (e.nativeEvent && e.nativeEvent.isComposing) || e.keyCode === 229) return
                     if (!e.shiftKey) {
                       e.preventDefault()
                       onSend()
