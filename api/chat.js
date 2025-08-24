@@ -1,127 +1,99 @@
-// api/chat.js  — Vercel Serverless Function（タグ厳密対照）
-import OpenAI from "openai";
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-
-// 転職理由：内部候補のみ（提示/確定に使える語はこれだけ）
-const REASON_OPTIONS = [
-  "MVV・経営理念に共感できる職場で働きたい",
-  "風通しがよく意見が言いやすい職場で働きたい",
-  "評価制度が導入されている職場で働きたい",
-  "教育体制が整備されている職場で働きたい",
-  "経営者が医療職のところで働きたい",
-  "経営者が医療職ではないところで働きたい",
-  "人間関係のトラブルが少ない職場で働きたい",
-  "同じ価値観を持つ仲間と働きたい",
-  "尊敬できる上司・経営者と働きたい",
-  "ロールモデルとなる上司や先輩がほしい",
-  "職種関係なく一体感がある仲間と働きたい",
-  "お局がいない職場で働きたい",
-  "今までの経験や自分の強みを活かしたい",
-  "未経験の仕事／分野に挑戦したい",
-  "スキルアップしたい",
-  "患者・利用者への貢献実感を感じられる仕事に携われる",
-  "昇進・昇格の機会がある",
-  "直行直帰ができる職場で働きたい",
-  "残業のない職場で働きたい",
-  "希望通りに有給が取得できる職場で働きたい",
-  "副業OKな職場で働きたい",
-  "社会保険を完備している職場で働きたい",
-  "診療時間内で自己研鑽できる職場で働きたい",
-  "前残業のない職場で働きたい",
-  "家庭との両立に理解のある職場で働きたい",
-  "勤務時間外でイベントがない職場で働きたい",
-  "プライベートでも仲良くしている職場で働きたい"
-];
-
-// must/want：必要十分な抜粋（デモ用：ここに増やせる）
-const MW_FLAT = [
-  "日勤のみ可","夜勤専従あり","2交替制","3交替制",
-  "残業ほぼなし","オンコールなし・免除可","緊急訪問なし",
-  "時差出勤導入","フレックスタイム制度あり","残業月20時間以内",
-  "駅近（5分以内）","直行直帰OK","車通勤可","バイク通勤可","自転車通勤可","駐車場完備",
-  "土日祝休み","週休2日","週休3日","有給消化率ほぼ100%"
-];
-
-// 同義語→正式ラベル寄せ（入力のブレ吸収）
-const SYN = {
-  "オンコールなし":"オンコールなし・免除可",
-  "オンコール免除":"オンコールなし・免除可",
-  "夜間呼び出しなし":"オンコールなし・免除可",
-  "直行直帰":"直行直帰OK",
-  "車通勤":"車通勤可",
-  "駐車場あり":"駐車場完備",
-  "土日休み":"土日祝休み",
-  "夜勤なし":"日勤のみ可",
-  "残業なし":"残業ほぼなし"
-};
-
+// api/chat.js — GPTs挙動：会話設計は全てプロンプトで制御（SDKなし）
 export default async function handler(req, res) {
-  if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
+  if (req.method !== "POST") {
+    return res.status(405).json({ error: "Method not allowed" });
+  }
 
   try {
-    const { stage, message, history = [] } = req.body || {};
-    // stage: "reason" | "must" | "want" | "free"（freeはStep4/5）
-    const sys = `
-あなたはHOAPのAIキャリアエージェント。日本語で短く、明るくテンポよく。
-禁止：新しい語の生成・意訳・言い換え・メタ語（タグ/JSON等）。出力は必ずJSONのみ。
+    let body = "";
+    for await (const chunk of req) body += chunk;
+    const { message = "", history = [] } = JSON.parse(body || "{}");
 
-要件：
-- stage="reason"：reasonTag は ${JSON.stringify(REASON_OPTIONS)} のいずれか/未設定。options は同集合から最大3件。
-- stage="must"/"want"：入力文を同義語補正してから ${JSON.stringify(MW_FLAT)} に完全一致するラベルのみを追加。複数可。options は同集合から最大3件。
-- stage="free"：タグ化せず reply のみ。
+    // ===== GPTs相当のシステムプロンプト（たかだちゃん指定ルール） =====
+    const SYSTEM_PROMPT = `
+あなたは、HOAPの新規事業におけるAIキャリアエージェント。医療・介護・歯科の求職者に一次ヒアリングを行い、
+会話から要点をつかみ、登録済みの知識（「所有資格」「転職目的（修正版転職理由_分類フローの内部候補）」「mustwant」）に厳密に整合させる。
+ただの質問フォームではなくキャリアエージェントとして、短い共感→要点の復唱→必要時のみ最大2回の深掘りで本音をテンポよく引き出す。
 
-出力フォーマット（必須）：
-{
-  "reply": "ユーザーへの返答。共感→一言の深掘り or 確認。step遷移のセリフは「ありがとう！」のみ。",
-  "reasonTag": "…またはnull",
-  "mustTagsAdd": ["…"],   // 追加がなければ []
-  "wantTagsAdd": ["…"],   // 追加がなければ []
-  "options": ["…"]        // 候補提示 0〜3件（stageに応じた集合内）
-}
+【ゴール】
+- 会話で「転職理由」「絶対希望（Must）」「できれば希望（Want）」を自然文で確定
+- 確定内容は登録済みの正式ラベルに厳密整合（新規語・言い換え禁止）
+- 「これまで」「これから」は原文のまま保持
+- 候補者が「条件が整理できた」と感じる状態で締める
+
+【知識スコープ by Step】
+- Step0：所有資格・現職（番号は半角の求職者番号。番号が無いと進めない）
+- Step1：転職目的（修正版転職理由_分類フローの内部候補のみ提示可。給与/設備/安定性は候補提示禁止）
+- Step2：mustwant（Must）
+- Step3：mustwant（Want）
+- Step4/5：自由文保存のみ（タグ化禁止）
+※他Stepの知識参照はしない。
+
+【絶対禁止】
+- 未登録のラベル生成・使用
+- ラベルの自然文アレンジ・言い換え・推測
+- 候補提示を4件以上
+- 内部情報（ファイル/JSON/タグ等）やメタ語の露出
+- 「ありがとう！では次〜」は禁止。次遷移時は「ありがとう！」のみ。
+
+【会話運用】
+- イントロ（Step0の文面）：以下の固定文を最初に出す
+  こんにちは！
+  担当エージェントとの面談がスムーズに進むように、HOAPのAIエージェントに少しだけ話を聞かせてね。
+
+  いくつか質問をしていくね。
+  担当エージェントとの面談でしっかりヒアリングするから、今日は自分の転職について改めて整理する感じで、気楽に話してね！
+
+  まず3つ教えて！
+  ①求職者番号②今の職種③今どこで働いてる？
+  ※求職者番号は「半角数字」で入力してね。
+
+- 深掘り：最大2回。「〜についてもう少し詳しく」「具体的にはどんな？」等のオープンクエスチョン。冷たい言い回しは避け、やわらかく。
+- 3回目のユーザー発話後は必ず候補提示へ切替。
+- 候補提示は2〜3件で『［A］／［B］／［C］』形式。「この中だとどれが一番近い？」を添える。
+- 確定は〔共感→項目名そのまま復唱→保存〕で一言。「ありがとう！」で次へ。
+
+【固定フレーズ（例）】
+- Step2（Must）確定時：「そっか、［ラベル］が絶対ってことだね！」
+- Step3（Want）確定時：「了解！［ラベル］だと嬉しいってことだね！」
+- 未マッチ時（Must）：「そっか、わかった！大事な希望だね◎」
+- 未マッチ時（Want）：「了解！気持ちは受け取ったよ◎」
+- ガードカテゴリ（給与・待遇／職場環境・設備／職場の安定性）は候補提示せず共感のみ。
+
+出力は必ず「ユーザーに見せる返答」だけ。JSONやタグ語は会話に出さない。
 `.trim();
 
-    const msgs = [
-      { role: "system", content: sys },
-      { role: "user", content: `stage=${stage}\nhistory=${JSON.stringify(history, null, 2)}\nmessage=${message || ""}` }
-    ];
+    // 履歴を OpenAI 形式に変換
+    const historyAsMessages = history.map(m => ({ role: m.role, content: m.content }));
 
-    const resp = await openai.chat.completions.create({
-      model: "gpt-4o-mini",
-      temperature: 0.2,
-      response_format: { type: "json_object" },
-      messages: msgs
+    // OpenAI API コール（SDKなし）
+    const openaiRes = await fetch("https://api.openai.com/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${process.env.OPENAI_API_KEY}`,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        model: "gpt-4o-mini",
+        temperature: 0.3,
+        messages: [
+          { role: "system", content: SYSTEM_PROMPT },
+          ...historyAsMessages,
+          { role: "user", content: message }
+        ]
+      })
     });
 
-    // JSONパース
-    let out = {};
-    try { out = JSON.parse(resp.choices?.[0]?.message?.content || "{}"); } catch {}
-    if (!out || typeof out !== "object") out = {};
-
-    // サーバー側ガード：集合外は落とす
-    const allowReason = new Set(REASON_OPTIONS);
-    const allowMW = new Set(MW_FLAT);
-
-    if (stage === "reason") {
-      out.reasonTag = allowReason.has(out.reasonTag) ? out.reasonTag : null;
-      out.mustTagsAdd = [];
-      out.wantTagsAdd = [];
-      out.options = Array.isArray(out.options) ? out.options.filter(t => allowReason.has(t)).slice(0,3) : [];
-    } else if (stage === "must" || stage === "want") {
-      const norm = (arr) => (Array.isArray(arr) ? arr : []).map(x => SYN[x] || x).filter(x => allowMW.has(x));
-      if (stage === "must") { out.mustTagsAdd = norm(out.mustTagsAdd); out.wantTagsAdd = []; }
-      if (stage === "want") { out.wantTagsAdd = norm(out.wantTagsAdd); out.mustTagsAdd = []; }
-      out.reasonTag = null;
-      out.options = Array.isArray(out.options) ? out.options.map(x => SYN[x] || x).filter(x => allowMW.has(x)).slice(0,3) : [];
-    } else { // free
-      out.reasonTag = null; out.mustTagsAdd = []; out.wantTagsAdd = []; out.options = [];
+    if (!openaiRes.ok) {
+      const detail = await openaiRes.text();
+      return res.status(500).json({ error: "OpenAI API error", detail });
     }
 
-    // 最低限の既定値
-    if (typeof out.reply !== "string") out.reply = "ありがとう！";
-
-    return res.status(200).json(out);
+    const data = await openaiRes.json();
+    const reply = data?.choices?.[0]?.message?.content || "（応答を取得できませんでした）";
+    return res.status(200).json({ reply });
   } catch (e) {
     console.error(e);
-    return res.status(500).json({ error: "OpenAI API error" });
+    return res.status(500).json({ error: "Server error" });
   }
 }
