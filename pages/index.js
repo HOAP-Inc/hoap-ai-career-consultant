@@ -49,17 +49,29 @@ export default function Home() {
     // Step0 はフロントで決定的に分岐（番号→職種→勤務先）
     if (currentStep === 0) {
       if (subStep === 0) {
-        setCandidateNumber(text)
-        setMessages((m) => [
-          ...m,
-          {
-            type: 'ai',
-            content: '求職者番号：' + text + ' だね！\n次は ②「今の職種」を教えて！',
-          },
-        ])
-        setSubStep(1)
-        return
-      }
+  // 5桁未満チェックを追加
+  const numberMatch = text.match(/\d+/);
+  if (numberMatch && numberMatch[0].length < 5) {
+    setMessages((m) => [
+      ...m,
+      {
+        type: 'ai',
+        content: '番号が違うみたい...もう一度確認してもらえる？\n求職者番号は登録時のLINEに書いてあるよ。',
+      },
+    ])
+    return
+  }
+  setCandidateNumber(text)
+  setMessages((m) => [
+    ...m,
+    {
+      type: 'ai',
+      content: '求職者番号：' + text + ' だね！\n次は ②「今の職種」を教えて！',
+    },
+  ])
+  setSubStep(1)
+  return
+}
       if (subStep === 1) {
         setJobTitle(text)
         setMessages((m) => [
