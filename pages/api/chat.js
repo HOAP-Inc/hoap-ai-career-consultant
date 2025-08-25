@@ -1,197 +1,240 @@
 // pages/api/chat.js
-import OpenAI from "openai";
+// ───────────────────────────────────────────────────────────
+// ほーぷちゃん API（Step0〜1の重複ガード付きミニFSM）
+// ───────────────────────────────────────────────────────────
 
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+/**
+ * メモリ内セッション
+ *  - 本番では KV / DB 等に置き換え
+ */
+const SESSIONS = new Map();
 
-/** ─────────────────────────────────────────────────────────
- *  セッション管理（メモリ簡易版：デモ用）
- *  本番は外部ストアへ移行推奨
- *  ───────────────────────────────────────────────────────── */
-const sessions = new Map();
-function getSession(id) {
-  if (!sessions.has(id)) {
-    sessions.set(id, {
-      // Step0
-      candidateNumber: "",
-      askedQualification: false,
-      askedWorkplace: false,
-      qualificationText: "",
-      workplaceText: "",
-
-      // Step1以降で渡すメモ
-      transferReason: "",
-      mustConditions: [],
-      wantConditions: [],
-      canDo: "",
-      willDo: "",
-
-      // 内部原文メモ（未マッチ保持用）
-      notes: [],
+/** 既存 or 新規セッションを取得 */
+function getSession(sessionId) {
+  if (!SESSIONS.has(sessionId)) {
+    SESSIONS.set(sessionId, {
+      sessionId,
+      createdAt: Date.now(),
+      // 状態
+      candidateNumber: '',
+      idConfirmed: false,
+      asked: {
+        id: false,          // 「最初に求職者IDを〜」を出したか
+        profession: false,  // 職種（所有資格）を聞いたか
+        workplace: false,   // どこで働いてる？を聞いたか
+      },
+      // 収集データ
+      profession: '',       // 所有資格（タグ確定は別ステップで実施）
+      workplace: '',
+      step: 0,              // 0:基本情報, 1:転職理由, 2:Must, 3:Want, 4:Can, 5:Will
+      memo: [],             // 原文メモ
     });
   }
-  return sessions.get(id);
+  return SESSIONS.get(sessionId);
 }
 
-/** ─────────────────────────────────────────────────────────
- *  所有資格タグ（例）
- *  ※「職種→所有資格タグ整合」の最低限辞書
- *  ───────────────────────────────────────────────────────── */
-const QUAL_TAGS = [
-  "正看護師",
-  "准看護師",
-  "介護福祉士",
-  "実務者研修",
-  "初任者研修",
-  "理学療法士",
-  "作業療法士",
-  "言語聴覚士",
-  "管理栄養士",
-  "栄養士",
-  "歯科衛生士",
-  "歯科技工士",
-  "保育士",
-];
+/** 返答ヘルパ */
+function reply(res, payload) {
+  return res.status(200).json(payload);
+}
 
-const CARE_WORDS = ["介護", "ヘルパー", "デイ", "老健", "特養", "サ高住", "グループホーム"];
+/** 数字っぽいIDか簡易チェック */
+function looksLikeId(text) {
+  return /^[0-9]{3,}$/.test(String(text || '').trim());
+}
 
-/** ─────────────────────────────────────────────────────────
- *  API ハンドラ
- *  ───────────────────────────────────────────────────────── */
 export default async function handler(req, res) {
-  if (req.method !== "POST") return res.status(405).json({ message: "Method not allowed" });
-
-  const {
-    message = "",
-    conversationHistory = [],
-    currentStep = 0,
-    candidateNumber = "",
-    isNumberConfirmed = false,
-    sessionId = "default",
-  } = req.body;
-
-  const text = String(message || "").trim();
-  const s = getSession(sessionId);
-
-  /* ── Step0: 求職者ID → 職種（所有資格） → 現職 ───────────────── */
-  if (currentStep === 0) {
-    // まだID未確定：数値抽出して確定
-    if (!isNumberConfirmed || !s.candidateNumber) {
-      const m = text.match(/\d{3,}/);
-      if (!m) {
-        return res.json({
-          response:
-            "すみません、最初に【求職者ID】を教えてね。※IDは「メール」で届いているやつ（LINEじゃないよ）。\nIDが確認できたら、そのあとで\n・今の職種（所有資格）\n・今どこで働いてる？\nも続けて聞いていくよ。気楽にどうぞ！",
-          step: 0,
-        });
-      }
-      // ★ 修正：ID確定時に職種質問モードへ遷移するためのフラグ初期化
-      s.candidateNumber = m[0];
-      s.askedQualification = false;
-      s.askedWorkplace = false;
-
-      return res.json({
-        response:
-          `OK、求職者ID：${s.candidateNumber} で確認したよ！\nまず【今の職種（所有資格）】を教えてね。\n（例）正看護師／介護福祉士／初任者研修 など`,
-        step: 0,
-        candidateNumber: s.candidateNumber,
-        isNumberConfirmed: true,
-      });
-    }
-
-    // 職種（所有資格）をまだ聞いていない
-    if (!s.askedQualification) {
-      s.qualificationText = text;
-
-      const matchedTag = QUAL_TAGS.find((tag) => s.qualificationText.includes(tag));
-      const hasCareWord = CARE_WORDS.some((w) => s.qualificationText.includes(w));
-
-      if (matchedTag) {
-        // タグ整合OK → 次は現職
-        s.askedQualification = true;
-        return res.json({
-          response:
-            "受け取ったよ！次に【今どこで働いてる？】を教えてね。\n（例）〇〇病院 外来／△△クリニック／訪問看護／老健 など",
-          step: 0,
-        });
-      }
-
-      // 介護系ワードだけ来た：資格の有無を確認（確定はまだ）
-      if (hasCareWord) {
-        return res.json({
-          response:
-            "介護系なんだね！資格はどうかな？\n「初任者研修」「実務者研修」「介護福祉士」のどれかは持ってる？ それとも無資格？",
-          step: 0,
-        });
-      }
-
-      // 未マッチ：内部メモ保持して次へ（UIは「未入力」扱いでOK）
-      s.notes.push({ field: "qualification", text: s.qualificationText });
-      s.askedQualification = true;
-      return res.json({
-        response:
-          "受け取ったよ！次に【今どこで働いてる？】を教えてね。\n（例）〇〇病院 外来／△△クリニック／訪問看護／老健 など",
-        step: 0,
-      });
-    }
-
-    // 現職（勤務先）をまだ聞いていない
-    if (!s.askedWorkplace) {
-      s.workplaceText = text;
-      s.askedWorkplace = true;
-
-      // ★ Step1 固定セリフ（完全一致版）
-      return res.json({
-        response:
-          "ありがとう！\n\nはじめに、今回の転職理由を教えてほしいな。きっかけってどんなことだった？\nしんどいと思ったこと、これはもう無理って思ったこと、逆にこういうことに挑戦したい！って思ったこと、何でもOKだよ◎",
-        step: 1,
-      });
-    }
+  if (req.method !== 'POST') {
+    return res.status(405).json({ error: 'Method Not Allowed' });
   }
-
-  /* ── Step1 以降：既存の会話制御（ベースは維持） ──────────────── */
-  // このプロンプトは従来どおり。必要なセッション情報だけ埋め込む
-  const systemPrompt = `あなたは、HOAPの新規事業におけるAIキャリアエージェント「ほーぷちゃん」。
-医療・介護・歯科の求職者に一次ヒアリングを行い、登録済み知識に整合させる。
-禁止：登録外タグの生成／自然文アレンジでの保存。
-
-セッション概要:
-- candidateNumber: ${s.candidateNumber}
-- qualificationText: ${s.qualificationText}
-- workplaceText: ${s.workplaceText}
-- notesCount: ${s.notes.length}
-
-重要: ユーザーの表現はそのまま尊重し、タグ保存時のみ既存のtag_labelを使うこと。`;
-
-  // 会話履歴構築
-  const msgs = [{ role: "system", content: systemPrompt }];
-  for (const m of conversationHistory) {
-    msgs.push(m.type === "ai" ? { role: "assistant", content: m.content } : { role: "user", content: m.content });
-  }
-  msgs.push({ role: "user", content: text });
 
   try {
-    const completion = await openai.chat.completions.create({
-      model: "gpt-4o-mini",
-      messages: msgs,
-      max_tokens: 800,
-      temperature: 0.3,
-    });
+    const {
+      message = '',
+      sessionId,
+      // フロントから送られてくる現状（あってもなくても良い）
+      currentStep,
+      candidateNumber,
+    } = req.body || {};
 
-    const out = completion.choices?.[0]?.message?.content || "すみません、もう一度お願いします。";
-    // ステップ進行は従来トリガーで（ここは既存ロジックを温存）
-    let nextStep = currentStep;
-    if (out.includes("じゃあ次の質問！") && currentStep === 1) nextStep = 2;
-    else if (out.includes("それじゃあ次に、こうだったらいいな") && currentStep === 2) nextStep = 3;
-    else if (out.includes("質問は残り2つ！") && currentStep === 3) nextStep = 4;
-    else if (out.includes("これが最後の質問👏") && currentStep === 4) nextStep = 5;
-    else if (out.includes("今日はたくさん話してくれてありがとう！") && currentStep === 5) nextStep = 6;
+    if (!sessionId) {
+      return res.status(400).json({ error: 'sessionId required' });
+    }
 
-    return res.json({
-      response: out,
-      step: nextStep,
+    const session = getSession(sessionId);
+    const userMsg = String(message || '').trim();
+
+    // フロントの state が進んでいても、サーバ側を真にする
+    if (typeof currentStep === 'number' && currentStep > session.step) {
+      session.step = currentStep;
+    }
+    if (typeof candidateNumber === 'string' && candidateNumber && !session.candidateNumber) {
+      session.candidateNumber = candidateNumber;
+      session.idConfirmed = true;
+    }
+
+    // ─────────────────────────────────────────
+    // Step0: 基本情報（ID → 職種 → 現在の勤務先）
+    // ─────────────────────────────────────────
+    if (session.step === 0) {
+      // 1) まだID未確認 → IDの案内 or 入力を処理
+      if (!session.idConfirmed) {
+        if (!session.asked.id) {
+          session.asked.id = true;
+          return reply(res, {
+            response:
+              '最初に【求職者ID】を教えてね。※IDは「メール」で届いているやつ（LINEじゃないよ）。\nIDが確認できたら、そのあとで\n・今の職種（所有資格）\n・今どこで働いてる？\nも続けて聞いていくよ。気楽にどうぞ！',
+            step: 0,
+            candidateNumber: '',
+            isNumberConfirmed: false,
+            sessionData: session,
+          });
+        }
+
+        // ユーザーの今回メッセージがIDなら確定
+        if (looksLikeId(userMsg)) {
+          session.candidateNumber = userMsg;
+          session.idConfirmed = true;
+          // 次の問い（職種）へ。以降、同じ案内は再出さない
+          session.asked.profession = true;
+          return reply(res, {
+            response:
+              `OK、求職者ID：${userMsg} で確認したよ！\nまず「今の職種（所有資格）」を教えてね。\n（例）正看護師／介護福祉士／初任者研修 など`,
+            step: 0,
+            candidateNumber: session.candidateNumber,
+            isNumberConfirmed: true,
+            sessionData: session,
+          });
+        }
+
+        // IDじゃない発話は保留メモに入れて、重複案内は出さない
+        if (userMsg) session.memo.push({ k: 'before_id', v: userMsg });
+        return reply(res, {
+          response:
+            'ごめんね、まずは【求職者ID】を教えてね。※IDは「メール」で届いているやつ（LINEじゃないよ）',
+          step: 0,
+          candidateNumber: '',
+          isNumberConfirmed: false,
+          sessionData: session,
+        });
+      }
+
+      // 2) IDは確認済み。職種を聞く（未質問なら出す・一度だけ）
+      if (!session.profession) {
+        if (!session.asked.profession) {
+          session.asked.profession = true;
+          return reply(res, {
+            response:
+              'まず「今の職種（所有資格）」を教えてね。\n（例）正看護師／介護福祉士／初任者研修 など',
+            step: 0,
+            candidateNumber: session.candidateNumber,
+            isNumberConfirmed: true,
+            sessionData: session,
+          });
+        }
+
+        // 今回の発話を職種として保持（タグ確定は後続ステップ）
+        if (userMsg) {
+          session.profession = userMsg;
+          // 次：勤務先を質問
+          session.asked.workplace = true;
+          return reply(res, {
+            response: 'ありがとう！次は「今どこで働いてる？」を教えてね。',
+            step: 0,
+            candidateNumber: session.candidateNumber,
+            isNumberConfirmed: true,
+            sessionData: session,
+          });
+        }
+
+        // 空メッセージ時は促す（繰り返し文は短く）
+        return reply(res, {
+          response: '今の職種（所有資格）を教えてね。',
+          step: 0,
+          candidateNumber: session.candidateNumber,
+          isNumberConfirmed: true,
+          sessionData: session,
+        });
+      }
+
+      // 3) 勤務先を聞く
+      if (!session.workplace) {
+        if (!session.asked.workplace) {
+          session.asked.workplace = true;
+          return reply(res, {
+            response: '次は「今どこで働いてる？」を教えてね。',
+            step: 0,
+            candidateNumber: session.candidateNumber,
+            isNumberConfirmed: true,
+            sessionData: session,
+          });
+        }
+
+        if (userMsg) {
+          session.workplace = userMsg;
+          // 基本情報そろった → Step1へ遷移
+          session.step = 1;
+          return reply(res, {
+            response:
+              'はじめに、今回の転職理由を教えてほしいな。きっかけってどんなことだった？\nしんどいと思ったこと、これはもう無理って思ったこと、逆にこういうことに挑戦したい！って思ったこと、何でもOKだよ◎',
+            step: 1,
+            candidateNumber: session.candidateNumber,
+            isNumberConfirmed: true,
+            sessionData: session,
+          });
+        }
+
+        return reply(res, {
+          response: '今どこで働いてる？を教えてね。',
+          step: 0,
+          candidateNumber: session.candidateNumber,
+          isNumberConfirmed: true,
+          sessionData: session,
+        });
+      }
+    }
+
+    // ─────────────────────────────────────────
+    // Step1（転職理由）：ここからは別ロジックに委譲想定
+    // ※ ここで重複させないガードだけ置いておく
+    // ─────────────────────────────────────────
+    if (session.step === 1) {
+      // まだユーザーの最初の転職理由を受け取っていない場合
+      if (userMsg) {
+        session.memo.push({ k: 'reason_raw', v: userMsg });
+        // 次のステップ（Must へ）に進ませるのは既存ロジック側でOK
+        // ここでは一旦、次に進む旨だけ返しておく
+        session.step = 2; // 以降の詳細ヒアリングは既存実装に任せる
+        return reply(res, {
+          response: 'ありがとう！次は「譲れない条件（Must）」を一緒に整理していこう。',
+          step: 2,
+          candidateNumber: session.candidateNumber,
+          isNumberConfirmed: true,
+          sessionData: session,
+        });
+      }
+
+      // 空なら、同じ質問を「一度だけ」返す
+      return reply(res, {
+        response:
+          '今回の転職理由を教えてほしいな。しんどかったこと・無理だと思ったこと・挑戦したいこと、何でもOKだよ◎',
+        step: 1,
+        candidateNumber: session.candidateNumber,
+        isNumberConfirmed: true,
+        sessionData: session,
+      });
+    }
+
+    // それ以外（Step2+）は既存の処理に繋げる前提。暫定で応答。
+    return reply(res, {
+      response: '続けよう！この先のステップは既存ロジックに合わせて進めるね。',
+      step: session.step,
+      candidateNumber: session.candidateNumber,
+      isNumberConfirmed: !!session.candidateNumber,
+      sessionData: session,
     });
   } catch (e) {
-    console.error("OpenAI error:", e);
-    return res.status(500).json({ message: "Internal server error", error: e?.message || String(e) });
+    console.error(e);
+    return res.status(500).json({ error: 'internal_error' });
   }
 }
