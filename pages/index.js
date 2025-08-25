@@ -1,7 +1,6 @@
-// pages/index.js（全置換）
+// pages/index.js
 import { useEffect, useRef, useState } from 'react'
 import Head from 'next/head'
-import '../styles/globals.css'
 
 const steps = [
   { label: '基本情報' },
@@ -32,16 +31,13 @@ export default function Home() {
   const textareaRef = useRef(null)
   const bottomRef = useRef(null)
 
-  // 送信後など常に最下部へ
   useEffect(() => {
-    // 少し遅らせて DOM 反映後にスクロール
     const t = setTimeout(() => {
       bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
     }, 0)
     return () => clearTimeout(t)
   }, [messages, loading])
 
-  // テキストエリアの高さを入力に合わせて可変
   useEffect(() => {
     if (!textareaRef.current) return
     textareaRef.current.style.height = '0px'
@@ -51,19 +47,14 @@ export default function Home() {
 
   const onSend = async () => {
     if (loading || !input.trim() || isComposing) return
-
     const outgoing = input.trim()
-
-    // 先にクリア（絶対に残らない）
     setInput('')
     if (textareaRef.current) {
       textareaRef.current.blur()
       textareaRef.current.style.height = '0px'
     }
-
     setMessages((m) => [...m, { type: 'user', content: outgoing }])
     setLoading(true)
-
     try {
       const res = await fetch('/api/chat', {
         method: 'POST',
@@ -79,9 +70,6 @@ export default function Home() {
       })
       if (!res.ok) throw new Error('API error')
       const data = await res.json()
-
-      // 二重初回メッセージ防止：API が案内文を重ねて返さない前提だが、
-      // 万一同じ文面が連続したら弾く
       setMessages((m) => {
         const next = [...m, { type: 'ai', content: data.response }]
         if (next.length >= 2) {
@@ -91,17 +79,11 @@ export default function Home() {
         }
         return next
       })
-
       if (typeof data.step === 'number') setCurrentStep(data.step)
-      if (typeof data.candidateNumber === 'string')
-        setCandidateNumber(data.candidateNumber)
-      if (typeof data.isNumberConfirmed === 'boolean')
-        setIsNumberConfirmed(data.isNumberConfirmed)
-    } catch (e) {
-      setMessages((m) => [
-        ...m,
-        { type: 'ai', content: 'すみません、エラーが発生しました。もう一度お試しください。' },
-      ])
+      if (typeof data.candidateNumber === 'string') setCandidateNumber(data.candidateNumber)
+      if (typeof data.isNumberConfirmed === 'boolean') setIsNumberConfirmed(data.isNumberConfirmed)
+    } catch {
+      setMessages((m) => [...m, { type: 'ai', content: 'すみません、エラーが発生しました。もう一度お試しください。' }])
     } finally {
       setLoading(false)
     }
@@ -132,16 +114,10 @@ export default function Home() {
           -webkit-text-fill-color: transparent;
           background-clip: text;
         }
-        .message-enter {
-          animation: slideIn 0.25s ease-out;
-        }
-        @keyframes slideIn {
-          from { opacity: 0; transform: translateY(8px); }
-          to { opacity: 1; transform: translateY(0); }
-        }
+        .message-enter { animation: slideIn 0.25s ease-out; }
+        @keyframes slideIn { from { opacity:0; transform:translateY(8px);} to { opacity:1; transform:translateY(0);} }
       `}</style>
 
-      {/* ヘッダー */}
       <header className="bg-white/90 backdrop-blur-sm border-b border-slate-200 sticky top-0 z-10">
         <div className="max-w-4xl mx-auto px-5 py-4">
           <div className="flex items-center justify-between">
@@ -150,23 +126,13 @@ export default function Home() {
               <span className="text-slate-500 text-sm">一次ヒアリング（番号必須・タグ厳密整合）</span>
             </div>
             <div className="text-right">
-              <div className="text-sm text-slate-500">
-                Step <span>{currentStep + 1}</span>/6
-              </div>
-              <div className="text-xs gradient-text font-medium">
-                {steps[currentStep]?.label}
-              </div>
+              <div className="text-sm text-slate-500">Step <span>{currentStep + 1}</span>/6</div>
+              <div className="text-xs gradient-text font-medium">{steps[currentStep]?.label}</div>
             </div>
           </div>
-
           <div className="mt-4 bg-gradient-to-r from-violet-100 via-pink-100 to-cyan-100 rounded-full h-1">
-            <div
-              className="bg-gradient-to-r from-violet-500 via-pink-500 to-cyan-500 h-1 rounded-full transition-all duration-500"
-              style={{ width: `${progress}%` }}
-            />
+            <div className="bg-gradient-to-r from-violet-500 via-pink-500 to-cyan-500 h-1 rounded-full transition-all duration-500" style={{ width: `${progress}%` }} />
           </div>
-
-          {/* ステータス帯 */}
           <div className="mt-3 flex flex-wrap gap-2 text-xs">
             {[
               ['番号', candidateNumber ? '設定済' : '未入力'],
@@ -186,39 +152,31 @@ export default function Home() {
         </div>
       </header>
 
-      {/* 本文 */}
       <main className="max-w-4xl mx-auto px-5 py-6 pb-[88px]" ref={listRef}>
         <div className="space-y-6">
           {messages.map((m, i) => (
             <div key={i} className={`flex ${m.type === 'user' ? 'justify-end' : 'justify-start'} message-enter`}>
               <div className={`flex max-w-xs lg:max-w-2xl ${m.type === 'user' ? 'flex-row-reverse' : 'flex-row'} items-start gap-3`}>
-                {/* アイコン：環境差が出ないよう 👤 固定 */}
                 <div className={`flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center overflow-hidden ${m.type === 'user'
                     ? 'bg-gradient-to-r from-pink-500 via-purple-500 to-cyan-500 text-white shadow-md'
                     : 'bg-gradient-to-r from-gray-100 to-gray-200 shadow-md border-2 border-white'}`}>
                   {m.type === 'user' ? <span className="text-xl">👤</span> : <span className="text-xl">🤖</span>}
                 </div>
-
                 <div className={`${m.type === 'user'
                       ? 'bg-gradient-to-r from-pink-500 via-purple-500 to-cyan-500 text-white ml-auto shadow-lg'
                       : 'bg-white/90 backdrop-blur-sm text-slate-700 border border-pink-100/50'
                     } rounded-2xl px-4 py-3`}>
-                  <div className="text-sm whitespace-pre-wrap leading-relaxed">
-                    {m.content}
-                  </div>
+                  <div className="text-sm whitespace-pre-wrap leading-relaxed">{m.content}</div>
                 </div>
               </div>
             </div>
           ))}
-
-          {/* 「考え中…」は出さない（従来表示に合わせて非表示） */}
+          {/* ローディング表示は非表示にする */}
           {loading && <div aria-hidden className="h-0" />}
-
           <div ref={bottomRef} />
         </div>
       </main>
 
-      {/* 入力バー（固定）。下の変な区切りはこれで消えます */}
       <footer className="fixed bottom-0 left-0 right-0 bg-white/95 backdrop-blur-md border-t border-slate-200">
         <div className="max-w-4xl mx-auto px-5 py-3">
           <div className="flex items-end gap-3">
@@ -242,7 +200,6 @@ export default function Home() {
                 }}
               />
             </div>
-
             <button
               onClick={onSend}
               disabled={loading}
