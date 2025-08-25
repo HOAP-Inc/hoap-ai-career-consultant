@@ -2,12 +2,12 @@ import { useEffect, useRef, useState } from 'react'
 import Head from 'next/head'
 
 const steps = [
-  { label: '基本情報' },
-  { label: '転職理由' },
-  { label: '絶対条件' },
-  { label: '絶対NG' },
-  { label: 'これまで' },
-  { label: 'これから' },
+  { label: '基本情報' },          // 0
+  { label: '転職理由' },          // 1
+  { label: '絶対希望（Must）' },  // 2
+  { label: 'あったらいいな（Want）' }, // 3
+  { label: 'これまで（Can）' },   // 4
+  { label: 'これから（Will）' },  // 5
 ]
 
 export default function Home() {
@@ -19,32 +19,31 @@ export default function Home() {
 
 最初に【求職者ID】を教えてね。※IDは「メール」で届いているやつ（LINEじゃないよ）。
 IDが確認できたら、そのあとで
-・今の職種
+・今の職種（所有資格）
 ・今どこで働いてる？
 も続けて聞いていくよ。気楽にどうぞ！`,
   }])
 
   const [currentStep, setCurrentStep] = useState(0)
-  const [candidateNumber, setCandidateNumber] = useState('') // サーバ互換のため変数名は継続使用
+  const [candidateNumber, setCandidateNumber] = useState('') // サーバ互換名は維持
   const [isNumberConfirmed, setIsNumberConfirmed] = useState(false)
   const [sessionId] = useState(() => Math.random().toString(36).slice(2))
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
 
-  // 進捗サマリー用のセッションデータ（APIから受け取る）
+  // サマリー用セッション（APIから受領して反映）
   const [sessionData, setSessionData] = useState({
     candidateNumber: '',
-    qualification: '',
+    qualification: '',   // 所有資格タグに整合（未マッチは空、原文はサーバ側memoに保持）
     workplace: '',
-    transferReason: '',
-    mustConditions: [],
-    wantConditions: [], // 将来拡張（UIは対応済み）
-    canDo: '',
-    willDo: '',
+    transferReason: '',  // タグ一致名（未マッチは空）
+    mustConditions: [],  // タグ配列
+    wantConditions: [],  // タグ配列
+    canDo: '',           // 原文
+    willDo: '',          // 原文
   })
 
   const listRef = useRef(null)
-
   useEffect(() => {
     listRef.current?.lastElementChild?.scrollIntoView({ behavior: 'smooth' })
   }, [messages])
@@ -61,9 +60,9 @@ IDが確認できたら、そのあとで
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           message: outgoing,
-          currentStep,            // 送るがサーバ側の真実状態を優先
-          candidateNumber,        // 送るがサーバ側の真実状態を優先
-          isNumberConfirmed,      // 送るがサーバ側の真実状態を優先
+          currentStep,
+          candidateNumber,
+          isNumberConfirmed,
           sessionId,
         }),
       })
@@ -76,12 +75,10 @@ IDが確認できたら、そのあとで
       if (typeof data.candidateNumber === 'string') setCandidateNumber(data.candidateNumber)
       if (typeof data.isNumberConfirmed === 'boolean') setIsNumberConfirmed(data.isNumberConfirmed)
 
-      // サマリー更新（差分が来たときだけ上書き）
       if (data.sessionData && typeof data.sessionData === 'object') {
         setSessionData(prev => ({
           ...prev,
           ...data.sessionData,
-          // 念のため配列項目の重複除去
           mustConditions: Array.isArray(data.sessionData.mustConditions)
             ? Array.from(new Set(data.sessionData.mustConditions))
             : prev.mustConditions,
@@ -89,11 +86,8 @@ IDが確認できたら、そのあとで
             ? Array.from(new Set(data.sessionData.wantConditions))
             : prev.wantConditions,
         }))
-      } else {
-        // Step0のID確定など、個別に来る値で反映
-        if (typeof data.candidateNumber === 'string' && data.candidateNumber) {
-          setSessionData(prev => ({ ...prev, candidateNumber: data.candidateNumber }))
-        }
+      } else if (typeof data.candidateNumber === 'string' && data.candidateNumber) {
+        setSessionData(prev => ({ ...prev, candidateNumber: data.candidateNumber }))
       }
     } catch (e) {
       setMessages(m => [...m, { type: 'ai', content: 'すみません、エラーが発生しました。もう一度お試しください。' }])
@@ -104,11 +98,25 @@ IDが確認できたら、そのあとで
 
   const progress = Math.min(((currentStep + 1) / 6) * 100, 100)
 
-  // 表示ルール：タグ一致はタグ名、そのほか未マッチは「済」
-  const displayOrDone = (val) => {
-    if (Array.isArray(val)) return val.length ? val.join('／') : '済'
-    if (typeof val === 'string') return val?.trim() ? val : '済'
-    return '済'
+  // 表示ルール：
+  // まだそのステップに到達していなければ「未入力」
+  // そのステップを超えたら、値が空の場合だけ「済」
+  const showStatus = (value, reached) => {
+    if (!reached) return '未入力'
+    if (Array.isArray(value)) return value.length ? value.join('／') : '済'
+    return (value && value.trim && value.trim().length) ? value : '済'
+  }
+
+  // 各項目の到達判定
+  const reached = {
+    id: currentStep >= 0,
+    qualification: currentStep >= 0,
+    workplace: currentStep >= 0,
+    transfer: currentStep >= 1,
+    must: currentStep >= 2,
+    want: currentStep >= 3,
+    can: currentStep >= 4,
+    will: currentStep >= 5,
   }
 
   return (
@@ -144,15 +152,17 @@ IDが確認できたら、そのあとで
           </div>
 
           {/* 進捗サマリー */}
-          <div className='mt-3 text-xs text-slate-700 grid grid-cols-2 md:grid-cols-4 gap-x-4 gap-y-1'>
-            <div><span className='text-slate-500'>求職者ID：</span>{sessionData.candidateNumber || '未入力'}</div>
-            <div><span className='text-slate-500'>職種：</span>{sessionData.qualification || '未入力'}</div>
-            <div><span className='text-slate-500'>現職：</span>{sessionData.workplace || '未入力'}</div>
-            <div><span className='text-slate-500'>転職目的：</span>{displayOrDone(sessionData.transferReason)}</div>
-            <div><span className='text-slate-500'>Must：</span>{displayOrDone(sessionData.mustConditions)}</div>
-            <div><span className='text-slate-500'>Want：</span>{displayOrDone(sessionData.wantConditions)}</div>
-            <div><span className='text-slate-500'>Can：</span>{displayOrDone(sessionData.canDo)}</div>
-            <div><span className='text-slate-500'>Will：</span>{displayOrDone(sessionData.willDo)}</div>
+          <div className='mt-3 text-xs text-slate-700'>
+            <div className='grid grid-cols-2 md:grid-cols-4 gap-x-4 gap-y-1'>
+              <div><span className='text-slate-500'>求職者ID：</span>{sessionData.candidateNumber || (reached.id ? '済' : '未入力')}</div>
+              <div><span className='text-slate-500'>職種：</span>{showStatus(sessionData.qualification, reached.qualification)}</div>
+              <div><span className='text-slate-500'>現職：</span>{showStatus(sessionData.workplace, reached.workplace)}</div>
+              <div><span className='text-slate-500'>転職目的：</span>{showStatus(sessionData.transferReason, reached.transfer)}</div>
+              <div><span className='text-slate-500'>Must：</span>{showStatus(sessionData.mustConditions, reached.must)}</div>
+              <div><span className='text-slate-500'>Want：</span>{showStatus(sessionData.wantConditions, reached.want)}</div>
+              <div><span className='text-slate-500'>Can：</span>{showStatus(sessionData.canDo, reached.can)}</div>
+              <div><span className='text-slate-500'>Will：</span>{showStatus(sessionData.willDo, reached.will)}</div>
+            </div>
           </div>
 
           {/* プログレスバー */}
