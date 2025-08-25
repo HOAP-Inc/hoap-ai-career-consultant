@@ -32,14 +32,14 @@ IDが確認できたら、そのあとで
   const [loading, setLoading] = useState(false)
   const [isComposing, setIsComposing] = useState(false)
 
-  // サーバから返る想定：タグ確定時は *Tag フィールドが入る
+  // サーバから返るデータ（タグ確定時は *Tag を返す想定）
   const [sessionData, setSessionData] = useState({
     candidateNumber: '',
     qualification: '',
-    qualificationTag: '',       // ★追加：職種のタグ名
+    qualificationTag: '',       // 職種タグ名
     workplace: '',
     transferReason: '',
-    transferReasonTag: '',      // ★追加：転職理由のタグ名（カテゴリ名）
+    transferReasonTag: '',      // 転職理由タグ（カテゴリ名）
     mustConditions: [],         // タグ名配列
     wantConditions: [],         // タグ名配列
     canDo: '',
@@ -53,31 +53,20 @@ IDが確認できたら、そのあとで
   const val = (v) => (typeof v === 'string' ? v.trim() : '')
   const arr = (a) => Array.isArray(a) ? a : []
 
+  // 表示文字列（「設定済」は使わない）
   const statusText = {
-    id: isNumberConfirmed && val(candidateNumber || sessionData.candidateNumber)
+    id: (isNumberConfirmed && val(candidateNumber || sessionData.candidateNumber))
       ? (candidateNumber || sessionData.candidateNumber)
       : '未入力',
     qualification: val(sessionData.qualificationTag) || val(sessionData.qualification) || '未入力',
     workplace: val(sessionData.workplace) || '未入力',
     reason: (() => {
       if (val(sessionData.transferReasonTag)) return sessionData.transferReasonTag
-      if (val(sessionData.transferReason)) return '済'        // 入力はあるがタグ未マッチ
+      if (val(sessionData.transferReason)) return '済'   // 入力はあるがタグ未マッチ
       return '未入力'
     })(),
-    must: (() => {
-      const list = arr(sessionData.mustConditions)
-      if (list.length === 0) return '0件'
-      const head = list.slice(0, 2).join('・')
-      const more = list.length > 2 ? ` 他${list.length - 2}件` : ''
-      return `${head}${more}`
-    })(),
-    want: (() => {
-      const list = arr(sessionData.wantConditions)
-      if (list.length === 0) return '0件'
-      const head = list.slice(0, 2).join('・')
-      const more = list.length > 2 ? ` 他${list.length - 2}件` : ''
-      return `${head}${more}`
-    })(),
+    mustCount: arr(sessionData.mustConditions).length,
+    wantCount: arr(sessionData.wantConditions).length,
     can: val(sessionData.canDo) ? '済' : '未入力',
     will: val(sessionData.willDo) ? '済' : '未入力',
   }
@@ -169,8 +158,8 @@ IDが確認できたら、そのあとで
           <div className="chip"><span className="dot"/>職種：{statusText.qualification}</div>
           <div className="chip"><span className="dot"/>勤務先：{statusText.workplace}</div>
           <div className="chip"><span className="dot"/>転職理由：{statusText.reason}</div>
-          <div className="chip"><span className="dot"/>Must：{statusText.must}</div>
-          <div className="chip"><span className="dot"/>Want：{statusText.want}</div>
+          <div className="chip"><span className="dot"/>Must：{statusText.mustCount}件</div>
+          <div className="chip"><span className="dot"/>Want：{statusText.wantCount}件</div>
           <div className="chip"><span className="dot"/>Can：{statusText.can}</div>
           <div className="chip"><span className="dot"/>Will：{statusText.will}</div>
         </div>
