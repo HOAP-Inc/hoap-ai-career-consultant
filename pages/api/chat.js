@@ -85,9 +85,9 @@ export default async function handler(req, res) {
     const session = getSession(sessionId)
     const text = String(message || '').trim()
 
-    /** Step0：ID → 職種 → 現職（厳密な順番制） */
+    /** Step0：ID → 職種 → 現職（厳密な順番・1回ずつ） */
     if (currentStep === 0) {
-      // フェーズの初期整合
+      // 初期整合
       if (!session.candidateNumber && isNumberConfirmed) {
         session.candidateNumber = candidateNumber
       }
@@ -143,7 +143,7 @@ export default async function handler(req, res) {
         })
       }
 
-      // 0-3) 現職（そのまま保持）
+      // 0-3) 現職（1回だけ聞く）
       if (session.step0Phase === 'needWorkplace') {
         if (!text) {
           return res.json({
@@ -159,18 +159,19 @@ export default async function handler(req, res) {
         session.step0Phase = 'done'
         return res.json({
           response:
-            'OK、基本情報そろった！\nはじめに、今回の【転職理由】を教えて。きっかけ・しんどかったこと・挑戦したいこと、何でもOK！',
-          step: 1, // ← ここで次ステップへ
+            // ★ セリフを指定の完全文言に差し替え（端折り禁止）
+            'はじめに、今回の転職理由を教えてほしいな。きっかけってどんなことだった？\nしんどいと思ったこと、これはもう無理って思ったこと、逆にこういうことに挑戦したい！って思ったこと、何でもOKだよ◎',
+          step: 1, // 次ステップへ
           candidateNumber: session.candidateNumber,
           isNumberConfirmed: true,
           sessionData: session,
         })
       }
 
-      // 念のため（doneで戻ってきたら転職理由へ誘導）
+      // フェーズdoneで戻ってきたら転職理由へ誘導
       return res.json({
         response:
-          'はじめに、今回の【転職理由】を教えて。きっかけ・しんどかったこと・挑戦したいこと、何でもOK！',
+          'はじめに、今回の転職理由を教えてほしいな。きっかけってどんなことだった？\nしんどいと思ったこと、これはもう無理って思ったこと、逆にこういうことに挑戦したい！って思ったこと、何でもOKだよ◎',
         step: 1,
         candidateNumber: session.candidateNumber,
         isNumberConfirmed: true,
@@ -178,7 +179,7 @@ export default async function handler(req, res) {
       })
     }
 
-    /** Step1以降：既存（暫定） */
+    /** Step1以降（暫定のまま） */
     const systemPrompt = `あなたはHOAPのAIキャリアエージェント。順番制でヒアリングし、登録済みのタグにのみ整合する。
 - 「絶対NG」は使わない。Must/Want/Can/Willで整理。
 - タグ未一致は新規生成せず、原文を保持して「未一致」として扱う。
@@ -198,7 +199,7 @@ export default async function handler(req, res) {
     })
     const response = completion.choices?.[0]?.message?.content ?? '…'
 
-    // 既存の簡易ステップ制御（後で置換予定）
+    // 暫定のステップ制御
     let nextStep = currentStep
     if (response.includes('じゃあ次の質問！') && currentStep === 1) nextStep = 2
     else if (response.includes('それじゃあ次に、こうだったらいいな') && currentStep === 2) nextStep = 3
