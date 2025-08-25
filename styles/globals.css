@@ -3,13 +3,61 @@
 @tailwind components;
 @tailwind utilities;
 
-/* 必要最低限のベースだけ（ここに余計な import は入れない） */
-html, body, #__next {
-  height: 100%;
+/* フォント＆色の基調 */
+:root{
+  --hoap-fg:#222222;
+  --hoap-sub:#606270;
+  --hoap-muted:#8f93a3;
+  --hoap-ring:#c084fc;      /* 紫 */
+  --hoap-grad-a:#f472b6;    /* ピンク */
+  --hoap-grad-b:#a78bfa;    /* 紫 */
+  --hoap-grad-c:#60a5fa;    /* 青 */
+  --surface:#ffffffcc;
 }
-body {
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-  letter-spacing: .01em;
-  font-feature-settings: "palt";
+
+html,body,#__next{height:100%;}
+html{scroll-behavior:smooth;}
+body{
+  color:var(--hoap-fg);
+  background:
+    radial-gradient(1200px 600px at 10% -10%, #ffe4f5 0%, transparent 60%),
+    radial-gradient(1200px 600px at 90% -10%, #efe9ff 0%, transparent 60%),
+    linear-gradient(180deg, #faf7ff 0%, #f7fbff 100%);
+  font-family: "Inter","Noto Sans JP", system-ui, -apple-system, Segoe UI, Roboto, "Helvetica Neue", Arial, "Hiragino Kaku Gothic ProN","Hiragino Sans","Noto Sans CJK JP","メイリオ", Meiryo, "ＭＳ Ｐゴシック", sans-serif;
 }
+
+a{color:var(--hoap-grad-b);}
+
+.gradient-text{
+  background:linear-gradient(90deg,var(--hoap-grad-a),var(--hoap-grad-b),var(--hoap-grad-c));
+  -webkit-background-clip:text;
+  background-clip:text;
+  -webkit-text-fill-color:transparent;
+}
+
+.card{
+  @apply rounded-2xl shadow-[0_6px_24px_rgba(20,20,40,.06)] border border-white/60 backdrop-blur bg-white/80;
+}
+
+.pill{
+  @apply text-sm px-3 py-1 rounded-full border bg-white/80 border-white/70 backdrop-blur;
+}
+
+.badge{
+  @apply text-xs px-2 py-0.5 rounded-full border bg-white/80 border-white/70;
+}
+
+.input{
+  @apply w-full rounded-2xl border border-white/70 bg-white/90 backdrop-blur px-4 py-3 outline-none;
+}
+
+.btn{
+  @apply rounded-2xl px-3 py-3 border border-white/70 bg-white/90 backdrop-blur hover:shadow hover:-translate-y-0.5 transition;
+}
+
+/* スクロールコンテナ */
+.chat-scroll{
+  scrollbar-width: thin;
+}
+.chat-scroll::-webkit-scrollbar{height:8px;width:8px}
+.chat-scroll::-webkit-scrollbar-thumb{background:#daddea;border-radius:9999px}
