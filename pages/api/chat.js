@@ -3,7 +3,7 @@ import OpenAI from 'openai'
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
 
-/** 所有資格タグ辞書（正規化パターン） */
+/** 所有資格タグ辞書 */
 const QUAL_TAGS = [
   { tag: '看護師', patterns: ['看護師', '正看', '正看護師', 'rn'] },
   { tag: '准看護師', patterns: ['准看', '准看護師'] },
@@ -26,6 +26,9 @@ const QUAL_TAGS = [
   { tag: '保育士', patterns: ['保育士'] },
 ]
 
+/** 介護系だけど資格が曖昧なワード */
+const AMBIG_CARE = ['介護', 'ヘルパー', '介護職']
+
 const norm = (s = '') =>
   String(s)
     .toLowerCase()
@@ -43,6 +46,11 @@ function matchQualificationTag(input) {
   return ''
 }
 
+function looksAmbiguousCare(input) {
+  const n = norm(input)
+  return AMBIG_CARE.some(k => n.includes(norm(k)))
+}
+
 const sessions = new Map()
 function getSession(sessionId) {
   if (!sessions.has(sessionId)) {
@@ -56,7 +64,12 @@ function getSession(sessionId) {
       wantConditions: [],
       canDo: '',
       willDo: '',
-      step0Phase: 'needId',
+      // Step0 内のフェーズ管理
+      step0Phase: 'needId', // needId -> needQualification -> needWorkplace -> done
+      // 資格あいまい確認フラグ
+      awaitingQualClarify: false,
+      // 内部メモ
+      notes: [],
       deepDrillCount: 0,
       currentCategory: null,
       awaitingSelection: false,
@@ -82,7 +95,7 @@ export default async function handler(req, res) {
     const session = getSession(sessionId)
     const text = String(message || '').trim()
 
-    /** Step0：ID → 職種 → 現職 */
+    /** Step0：ID → 職種（所有資格）→ 現職（勤務先） */
     if (currentStep === 0) {
       if (!session.candidateNumber && isNumberConfirmed) {
         session.candidateNumber = candidateNumber
@@ -114,8 +127,43 @@ export default async function handler(req, res) {
         })
       }
 
-      // 0-2) 職種
+      // 0-2) 職種（所有資格） — 曖昧入力対応
       if (session.step0Phase === 'needQualification') {
+        // すでに曖昧確認モードの場合 → 回答を判定
+        if (session.awaitingQualClarify) {
+          const n = norm(text)
+          let tag = matchQualificationTag(text)
+
+          // 無資格系の明示
+          const noQual = /(無資格|資格なし|持ってない|なし|未取得)/.test(text)
+
+          if (!tag && noQual) {
+            // タグは空で保存（UIは「済」表示）
+            session.qualification = session.qualification || '介護（無資格）'
+            session.qualificationTag = ''
+          } else if (tag) {
+            session.qualification = text
+            session.qualificationTag = tag
+          } else {
+            // 依然あいまい → タグ空でメモ保持
+            session.qualification = text || session.qualification
+            session.qualificationTag = ''
+            session.notes.push(`資格あいまい回答: ${text}`)
+          }
+
+          session.awaitingQualClarify = false
+          session.step0Phase = 'needWorkplace'
+          return res.json({
+            response:
+              '受け取ったよ！次に【今どこで働いてる？】を教えてね。\n（例）〇〇病院 外来／△△クリニック',
+            step: 0,
+            candidateNumber: session.candidateNumber,
+            isNumberConfirmed: true,
+            sessionData: session,
+          })
+        }
+
+        // まだ通常フロー
         if (!text) {
           return res.json({
             response: 'まず【今の職種（所有資格）】を教えてね。\n（例）正看護師',
@@ -125,8 +173,42 @@ export default async function handler(req, res) {
             sessionData: session,
           })
         }
+
+        const tag = matchQualificationTag(text)
+
+        if (tag) {
+          // そのまま整合
+          session.qualification = text
+          session.qualificationTag = tag
+          session.step0Phase = 'needWorkplace'
+          return res.json({
+            response:
+              '受け取ったよ！次に【今どこで働いてる？】を教えてね。\n（例）〇〇病院 外来／△△クリニック',
+            step: 0,
+            candidateNumber: session.candidateNumber,
+            isNumberConfirmed: true,
+            sessionData: session,
+          })
+        }
+
+        // タグ未一致：介護系の曖昧ワードなら確認質問を挟む
+        if (looksAmbiguousCare(text)) {
+          session.qualification = text // 原文は保持
+          session.qualificationTag = '' // まだ未確定
+          session.awaitingQualClarify = true
+          return res.json({
+            response:
+              '「介護／ヘルパー」了解！\n**初任者研修／実務者研修／介護福祉士**などの資格は持ってる？それとも**持っていない**？\n（例）「初任者研修」「介護福祉士」「無資格」などで教えてね。',
+            step: 0,
+            candidateNumber: session.candidateNumber,
+            isNumberConfirmed: true,
+            sessionData: session,
+          })
+        }
+
+        // それ以外の未一致：タグは空で保存（UIは「済」表示）、現職へ
         session.qualification = text
-        session.qualificationTag = matchQualificationTag(text)
+        session.qualificationTag = ''
         session.step0Phase = 'needWorkplace'
         return res.json({
           response:
@@ -138,7 +220,7 @@ export default async function handler(req, res) {
         })
       }
 
-      // 0-3) 現職
+      // 0-3) 現職（勤務先）
       if (session.step0Phase === 'needWorkplace') {
         if (!text) {
           return res.json({
@@ -153,7 +235,7 @@ export default async function handler(req, res) {
         session.step0Phase = 'done'
         return res.json({
           response:
-            'はじめに、今回の転職理由を教えてほしいな。きっかけってどんなことだった？\nしんどいと思ったこと、これはもう無理って思ったこと、逆にこういうことに挑戦したい！って思ったこと、何でもOKだよ◎',
+            'はじめに、今回の【転職理由】を教えて。きっかけ・しんどかったこと・挑戦したいこと、何でもOKだよ◎',
           step: 1,
           candidateNumber: session.candidateNumber,
           isNumberConfirmed: true,
@@ -162,11 +244,11 @@ export default async function handler(req, res) {
       }
     }
 
-    /** Step1以降 */
+    /** Step1以降（従来どおりGPTに委譲、システム制約を強める） */
     const systemPrompt = `あなたは「ほーぷちゃん」。医療・介護・歯科の一次ヒアリングを行うAIキャリアエージェント。
-- ユーザーとフレンドリーに会話しながら、順番制で必ず聞き切る。
-- 「絶対NG」は存在しない。Must/Want/Can/Willで整理。
-- タグ未一致は新規生成せず、原文を保持して「未一致」とする。
+- ユーザーとフレンドリーに、順番制で必ず聞き切る。
+- 「絶対NG」は存在しない。Must/Want/Can/Willで整理する。
+- タグ未一致は新規生成しない。原文を保持し、タグは空。
 - 現在のステップ: ${currentStep}
 - セッション: ${JSON.stringify(session)}`
 
