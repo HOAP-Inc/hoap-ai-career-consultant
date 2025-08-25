@@ -2,15 +2,16 @@ import { useEffect, useRef, useState } from 'react'
 import Head from 'next/head'
 
 const steps = [
-  { label: '基本情報' },             // 0
-  { label: '転職理由' },             // 1
-  { label: '絶対希望（Must）' },     // 2
-  { label: 'あったらいいな（Want）' }, // 3
-  { label: 'これまで（Can）' },      // 4
-  { label: 'これから（Will）' },     // 5
+  { label: '基本情報' },                 // 0
+  { label: '転職理由' },                 // 1
+  { label: '絶対希望（Must）' },         // 2
+  { label: 'あったらいいな（Want）' },   // 3
+  { label: 'これまで（Can）' },          // 4
+  { label: 'これから（Will）' },         // 5
 ]
 
 export default function Home() {
+  // 初期メッセージ（文面確定）
   const [messages, setMessages] = useState([{
     type: 'ai',
     content:
@@ -25,22 +26,22 @@ IDが確認できたら、そのあとで
   }])
 
   const [currentStep, setCurrentStep] = useState(0)
-  const [candidateNumber, setCandidateNumber] = useState('') // サーバ互換名を維持
+  const [candidateNumber, setCandidateNumber] = useState('') // サーバ互換名
   const [isNumberConfirmed, setIsNumberConfirmed] = useState(false)
   const [sessionId] = useState(() => Math.random().toString(36).slice(2))
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
 
-  // サマリー用（APIから返る値をそのまま反映）
+  // サマリー表示用（APIからの内容を反映）
   const [sessionData, setSessionData] = useState({
     candidateNumber: '',
-    qualification: '',   // 所有資格タグ名（未マッチなら空）
+    qualification: '',   // （所有資格タグに整合／未マッチは空）
     workplace: '',       // 原文
-    transferReason: '',  // タグ名（未マッチなら空）
+    transferReason: '',  // タグ名（未マッチは空）
     mustConditions: [],  // タグ配列
     wantConditions: [],  // タグ配列
-    canDo: '',           // 原文
-    willDo: '',          // 原文
+    canDo: '',           // 原文（空OK）
+    willDo: '',          // 原文（空OK）
   })
 
   const listRef = useRef(null)
@@ -75,6 +76,7 @@ IDが確認できたら、そのあとで
       if (typeof data.candidateNumber === 'string') setCandidateNumber(data.candidateNumber)
       if (typeof data.isNumberConfirmed === 'boolean') setIsNumberConfirmed(data.isNumberConfirmed)
 
+      // サマリー反映（配列は重複排除）
       if (data.sessionData && typeof data.sessionData === 'object') {
         setSessionData(prev => ({
           ...prev,
@@ -89,7 +91,7 @@ IDが確認できたら、そのあとで
       } else if (typeof data.candidateNumber === 'string' && data.candidateNumber) {
         setSessionData(prev => ({ ...prev, candidateNumber: data.candidateNumber }))
       }
-    } catch (e) {
+    } catch {
       setMessages(m => [...m, { type: 'ai', content: 'すみません、エラーが発生しました。もう一度お試しください。' }])
     } finally {
       setLoading(false)
@@ -98,19 +100,19 @@ IDが確認できたら、そのあとで
 
   const progress = Math.min(((currentStep + 1) / 6) * 100, 100)
 
-  // ===== 表示ルール =====
-  // まだそのステップに到達していなければ「未入力」
-  // そのステップを超えたら、値が空の場合のみ「済」
+  // —— 表示ルール（UI崩れの根本直し）——
+  // ・未到達 → 「未入力」
+  // ・到達後で値が空 → 「済」
+  // ・値あり → 値を表示（配列は／区切り）
   const showStatus = (value, reached) => {
     if (!reached) return '未入力'
     if (Array.isArray(value)) return value.length ? value.join('／') : '済'
     return (typeof value === 'string' && value.trim().length) ? value : '済'
   }
-
-  // 「到達済み」判定を厳格化（ここが“全部済”の元凶だったとこ修正）
+  // 到達判定：Step1に入るまでは職種/現職も未入力のまま
   const reached = {
-    id: true,                     // ID欄は常に表示。空なら「未入力」
-    qualification: currentStep >= 1, // Step1に入ったら評価開始
+    id: true,                      // IDは常に表示（空なら未入力）
+    qualification: currentStep >= 1,
     workplace:    currentStep >= 1,
     transfer:     currentStep >= 1,
     must:         currentStep >= 2,
@@ -126,13 +128,7 @@ IDが確認できたら、そのあとで
         <meta name='viewport' content='width=device-width, initial-scale=1' />
       </Head>
 
-      <style jsx global>{`
-        .gradient-bg { background: linear-gradient(135deg, #fdf2f8 0%, #faf5ff 50%, #eff6ff 100%); }
-        .gradient-text { background: linear-gradient(135deg, #ec4899 0%, #8b5cf6 50%, #3b82f6 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
-        .message-enter { animation: slideIn 0.3s ease-out; }
-        @keyframes slideIn { from { opacity: 0; transform: translateY(10px);} to { opacity: 1; transform: translateY(0);} }
-      `}</style>
-
+      {/* ===== ヘッダー ===== */}
       <header className='bg-white/90 backdrop-blur-sm border-b border-pink-100 sticky top-0 z-10 shadow-sm'>
         <div className='max-w-5xl mx-auto px-4 sm:px-6 py-4'>
           <div className='flex items-start sm:items-center justify-between gap-3'>
@@ -153,7 +149,7 @@ IDが確認できたら、そのあとで
             </div>
           </div>
 
-          {/* 進捗サマリー（レイアウト崩れ防止のため幅/行間を調整） */}
+          {/* 進捗サマリー（崩れ防止：行間/文字サイズ/グリッド最適化） */}
           <div className='mt-3 text-[12px] sm:text-xs text-slate-700'>
             <div className='grid grid-cols-2 md:grid-cols-4 gap-x-4 gap-y-1 leading-snug'>
               <div><span className='text-slate-500'>求職者ID：</span>{sessionData.candidateNumber || '未入力'}</div>
@@ -177,6 +173,7 @@ IDが確認できたら、そのあとで
         </div>
       </header>
 
+      {/* ===== メッセージ ===== */}
       <main className='max-w-5xl mx-auto px-4 sm:px-6 py-6 sm:py-8 pb-32'>
         <div ref={listRef} className='space-y-4 sm:space-y-6'>
           {messages.map((m, i) => (
@@ -216,15 +213,16 @@ IDが確認できたら、そのあとで
         </div>
       </main>
 
+      {/* ===== 入力欄 ===== */}
       <footer className='fixed bottom-0 left-0 right-0 bg-white/95 backdrop-blur-md border-t border-pink-100/50 shadow-xl'>
         <div className='max-w-5xl mx-auto px-4 sm:px-6 py-3 sm:py-4'>
           <div className='flex items-end gap-2 sm:gap-3'>
-            <div className='flex-1 relative'>
+            <div className='flex-1'>
               <textarea
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 placeholder={!isNumberConfirmed && currentStep === 0 ? '求職者IDを入力してください（メールに届いているID）...' : 'メッセージを入力...'}
-                className='w-full bg-white border border-pink-200 rounded-xl px-3 py-3 sm:px-4 sm:py-3 text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-purple-400 focus:border-transparent resize-none min-h-[48px] sm:min-h-[52px] max-h-32 shadow-sm'
+                className='w-full bg-white border border-pink-200 rounded-xl px-3 py-3 sm:px-4 sm:py-3 text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-purple-400 focus:border-transparent min-h-[48px] sm:min-h-[52px] max-h-32 shadow-sm'
                 rows={1}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter' && !e.shiftKey) {
