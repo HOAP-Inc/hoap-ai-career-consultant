@@ -1,299 +1,335 @@
-// pages/api/chat.js
-import OpenAI from 'openai'
+// pages/api/chat.js  —— 全置換
+// ほーぷちゃん：Step1〜5の厳密フロー実装（タグは登録済みtag_labelのみ使用）
 
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
+/* ---------------- 辞書（tag_labelのみ） ---------------- */
+// Step1 転職目的カテゴリ → 固定候補（2〜3件/カテゴリ）
+const REASON_CANDIDATES = {
+  '働く仲間に関すること': [
+    '人間関係のトラブルが少ない職場で働きたい',
+    '同じ価値観を持つ仲間と働きたい',
+    '尊敬できる上司・経営者と働きたい',
+  ],
+  '労働条件に関すること': [
+    '残業のない職場で働きたい',
+    '希望通りに有給が取得できる職場で働きたい',
+    '副業OKな職場で働きたい',
+  ],
+  '経営・組織に関すること': [
+    '風通しがよく意見が言いやすい職場で働きたい',
+    '評価制度が導入されている職場で働きたい',
+    '教育体制が整備されている職場で働きたい',
+  ],
+  '仕事内容・キャリアに関すること': [
+    '今までの経験や自分の強みを活かしたい',
+    '未経験の仕事／分野に挑戦したい',
+    '昇進・昇格の機会がある',
+  ],
+  'プライベートに関すること': [
+    '家庭との両立に理解のある職場で働きたい',
+    '勤務時間外でイベントがない職場で働きたい',
+  ],
+  '職場環境・設備': [
+    // ※候補提示は2〜3件ルールだが、ここは候補提示禁止カテゴリにはしていない
+    '最新の設備・システムが整った職場で働きたい',
+    'デジタルツールが整備された職場で働きたい',
+  ],
+  '職場の安定性': [
+    '将来性のある安定した職場で働きたい',
+    '経営が安定している職場で働きたい',
+  ],
+  '給与・待遇': [
+    '昇給・賞与の仕組みが明確な職場で働きたい',
+    '手当や福利厚生が充実した職場で働きたい',
+  ],
+}
 
-/** 所有資格タグ辞書 */
-const QUAL_TAGS = [
-  { tag: '看護師', patterns: ['看護師', '正看', '正看護師', 'rn'] },
-  { tag: '准看護師', patterns: ['准看', '准看護師'] },
-  { tag: '保健師', patterns: ['保健師'] },
-  { tag: '助産師', patterns: ['助産師'] },
-  { tag: '介護福祉士', patterns: ['介護福祉士', '介福'] },
-  { tag: '介護職（初任者研修）', patterns: ['初任者', '初任者研修', 'ヘルパー2級', 'ﾍﾙﾊﾟｰ2級'] },
-  { tag: '介護職（実務者研修）', patterns: ['実務者', '実務者研修', 'ヘルパー1級', 'ﾍﾙﾊﾟｰ1級'] },
-  { tag: '理学療法士', patterns: ['理学療法士', 'pt'] },
-  { tag: '作業療法士', patterns: ['作業療法士', 'ot'] },
-  { tag: '言語聴覚士', patterns: ['言語聴覚士', 'st'] },
-  { tag: '管理栄養士', patterns: ['管理栄養士'] },
-  { tag: '栄養士', patterns: ['栄養士'] },
-  { tag: '歯科衛生士', patterns: ['歯科衛生士', 'dh'] },
-  { tag: '歯科技工士', patterns: ['歯科技工士'] },
-  { tag: '歯科助手', patterns: ['歯科助手'] },
-  { tag: '介護支援専門員（ケアマネ）', patterns: ['ケアマネ', '介護支援専門員'] },
-  { tag: '医療事務', patterns: ['医療事務'] },
-  { tag: '福祉用具専門相談員', patterns: ['福祉用具専門相談員', '福祉用具'] },
-  { tag: '保育士', patterns: ['保育士'] },
+// Step2（絶対）/Step3（あったら良い） 用の辞書（tag_labelのみ）
+const MUST_TAGS = [
+  '残業のない職場で働きたい',
+  '希望通りに有給が取得できる職場で働きたい',
+  '副業OKな職場で働きたい',
+  '直行直帰ができる職場で働きたい',
+  '社会保険を完備している職場で働きたい',
+  '診療時間内で自己研鑽できる職場で働きたい',
+  '前残業のない職場で働きたい',
+]
+const WANT_TAGS = [
+  '人間関係のトラブルが少ない職場で働きたい',
+  '同じ価値観を持つ仲間と働きたい',
+  '尊敬できる上司・経営者と働きたい',
+  '風通しがよく意見が言いやすい職場で働きたい',
+  '評価制度が導入されている職場で働きたい',
+  '教育体制が整備されている職場で働きたい',
+  '今までの経験や自分の強みを活かしたい',
+  '未経験の仕事／分野に挑戦したい',
+  '昇進・昇格の機会がある',
+  '家庭との両立に理解のある職場で働きたい',
+  '勤務時間外でイベントがない職場で働きたい',
 ]
 
-/** 介護系だけど資格が曖昧なワード */
-const AMBIG_CARE = ['介護', 'ヘルパー', '介護職']
+/* ------------- カテゴリ推定用の軽量キーワード ------------- */
+const CATEGORY_HINTS = [
+  { cat: '働く仲間に関すること', keys: ['人間関係','上司','先輩','同僚','雰囲気','チーム','陰口','派閥','ハラスメント'] },
+  { cat: '労働条件に関すること', keys: ['残業','夜勤','休日','シフト','有給','時間','働き方','オンコール','直行直帰','前残業'] },
+  { cat: '経営・組織に関すること', keys: ['理念','方針','評価','教育','研修','制度','風通し','トップ','経営'] },
+  { cat: '仕事内容・キャリアに関すること', keys: ['やりがい','成長','挑戦','キャリア','昇進','専門','幅を広げ','スキル'] },
+  { cat: 'プライベートに関すること', keys: ['家庭','育児','両立','プライベート','行事','イベント','時短'] },
+  { cat: '職場環境・設備', keys: ['設備','機器','システム','デジタル','古い','新しい'] },
+  { cat: '職場の安定性', keys: ['安定','倒産','将来性','不安'] },
+  { cat: '給与・待遇', keys: ['給与','年収','手取り','賞与','ボーナス','手当','福利厚生'] },
+]
 
-const norm = (s = '') =>
-  String(s)
-    .toLowerCase()
-    .replace(/\s+/g, '')
-    .replace(/[Ａ-Ｚａ-ｚ０-９]/g, ch => String.fromCharCode(ch.charCodeAt(0) - 0xfee0))
-
-function matchQualificationTag(input) {
-  const n = norm(input)
-  if (!n) return ''
-  for (const { tag, patterns } of QUAL_TAGS) {
-    for (const p of patterns) {
-      if (n.includes(norm(p))) return tag
-    }
-  }
-  return ''
-}
-
-function looksAmbiguousCare(input) {
-  const n = norm(input)
-  return AMBIG_CARE.some(k => n.includes(norm(k)))
-}
-
+/* ---------------- セッション（メモリ内） ---------------- */
 const sessions = new Map()
-function getSession(sessionId) {
-  if (!sessions.has(sessionId)) {
-    sessions.set(sessionId, {
+const getS = (id) => {
+  if (!sessions.has(id)) {
+    sessions.set(id, {
+      // 共通保存
       candidateNumber: '',
-      qualification: '',
       qualificationTag: '',
-      workplace: '',
-      transferReason: '',
-      mustConditions: [],
-      wantConditions: [],
-      canDo: '',
-      willDo: '',
-      // Step0 内のフェーズ管理: needId -> needQualification -> needWorkplace -> done
-      step0Phase: 'needId',
-      // 資格あいまい確認フラグ
-      awaitingQualClarify: false,
-      // 内部メモ
-      notes: [],
-      // 以下、後工程用
-      deepDrillCount: 0,
-      currentCategory: null,
-      awaitingSelection: false,
-      selectionOptions: [],
+      workplaceText: '',
+      // Step1
+      step1: {
+        deepCount: 0, // 0→1→2（ユーザー発話数）
+        cat: null,
+        notes: [], // ユーザー原文はここに保持（会話では繰り返さない）
+        awaitingPick: false,
+        options: [],
+        decided: '', // tag_label
+      },
+      // Step2/3
+      must: [], // tag_label[] 保存
+      want: [], // tag_label[]
+      // Step4/5
+      canText: '',
+      willText: '',
     })
   }
-  return sessions.get(sessionId)
+  return sessions.get(id)
 }
 
+/* ----------------- ユーティリティ ----------------- */
+const norm = (s='') => String(s).trim()
+const includesAny = (text, arr) => arr.some(k => text.includes(k))
+const pickReasonCategory = (text) => {
+  const t = norm(text)
+  let best = null, score = 0
+  for (const {cat, keys} of CATEGORY_HINTS) {
+    const hit = keys.reduce((n,k)=> n + (t.includes(k) ? 1 : 0), 0)
+    if (hit > score) { score = hit; best = cat }
+  }
+  return (score > 0) ? best : null
+}
+const candidateListFor = (cat) => (REASON_CANDIDATES[cat] || []).slice(0,3)
+const textHasExit = (text) => /(?:ない|無し|ありません|以上|特にない)/.test(text)
+
+/* ----------------- 返答ビルダー ----------------- */
+const say = (text) => ({ response: text })
+
+/* ================== メインハンドラ ================== */
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ message: 'Method not allowed' })
 
-  try {
-    const {
-      message = '',
-      conversationHistory = [],
-      currentStep = 0,
-      candidateNumber = '',
-      isNumberConfirmed = false,
-      sessionId = 'default',
-    } = req.body
+  const {
+    message = '',
+    currentStep = 1,
+    sessionId = 'default',
+    candidateNumber = '',
+    isNumberConfirmed = false,
+  } = req.body
 
-    const session = getSession(sessionId)
-    const text = String(message || '').trim()
+  const s = getS(sessionId)
+  const user = norm(message)
 
-    /** Step0：ID → 職種（所有資格）→ 現職（勤務先） */
-    if (currentStep === 0) {
-      if (!session.candidateNumber && isNumberConfirmed) {
-        session.candidateNumber = candidateNumber
-      }
-      if (session.step0Phase === 'needId' && session.candidateNumber) {
-        session.step0Phase = 'needQualification'
-      }
+  // 既存の番号を受け取った場合は保存しておく（UIのため）
+  if (isNumberConfirmed && candidateNumber && !s.candidateNumber) {
+    s.candidateNumber = candidateNumber
+  }
 
-      // 0-1) 求職者ID
-      if (session.step0Phase === 'needId') {
-        if (text && text.length >= 3) {
-          session.candidateNumber = text
-          session.step0Phase = 'needQualification'
-          return res.json({
-            response:
-              'OK、求職者ID確認したよ！\nまず【今の職種（所有資格）】を教えてね。\n（例）正看護師',
-            step: 0,
-            candidateNumber: session.candidateNumber,
-            isNumberConfirmed: true,
-            sessionData: session,
-          })
-        }
-        return res.json({
-          response: '最初に【求職者ID】を教えてね。※IDは「メール」で届いているやつ（LINEじゃないよ）。',
-          step: 0,
-          candidateNumber: session.candidateNumber,
-          isNumberConfirmed: false,
-          sessionData: session,
-        })
-      }
+  /* ---------- Step1：転職目的（深掘り→候補→確定） ---------- */
+  if (currentStep === 1) {
+    const st = s.step1
 
-      // 0-2) 職種（所有資格） — 曖昧入力対応
-      if (session.step0Phase === 'needQualification') {
-        // すでに曖昧確認モード → 回答判定
-        if (session.awaitingQualClarify) {
-          const tag = matchQualificationTag(text)
-          const noQual = /(無資格|資格なし|持ってない|なし|未取得)/.test(text)
-
-          if (!tag && noQual) {
-            session.qualification = session.qualification || '介護（無資格）'
-            session.qualificationTag = ''
-          } else if (tag) {
-            session.qualification = text
-            session.qualificationTag = tag
-          } else {
-            session.qualification = text || session.qualification
-            session.qualificationTag = ''
-            session.notes.push(`資格あいまい回答: ${text}`)
-          }
-
-          session.awaitingQualClarify = false
-          session.step0Phase = 'needWorkplace'
-          return res.json({
-            response:
-              '受け取ったよ！次に【今どこで働いてる？】を教えてね。\n（例）〇〇病院 外来／△△クリニック',
-            step: 0,
-            candidateNumber: session.candidateNumber,
-            isNumberConfirmed: true,
-            sessionData: session,
-          })
-        }
-
-        // 通常フロー
-        if (!text) {
-          return res.json({
-            response: 'まず【今の職種（所有資格）】を教えてね。\n（例）正看護師',
-            step: 0,
-            candidateNumber: session.candidateNumber,
-            isNumberConfirmed: true,
-            sessionData: session,
-          })
-        }
-
-        const tag = matchQualificationTag(text)
-
-        if (tag) {
-          session.qualification = text
-          session.qualificationTag = tag
-          session.step0Phase = 'needWorkplace'
-          return res.json({
-            response:
-              '受け取ったよ！次に【今どこで働いてる？】を教えてね。\n（例）〇〇病院 外来／△△クリニック',
-            step: 0,
-            candidateNumber: session.candidateNumber,
-            isNumberConfirmed: true,
-            sessionData: session,
-          })
-        }
-
-        // タグ未一致：介護系の曖昧ワードなら確認質問を挟む
-        if (looksAmbiguousCare(text)) {
-          session.qualification = text // 原文保持
-          session.qualificationTag = '' // 未確定
-          session.awaitingQualClarify = true
-          return res.json({
-            response:
-              '「介護／ヘルパー」了解！\n**初任者研修／実務者研修／介護福祉士**などの資格は持ってる？それとも**持っていない**？\n（例）「初任者研修」「介護福祉士」「無資格」などで教えてね。',
-            step: 0,
-            candidateNumber: session.candidateNumber,
-            isNumberConfirmed: true,
-            sessionData: session,
-          })
-        }
-
-        // その他の未一致：タグ空保存で現職へ
-        session.qualification = text
-        session.qualificationTag = ''
-        session.step0Phase = 'needWorkplace'
+    // 候補提示済み → 選択待ち
+    if (st.awaitingPick && st.options.length) {
+      const pickByNumber = user.match(/[1-3]/) ? st.options[Number(user.match(/[1-3]/)[0]) - 1] : ''
+      const picked = st.options.find(o => user.includes(o)) || pickByNumber
+      if (picked) {
+        st.decided = picked
+        st.awaitingPick = false
+        st.options = []
+        st.deepCount = 0
+        // ①共感 → ②復唱（tag_labelそのまま） → ③保存完了メッセージ
         return res.json({
           response:
-            '受け取ったよ！次に【今どこで働いてる？】を教えてね。\n（例）〇〇病院 外来／△△クリニック',
-          step: 0,
-          candidateNumber: session.candidateNumber,
-          isNumberConfirmed: true,
-          sessionData: session,
+            `なるほど、それは大事だよね！\n` +
+            `つまり『${picked}』ってことだね！\n` +
+            `ありがとう！じゃあ次は、希望の中でも「これは外せない」と思う条件について教えてね。短くてOKだよ。`,
+          step: 2,
+          candidateNumber: s.candidateNumber,
+          isNumberConfirmed: !!s.candidateNumber,
+          sessionData: s,
         })
       }
-
-      // 0-3) 現職（勤務先）
-      if (session.step0Phase === 'needWorkplace') {
-        if (!text) {
-          return res.json({
-            response: '【今どこで働いてる？】を教えてね。\n（例）〇〇病院 外来／△△クリニック',
-            step: 0,
-            candidateNumber: session.candidateNumber,
-            isNumberConfirmed: true,
-            sessionData: session,
-          })
-        }
-        session.workplace = text
-        session.step0Phase = 'done'
-        // ★ Step1 への誘導は “完全一致” セリフで固定（端折り禁止）
-        return res.json({
-          response:
-            'はじめに、今回の転職理由を教えてほしいな。きっかけってどんなことだった？\nしんどいと思ったこと、これはもう無理って思ったこと、逆にこういうことに挑戦したい！って思ったこと、何でもOKだよ◎',
-          step: 1,
-          candidateNumber: session.candidateNumber,
-          isNumberConfirmed: true,
-          sessionData: session,
-        })
-      }
-
-      // 0-x) 既に done の場合も Step1 のフルセリフで案内
+      // 正しく選ばれなかった場合も候補提示を維持
       return res.json({
-        response:
-          'はじめに、今回の転職理由を教えてほしいな。きっかけってどんなことだった？\nしんどいと思ったこと、これはもう無理って思ったこと、逆にこういうことに挑戦したい！って思ったこと、何でもOKだよ◎',
+        response: `この中だとどれが一番近い？『${st.options.join('／')}』\n（番号 1〜3 でもOK）`,
         step: 1,
-        candidateNumber: session.candidateNumber,
-        isNumberConfirmed: true,
-        sessionData: session,
+        candidateNumber: s.candidateNumber,
+        isNumberConfirmed: !!s.candidateNumber,
+        sessionData: s,
       })
     }
 
-    /** Step1 以降（暫定はGPTに委譲。ほーぷちゃんの制約だけ強める） */
-    const systemPrompt = `あなたは「ほーぷちゃん」。医療・介護・歯科の一次ヒアリングを行うAIキャリアエージェント。
-- フレンドリーだが順番制で必ず聞き切る。
-- 「絶対NG」は存在しない。Must/Want/Can/Willで整理。
-- タグ未一致は新規生成しない。原文を保持し、タグは空のまま。
-- 現在のステップ: ${currentStep}
-- セッション: ${JSON.stringify(session)}`
-
-    const msgs = [{ role: 'system', content: systemPrompt }]
-    for (const m of conversationHistory) {
-      msgs.push(
-        m.type === 'ai'
-          ? { role: 'assistant', content: m.content }
-          : { role: 'user', content: m.content }
-      )
+    // 深掘り：ユーザー 1→2→3 発話で区切る（オープンクエスチョンのみ）
+    if (st.deepCount === 0) {
+      st.notes.push(user)
+      st.cat = pickReasonCategory(user)
+      st.deepCount = 1
+      return res.json({
+        response: 'そのことについて、もう少し詳しく教えてもらってもいい？',
+        step: 1,
+        candidateNumber: s.candidateNumber,
+        isNumberConfirmed: !!s.candidateNumber,
+        sessionData: s,
+      })
     }
-    msgs.push({ role: 'user', content: message })
-
-    const completion = await openai.chat.completions.create({
-      model: 'gpt-4o-mini',
-      messages: msgs,
-      temperature: 0.3,
-      max_tokens: 1000,
-    })
-
-    const response = completion.choices?.[0]?.message?.content ?? '…'
-
-    // 暫定の次ステップ判定（今後ここも厳密にする前提）
-    let nextStep = currentStep
-    if (response.includes('じゃあ次の質問！') && currentStep === 1) nextStep = 2
-    else if (response.includes('それじゃあ次に、こうだったらいいな') && currentStep === 2) nextStep = 3
-    else if (response.includes('質問は残り2つ！') && currentStep === 3) nextStep = 4
-    else if (response.includes('これが最後の質問👏') && currentStep === 4) nextStep = 5
-    else if (response.includes('今日はたくさん話してくれてありがとう！') && currentStep === 5) nextStep = 6
-
-    return res.json({
-      response,
-      step: nextStep,
-      candidateNumber: session.candidateNumber,
-      isNumberConfirmed: Boolean(session.candidateNumber),
-      sessionData: session,
-    })
-  } catch (err) {
-    console.error('Error in chat API:', err)
-    return res.status(500).json({ message: 'Internal server error', error: err.message })
+    if (st.deepCount === 1) {
+      st.notes.push(user)
+      st.deepCount = 2
+      return res.json({
+        response: '具体的にはどんな場面でそう感じたの？',
+        step: 1,
+        candidateNumber: s.candidateNumber,
+        isNumberConfirmed: !!s.candidateNumber,
+        sessionData: s,
+      })
+    }
+    if (st.deepCount === 2) {
+      st.notes.push(user)
+      // 3回目のユーザー発話後は必ず候補提示に切替
+      const cat = st.cat || pickReasonCategory([st.notes[0], st.notes[1], user].join(' '))
+      const options = candidateListFor(cat)
+      if (cat && options.length >= 2 && options.length <= 3) {
+        st.awaitingPick = true
+        st.options = options
+        return res.json({
+          response: `この中だとどれが一番近い？『${options.join('／')}』\n（番号 1〜3 でもOK）`,
+          step: 1,
+          candidateNumber: s.candidateNumber,
+          isNumberConfirmed: !!s.candidateNumber,
+          sessionData: s,
+        })
+      }
+      // 未マッチ：候補提示せず固定文で終了、タグ化は行わない
+      st.deepCount = 0
+      st.cat = null
+      st.options = []
+      st.awaitingPick = false
+      return res.json({
+        response: 'なるほど、その気持ちよくわかる！大事な転職のきっかけだね◎\nありがとう！じゃあ次は、希望の中でも「これは外せない」と思う条件について教えてね。短くてOKだよ。',
+        step: 2,
+        candidateNumber: s.candidateNumber,
+        isNumberConfirmed: !!s.candidateNumber,
+        sessionData: s,
+      })
+    }
   }
+
+  /* ---------------- Step2：必須条件（辞書マッチ） ---------------- */
+  if (currentStep === 2) {
+    // マッチ判定
+    const hit = MUST_TAGS.find(tag => user.includes(tag))
+    if (hit) {
+      if (!s.must.includes(hit)) s.must.push(hit)
+      return res.json({
+        response: `そっか、『${hit}』が絶対ってことだね！\n他にも絶対条件はある？（なければ「ない」でOK）`,
+        step: 2,
+        candidateNumber: s.candidateNumber,
+        isNumberConfirmed: !!s.candidateNumber,
+        sessionData: s,
+      })
+    }
+    // 未マッチでも前進
+    if (textHasExit(user)) {
+      return res.json({
+        response: 'ありがとう！じゃあ次は、あったら嬉しい条件について教えてね。短くてOKだよ。',
+        step: 3,
+        candidateNumber: s.candidateNumber,
+        isNumberConfirmed: !!s.candidateNumber,
+        sessionData: s,
+      })
+    }
+    return res.json({
+      response: 'そっか、わかった！大事な希望だね◎\n他にも絶対条件はある？（なければ「ない」でOK）',
+      step: 2,
+      candidateNumber: s.candidateNumber,
+      isNumberConfirmed: !!s.candidateNumber,
+      sessionData: s,
+    })
+  }
+
+  /* --------------- Step3：あったら嬉しい（辞書マッチ） --------------- */
+  if (currentStep === 3) {
+    const hit = WANT_TAGS.find(tag => user.includes(tag))
+    if (hit) {
+      if (!s.want.includes(hit)) s.want.push(hit)
+      return res.json({
+        response: `了解！『${hit}』だと嬉しいってことだね！\n他にもあったらいいなっていうのはある？（なければ「ない」でOK）`,
+        step: 3,
+        candidateNumber: s.candidateNumber,
+        isNumberConfirmed: !!s.candidateNumber,
+        sessionData: s,
+      })
+    }
+    if (textHasExit(user)) {
+      return res.json({
+        response: 'ありがとう！それじゃあ次は、今できることや得意なことを教えてね。自由に書いてOKだよ。',
+        step: 4,
+        candidateNumber: s.candidateNumber,
+        isNumberConfirmed: !!s.candidateNumber,
+        sessionData: s,
+      })
+    }
+    return res.json({
+      response: '了解！気持ちは受け取ったよ◎\n他にもあったらいいなっていうのはある？（なければ「ない」でOK）',
+      step: 3,
+      candidateNumber: s.candidateNumber,
+      isNumberConfirmed: !!s.candidateNumber,
+      sessionData: s,
+    })
+  }
+
+  /* ---------------- Step4：Can（テキスト保存のみ） ---------------- */
+  if (currentStep === 4) {
+    s.canText = user // 原文保存のみ（タグ化禁止）
+    return res.json({
+      response: 'いいね！次は、これからやりたいことや興味のあることを教えてね。自由に書いてOKだよ。',
+      step: 5,
+      candidateNumber: s.candidateNumber,
+      isNumberConfirmed: !!s.candidateNumber,
+      sessionData: s,
+    })
+  }
+
+  /* ---------------- Step5：Will（テキスト保存のみ） ---------------- */
+  if (currentStep === 5) {
+    s.willText = user // 原文保存のみ（タグ化禁止）
+    return res.json({
+      response: '今日はたくさん話してくれてありがとう！内容は担当エージェントにしっかり共有するね。面談で詳しく相談していこう！',
+      step: 6,
+      candidateNumber: s.candidateNumber,
+      isNumberConfirmed: !!s.candidateNumber,
+      sessionData: s,
+    })
+  }
+
+  // それ以外（保険）
+  return res.json({
+    response: 'OK！続けよう。',
+    step: currentStep,
+    candidateNumber: s.candidateNumber,
+    isNumberConfirmed: !!s.candidateNumber,
+    sessionData: s,
+  })
 }
