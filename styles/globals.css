@@ -75,9 +75,12 @@ body{
 .msg{
   display:flex; gap:10px; align-items:flex-start;
 }
-.msg.ai{ justify-content:flex-start; }
-.msg.user{ justify-content:flex-end; }
-
+.msg.ai { 
+  justify-content: flex-start;  /* AIは左 */
+}
+.msg.user { 
+  justify-content: flex-end;    /* ユーザーは右 */
+}
 .avatar{
   width:36px; height:36px; border-radius:999px;
   box-shadow: var(--card-shadow);
@@ -87,13 +90,14 @@ body{
   border:2px solid #fff;
   overflow:hidden;
 }
-.avatar.ai{
-  background:#eef2ff;
+.avatar.ai {
+  background:#eef2ff;   /* 濃いめの薄紫 */
+  opacity: 1;           /* ← 薄くしない */
 }
-.avatar.user{
+.avatar.user {
   background: linear-gradient(135deg, var(--user-grad-from), var(--user-grad-via) 50%, var(--user-grad-to));
-  /* 薄さ禁止：常に不透明 */
-  opacity: 1;
+  box-shadow: var(--card-shadow);
+  opacity: 1;   /* ← ここを1に固定（もしくは行を削除） */
 }
 
 .bubble{
@@ -106,13 +110,15 @@ body{
   white-space: pre-wrap;
   font-size: 15px;
 }
-.ai .bubble{
-  background: var(--ai-bubble-bg);
+.ai .bubble {
+  background: #ffffff;  /* 白で固定 */
   border:1px solid #f3e8ff;
+  opacity: 1;
 }
-.user .bubble{
+.user .bubble {
   background: linear-gradient(135deg, var(--user-grad-from), var(--user-grad-via) 50%, var(--user-grad-to));
   border:1px solid #e9d5ff;
+  opacity: 1;   /* ← 追加して濃く */
 }
 
 /* 入力バー */
