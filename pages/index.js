@@ -108,7 +108,7 @@ export default function Home() {
         {messages.map((m, i) => (
           <div key={i} className={`msg ${m.type}`}>
             <div className={`avatar ${m.type}`}>
-              {m.type === "ai" ? "🤖" : ""}
+              {m.type === "ai" ? "🤖" : "👤"}
             </div>
             <div className="bubble">{m.content}</div>
           </div>
