@@ -2,11 +2,21 @@
 @tailwind components;
 @tailwind utilities;
 
-/* ===== カスタム共通スタイル ===== */
-.gradient-bg {
-  background: linear-gradient(135deg, #fdf2f8 0%, #faf5ff 50%, #eff6ff 100%);
+/* ===== 共通レイアウト/色 ===== */
+:root {
+  --hoap-bg-from: #fdf2f8; /* pink-50 */
+  --hoap-bg-mid:  #faf5ff; /* purple-50 */
+  --hoap-bg-to:   #eff6ff; /* blue-50 */
 }
-
+html, body, #__next { height: 100%; }
+body {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  font-feature-settings: "palt";
+}
+.gradient-bg {
+  background: linear-gradient(135deg, var(--hoap-bg-from) 0%, var(--hoap-bg-mid) 50%, var(--hoap-bg-to) 100%);
+}
 .gradient-text {
   background: linear-gradient(135deg, #ec4899 0%, #8b5cf6 50%, #3b82f6 100%);
   -webkit-background-clip: text;
@@ -14,27 +24,20 @@
   background-clip: text;
 }
 
-.message-enter {
-  animation: slideIn 0.3s ease-out;
-}
-
+/* ===== アニメーション ===== */
+.message-enter { animation: slideIn .25s ease-out; }
 @keyframes slideIn {
-  from { opacity: 0; transform: translateY(10px); }
+  from { opacity: 0; transform: translateY(6px); }
   to   { opacity: 1; transform: translateY(0); }
 }
 
-/* 入力欄の見た目を安定させる（iOS対策） */
+/* ===== 入力UI安定化 ===== */
 textarea {
   outline: none;
   -webkit-tap-highlight-color: transparent;
+  resize: none;
 }
+button:disabled { opacity:.7; }
 
-/* スクロールの挙動を少し滑らかに */
-html, body {
-  scroll-behavior: smooth;
-}
-
-/* 影の微調整（見た目強化） */
-.shadow-soft {
-  box-shadow: 0 6px 20px rgba(0,0,0,0.06);
-}
+/* ===== 小パーツ ===== */
+.shadow-soft { box-shadow: 0 6px 20px rgba(0,0,0,.06); }
