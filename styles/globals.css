@@ -46,11 +46,11 @@ body{
   display:flex; align-items:center; justify-content:space-between;
   gap:16px; margin-bottom:14px;
 }
-.title{
-  font-size: clamp(26px, 3vw, 32px); /* ← 少し大きめ */
-  font-weight: 900; /* ← 太字を強調 */
-  letter-spacing:.02em;
-  background: linear-gradient(90deg,#ec4899,#a78bfa,#60a5fa); 
+.title {
+  font-size: clamp(26px, 3vw, 34px);
+  font-weight: 900;
+  letter-spacing: .02em;
+  background: linear-gradient(90deg, #ec4899, #8b5cf6, #3b82f6); /* ピンク→紫→青 */
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
