@@ -19,7 +19,7 @@ const QUAL_TAGS = [
   { tag: '栄養士', patterns: ['栄養士'] },
   { tag: '歯科衛生士', patterns: ['歯科衛生士', 'dh'] },
   { tag: '歯科技工士', patterns: ['歯科技工士'] },
-  { tag: '歯科助手', patterns: ['歯科助手'] }, // 運用タグ
+  { tag: '歯科助手', patterns: ['歯科助手'] },
   { tag: '介護支援専門員（ケアマネ）', patterns: ['ケアマネ', '介護支援専門員'] },
   { tag: '医療事務', patterns: ['医療事務'] },
   { tag: '福祉用具専門相談員', patterns: ['福祉用具専門相談員', '福祉用具'] },
@@ -47,20 +47,16 @@ const sessions = new Map()
 function getSession(sessionId) {
   if (!sessions.has(sessionId)) {
     sessions.set(sessionId, {
-      // 基本情報
       candidateNumber: '',
       qualification: '',
       qualificationTag: '',
       workplace: '',
-      // 以降の項目
       transferReason: '',
       mustConditions: [],
       wantConditions: [],
       canDo: '',
       willDo: '',
-      // Step0のサブ段階: needId | needQualification | needWorkplace | done
       step0Phase: 'needId',
-      // その他
       deepDrillCount: 0,
       currentCategory: null,
       awaitingSelection: false,
@@ -72,6 +68,7 @@ function getSession(sessionId) {
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ message: 'Method not allowed' })
+
   try {
     const {
       message = '',
@@ -85,9 +82,8 @@ export default async function handler(req, res) {
     const session = getSession(sessionId)
     const text = String(message || '').trim()
 
-    /** Step0：ID → 職種 → 現職（厳密な順番・1回ずつ） */
+    /** Step0：ID → 職種 → 現職 */
     if (currentStep === 0) {
-      // 初期整合
       if (!session.candidateNumber && isNumberConfirmed) {
         session.candidateNumber = candidateNumber
       }
@@ -95,7 +91,7 @@ export default async function handler(req, res) {
         session.step0Phase = 'needQualification'
       }
 
-      // 0-1) ID 確認
+      // 0-1) ID
       if (session.step0Phase === 'needId') {
         if (text && text.length >= 3) {
           session.candidateNumber = text
@@ -118,12 +114,11 @@ export default async function handler(req, res) {
         })
       }
 
-      // 0-2) 職種（所有資格タグに整合）
+      // 0-2) 職種
       if (session.step0Phase === 'needQualification') {
         if (!text) {
           return res.json({
-            response:
-              'まず【今の職種（所有資格）】を教えてね。\n（例）正看護師',
+            response: 'まず【今の職種（所有資格）】を教えてね。\n（例）正看護師',
             step: 0,
             candidateNumber: session.candidateNumber,
             isNumberConfirmed: true,
@@ -143,12 +138,11 @@ export default async function handler(req, res) {
         })
       }
 
-      // 0-3) 現職（1回だけ聞く）
+      // 0-3) 現職
       if (session.step0Phase === 'needWorkplace') {
         if (!text) {
           return res.json({
-            response:
-              '【今どこで働いてる？】を教えてね。\n（例）〇〇病院 外来／△△クリニック',
+            response: '【今どこで働いてる？】を教えてね。\n（例）〇〇病院 外来／△△クリニック',
             step: 0,
             candidateNumber: session.candidateNumber,
             isNumberConfirmed: true,
@@ -159,35 +153,28 @@ export default async function handler(req, res) {
         session.step0Phase = 'done'
         return res.json({
           response:
-            // ★ セリフを指定の完全文言に差し替え（端折り禁止）
             'はじめに、今回の転職理由を教えてほしいな。きっかけってどんなことだった？\nしんどいと思ったこと、これはもう無理って思ったこと、逆にこういうことに挑戦したい！って思ったこと、何でもOKだよ◎',
-          step: 1, // 次ステップへ
+          step: 1,
           candidateNumber: session.candidateNumber,
           isNumberConfirmed: true,
           sessionData: session,
         })
       }
-
-      // フェーズdoneで戻ってきたら転職理由へ誘導
-      return res.json({
-        response:
-          'はじめに、今回の転職理由を教えてほしいな。きっかけってどんなことだった？\nしんどいと思ったこと、これはもう無理って思ったこと、逆にこういうことに挑戦したい！って思ったこと、何でもOKだよ◎',
-        step: 1,
-        candidateNumber: session.candidateNumber,
-        isNumberConfirmed: true,
-        sessionData: session,
-      })
     }
 
-    /** Step1以降（暫定のまま） */
-    const systemPrompt = `あなたはHOAPのAIキャリアエージェント。順番制でヒアリングし、登録済みのタグにのみ整合する。
-- 「絶対NG」は使わない。Must/Want/Can/Willで整理。
-- タグ未一致は新規生成せず、原文を保持して「未一致」として扱う。
+    /** Step1以降 */
+    const systemPrompt = `あなたは「ほーぷちゃん」。医療・介護・歯科の一次ヒアリングを行うAIキャリアエージェント。
+- ユーザーとフレンドリーに会話しながら、順番制で必ず聞き切る。
+- 「絶対NG」は存在しない。Must/Want/Can/Willで整理。
+- タグ未一致は新規生成せず、原文を保持して「未一致」とする。
 - 現在のステップ: ${currentStep}
 - セッション: ${JSON.stringify(session)}`
+
     const msgs = [{ role: 'system', content: systemPrompt }]
     for (const m of conversationHistory) {
-      msgs.push(m.type === 'ai' ? { role: 'assistant', content: m.content } : { role: 'user', content: m.content })
+      msgs.push(m.type === 'ai'
+        ? { role: 'assistant', content: m.content }
+        : { role: 'user', content: m.content })
     }
     msgs.push({ role: 'user', content: message })
 
@@ -197,9 +184,9 @@ export default async function handler(req, res) {
       temperature: 0.3,
       max_tokens: 1000,
     })
+
     const response = completion.choices?.[0]?.message?.content ?? '…'
 
-    // 暫定のステップ制御
     let nextStep = currentStep
     if (response.includes('じゃあ次の質問！') && currentStep === 1) nextStep = 2
     else if (response.includes('それじゃあ次に、こうだったらいいな') && currentStep === 2) nextStep = 3
