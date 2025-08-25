@@ -92,8 +92,8 @@ body{
 }
 .avatar.user{
   background: linear-gradient(135deg, var(--user-grad-from), var(--user-grad-via) 50%, var(--user-grad-to));
-  /* 薄め指定：不透明度を軽く下げる */
-  opacity: 0.9;
+  /* 薄さ禁止：常に不透明 */
+  opacity: 1;
 }
 
 .bubble{
