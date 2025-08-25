@@ -1,63 +1,71 @@
-/* styles/globals.css */
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
-
-/* フォント＆色の基調 */
-:root{
-  --hoap-fg:#222222;
-  --hoap-sub:#606270;
-  --hoap-muted:#8f93a3;
-  --hoap-ring:#c084fc;      /* 紫 */
-  --hoap-grad-a:#f472b6;    /* ピンク */
-  --hoap-grad-b:#a78bfa;    /* 紫 */
-  --hoap-grad-c:#60a5fa;    /* 青 */
-  --surface:#ffffffcc;
+/* 全体ベース */
+body {
+  margin: 0;
+  font-family: 'Helvetica Neue', Arial, sans-serif;
+  background: linear-gradient(to bottom, #fdfbfb, #ebedee);
+  color: #333;
 }
 
-html,body,#__next{height:100%;}
-html{scroll-behavior:smooth;}
-body{
-  color:var(--hoap-fg);
-  background:
-    radial-gradient(1200px 600px at 10% -10%, #ffe4f5 0%, transparent 60%),
-    radial-gradient(1200px 600px at 90% -10%, #efe9ff 0%, transparent 60%),
-    linear-gradient(180deg, #faf7ff 0%, #f7fbff 100%);
-  font-family: "Inter","Noto Sans JP", system-ui, -apple-system, Segoe UI, Roboto, "Helvetica Neue", Arial, "Hiragino Kaku Gothic ProN","Hiragino Sans","Noto Sans CJK JP","メイリオ", Meiryo, "ＭＳ Ｐゴシック", sans-serif;
+/* チャットコンテナ */
+.chat-container {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  padding: 1rem;
+  max-width: 800px;
+  margin: 0 auto;
 }
 
-a{color:var(--hoap-grad-b);}
-
-.gradient-text{
-  background:linear-gradient(90deg,var(--hoap-grad-a),var(--hoap-grad-b),var(--hoap-grad-c));
-  -webkit-background-clip:text;
-  background-clip:text;
-  -webkit-text-fill-color:transparent;
+/* 共通の吹き出し */
+.message {
+  max-width: 70%;
+  padding: 12px 16px;
+  border-radius: 20px;
+  font-size: 15px;
+  line-height: 1.5;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.05);
+  word-break: break-word;
 }
 
-.card{
-  @apply rounded-2xl shadow-[0_6px_24px_rgba(20,20,40,.06)] border border-white/60 backdrop-blur bg-white/80;
+/* ユーザー吹き出し（右側・薄いグラデ） */
+.user-message {
+  align-self: flex-end;
+  background: linear-gradient(135deg, #fbd6f2, #cde4fb); /* 薄めパステル */
+  color: #333; /* 字は濃い */
 }
 
-.pill{
-  @apply text-sm px-3 py-1 rounded-full border bg-white/80 border-white/70 backdrop-blur;
+/* ほーぷちゃん吹き出し（左側・薄めブルー） */
+.bot-message {
+  align-self: flex-start;
+  background: linear-gradient(135deg, #e6f3ff, #f0f9ff); /* 薄い水色 */
+  color: #333;
 }
 
-.badge{
-  @apply text-xs px-2 py-0.5 rounded-full border bg-white/80 border-white/70;
+/* アイコン共通 */
+.message-row {
+  display: flex;
+  align-items: flex-end;
+  gap: 0.5rem;
 }
 
-.input{
-  @apply w-full rounded-2xl border border-white/70 bg-white/90 backdrop-blur px-4 py-3 outline-none;
+.user-icon, .bot-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  color: white;
 }
 
-.btn{
-  @apply rounded-2xl px-3 py-3 border border-white/70 bg-white/90 backdrop-blur hover:shadow hover:-translate-y-0.5 transition;
+/* ユーザーアイコン（グラデ薄め） */
+.user-icon {
+  background: linear-gradient(135deg, #fbd6f2, #cde4fb);
 }
 
-/* スクロールコンテナ */
-.chat-scroll{
-  scrollbar-width: thin;
+/* ほーぷちゃんアイコン（淡いブルー） */
+.bot-icon {
+  background: linear-gradient(135deg, #e6f3ff, #f0f9ff);
+  color: #4a6fa5;
 }
-.chat-scroll::-webkit-scrollbar{height:8px;width:8px}
-.chat-scroll::-webkit-scrollbar-thumb{background:#daddea;border-radius:9999px}
