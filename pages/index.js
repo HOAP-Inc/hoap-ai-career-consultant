@@ -40,18 +40,26 @@ IDが確認できたら、そのあとで
   const listRef = useRef(null)
   const inputRef = useRef(null)
 
-  useEffect(() => {
-    listRef.current?.lastElementChild?.scrollIntoView({ behavior: 'smooth' })
-  }, [messages])
+  // ---- 常に最下部へスクロール（ウィンドウ＆リスト両方） ----
+  const scrollToBottom = () => {
+    try {
+      listRef.current?.lastElementChild?.scrollIntoView({ behavior: 'smooth', block: 'end' })
+      // 次のフレームでブラウザ全体もスクロール
+      setTimeout(() => {
+        window.scrollTo({ top: document.documentElement.scrollHeight, behavior: 'smooth' })
+      }, 0)
+    } catch {}
+  }
+  useEffect(() => { scrollToBottom() }, [messages])
 
   const onSend = async () => {
     if (!input.trim() || loading || isComposing) return
     const outgoing = input.trim()
 
-    // 先にUIを更新
+    // 先にUI更新
     setMessages((m) => [...m, { type: 'user', content: outgoing }])
     setInput('')
-    if (inputRef.current) inputRef.current.value = '' // ← 強制クリア
+    if (inputRef.current) inputRef.current.value = '' // テキストエリア強制クリア
     setLoading(true)
 
     try {
@@ -94,9 +102,9 @@ IDが確認できたら、そのあとで
       ])
     } finally {
       setLoading(false)
-      // 念押しクリア
       setInput('')
       if (inputRef.current) inputRef.current.value = ''
+      scrollToBottom()
     }
   }
 
@@ -130,6 +138,17 @@ IDが確認できたら、そのあとで
         <meta name="viewport" content="width=device-width, initial-scale=1" />
       </Head>
 
+      <style jsx global>{`
+        .gradient-bg { background: linear-gradient(135deg, #fdf2f8 0%, #faf5ff 50%, #eff6ff 100%); }
+        .gradient-text { background: linear-gradient(135deg, #6366f1 0%, #a855f7 50%, #ec4899 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
+        .card { background: rgba(255,255,255,.9); border: 1px solid rgba(236,72,153,.15); backdrop-filter: blur(8px); }
+        .pill { display:inline-flex; align-items:center; gap:.25rem; padding:.25rem .5rem; border-radius:9999px; background:#fff; border:1px solid rgba(236,72,153,.2); box-shadow:0 1px 2px rgba(0,0,0,.04)}
+        .badge-dot { width:.4rem; height:.4rem; border-radius:9999px; background:#a78bfa }
+        .message-enter { animation: slideIn .25s ease-out; }
+        @keyframes slideIn { from{opacity:0; transform:translateY(6px)} to{opacity:1; transform:translateY(0)} }
+        html, body { height: auto; overflow-y: auto; }
+      `}</style>
+
       <header className="bg-white/80 backdrop-blur-md border-b border-pink-100 sticky top-0 z-10">
         <div className="max-w-5xl mx-auto px-4 sm:px-6 py-4">
           <div className="flex items-start sm:items-center justify-between gap-3">
@@ -161,7 +180,8 @@ IDが確認できたら、そのあとで
         </div>
       </header>
 
-      <main className="max-w-4xl mx-auto px-4 sm:px-6 py-6 sm:py-10 pb-40">
+      {/* フッターと被らないように pb-56 で余白を確保 */}
+      <main className="max-w-4xl mx-auto px-4 sm:px-6 py-6 sm:py-10 pb-56">
         <div ref={listRef} className="space-y-5 sm:space-y-6">
           {messages.map((m, i) => (
             <div key={i} className={`flex ${m.type === 'user' ? 'justify-end' : 'justify-start'} message-enter`}>
