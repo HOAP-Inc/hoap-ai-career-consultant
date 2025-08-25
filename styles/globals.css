@@ -2,7 +2,7 @@
 @tailwind components;
 @tailwind utilities;
 
-/* ===== HOAP 共通 ===== */
+/* ==== HOAP 共通 ==== */
 :root{
   --hoap-bg-from:#fdf2f8; /* pink-50 */
   --hoap-bg-mid:#faf5ff;  /* purple-50 */
@@ -13,14 +13,11 @@ body{
   -webkit-font-smoothing:antialiased;
   -moz-osx-font-smoothing:grayscale;
   font-feature-settings:"palt";
+  letter-spacing: .01em;
 }
-
-/* 背景グラデ */
 .gradient-bg{
   background:linear-gradient(135deg,var(--hoap-bg-from) 0%,var(--hoap-bg-mid) 50%,var(--hoap-bg-to) 100%);
 }
-
-/* 文字グラデ */
 .gradient-text{
   background:linear-gradient(135deg,#ec4899 0%,#8b5cf6 50%,#3b82f6 100%);
   -webkit-background-clip:text;
@@ -28,9 +25,13 @@ body{
   background-clip:text;
 }
 
-/* ふわっと表示 */
+/* アニメーション */
 .message-enter{animation:slideIn .25s ease-out;}
-@keyframes slideIn{
-  from{opacity:0;transform:translateY(6px);}
-  to{opacity:1;transform:translateY(0);}
-}
+@keyframes slideIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
+
+/* コンポーネント系 */
+.shadow-soft{box-shadow:0 6px 20px rgba(0,0,0,.06)}
+.card{background:rgba(255,255,255,.9);backdrop-filter:saturate(1.2) blur(6px)}
+.badge{display:inline-flex;align-items:center;gap:.25rem;border-radius:.5rem;padding:.125rem .5rem;border:1px solid rgba(203,213,225,.6);font-size:.75rem;line-height:1rem}
+.badge .label{color:#64748b}
+.badge .value{color:#0f172a}
