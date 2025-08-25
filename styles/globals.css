@@ -47,13 +47,13 @@ body{
   gap:16px; margin-bottom:14px;
 }
 .title{
-  font-size: clamp(22px, 3vw, 28px);
-  font-weight: 800;
+  font-size: clamp(26px, 3vw, 32px); /* ← 少し大きめ */
+  font-weight: 900; /* ← 太字を強調 */
   letter-spacing:.02em;
-  background: linear-gradient(90deg,#a78bfa,#60a5fa);
-  -webkit-background-clip:text;
-  background-clip:text;
-  color:transparent;
+  background: linear-gradient(90deg,#ec4899,#a78bfa,#60a5fa); 
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
 }
 .step{
   font-size:12px; color:#6b7280;
