@@ -102,19 +102,16 @@ export default function Home() {
         <span className="badge">Can：{status.can}</span>
         <span className="badge">Will：{status.will}</span>
       </div>
-  {/* ステータスバー（進捗） */}
+ {/* ステータスバー（進捗） */}
 <div className="progress">
-  <div
-    className="progress-inner"
-    style={{ width: `${((step) / 6) * 100}%` }}
-  ></div>
+  <div className="progress-inner" style={{ width: `${(step / 6) * 100}%` }} />
 </div>
 
       {/* チャット */}
       <main className="chat list" ref={listRef}>
         {messages.map((m, i) => (
           <div key={i} className={`msg ${m.type}`}>
-            <div className={`avatar ${m.type}`}>
+          　  <div className={`avatar ${m.type}`}>
               {m.type === "ai" ? "🤖" : "👤"}
             </div>
             <div className="bubble">{m.content}</div>
