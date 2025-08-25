@@ -1,19 +1,31 @@
-import { useEffect, useRef, useState } from 'react'
-import Head from 'next/head'
+import { useEffect, useRef, useState } from 'react';
+import Head from 'next/head';
+import '../styles/globals.css';
 
-const steps = [
-  { label: '基本情報' },
-  { label: '転職理由' },
-  { label: '絶対希望（Must）' },
-  { label: 'あったらいいな（Want）' },
-  { label: 'これまで（Can）' },
-  { label: 'これから（Will）' },
-]
+const HeaderBadges = ({ state }) => (
+  <div className="flex flex-wrap items-center gap-3 text-sm">
+    <span className="badge">番号：{state.candidateNumber ? '設定済' : '未入力'}</span>
+    <span className="badge">職種：{state.qualificationText ? '設定済' : '未入力'}</span>
+    <span className="badge">勤務先：{state.workplaceText ? '入力' : '未入力'}</span>
+    <span className="badge">転職理由：{state.step >= 1 ? '入力中' : '未入力'}</span>
+    <span className="badge">Must：0件</span>
+    <span className="badge">Want：0件</span>
+    <span className="badge">Can：{state.step >= 4 ? '入力中' : '未入力'}</span>
+    <span className="badge">Will：{state.step >= 5 ? '入力中' : '未入力'}</span>
+    <style jsx>{`
+      .badge {
+        padding: 4px 10px;
+        background: #fff;
+        border: 1px solid #e5e7eb;
+        border-radius: 9999px;
+      }
+    `}</style>
+  </div>
+);
 
 export default function Home() {
-  const [messages, setMessages] = useState([{
-    type: 'ai',
-    content:
+  const [messages, setMessages] = useState([
+    { type: 'ai', content:
 `こんにちは！
 担当エージェントとの面談がスムーズに進むように、**ほーぷちゃん**に少しだけ話を聞かせてね。
 
@@ -21,244 +33,111 @@ export default function Home() {
 IDが確認できたら、そのあとで
 ・今の職種（所有資格）
 ・今どこで働いてる？
-も続けて聞いていくよ。気楽にどうぞ！`,
-  }])
-
-  const [currentStep, setCurrentStep] = useState(0)
-  const [candidateNumber, setCandidateNumber] = useState('')
-  const [isNumberConfirmed, setIsNumberConfirmed] = useState(false)
-  const [sessionId] = useState(() => Math.random().toString(36).slice(2))
-  const [input, setInput] = useState('')
-  const [loading, setLoading] = useState(false)
-  const [isComposing, setIsComposing] = useState(false)
-
-  // サーバから返るデータ（タグ確定時は *Tag を返す想定）
-  const [sessionData, setSessionData] = useState({
-    candidateNumber: '',
-    qualification: '',
-    qualificationTag: '',       // 職種タグ名
-    workplace: '',
-    transferReason: '',
-    transferReasonTag: '',      // 転職理由タグ（カテゴリ名）
-    mustConditions: [],         // タグ名配列
-    wantConditions: [],         // タグ名配列
-    canDo: '',
-    willDo: '',
-  })
-
-  const scrollAreaRef = useRef(null)
-  const bottomRef = useRef(null)
-  const inputRef = useRef(null)
-
-  const val = (v) => (typeof v === 'string' ? v.trim() : '')
-  const arr = (a) => Array.isArray(a) ? a : []
-
-  // 表示文字列（「設定済」は使わない）
-  const statusText = {
-    id: (isNumberConfirmed && val(candidateNumber || sessionData.candidateNumber))
-      ? (candidateNumber || sessionData.candidateNumber)
-      : '未入力',
-    qualification: val(sessionData.qualificationTag) || val(sessionData.qualification) || '未入力',
-    workplace: val(sessionData.workplace) || '未入力',
-    reason: (() => {
-      if (val(sessionData.transferReasonTag)) return sessionData.transferReasonTag
-      if (val(sessionData.transferReason)) return '済'   // 入力はあるがタグ未マッチ
-      return '未入力'
-    })(),
-    mustCount: arr(sessionData.mustConditions).length,
-    wantCount: arr(sessionData.wantConditions).length,
-    can: val(sessionData.canDo) ? '済' : '未入力',
-    will: val(sessionData.willDo) ? '済' : '未入力',
-  }
-
-  const scrollToBottom = () => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' })
-    if (scrollAreaRef.current) {
-      scrollAreaRef.current.scrollTo({
-        top: scrollAreaRef.current.scrollHeight,
-        behavior: 'smooth',
-      })
+も続けて聞いていくよ。気楽にどうぞ！`
     }
-  }
-  useEffect(() => { scrollToBottom() }, [messages, loading])
+  ]);
+  const [state, setState] = useState({
+    step: 0,
+    candidateNumber: '',
+    qualificationText: '',
+    workplaceText: ''
+  });
+  const [input, setInput] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [sessionId] = useState(() => Math.random().toString(36).slice(2));
 
-  const onSend = async () => {
-    if (!input.trim() || loading || isComposing) return
-    const outgoing = input.trim()
-    setMessages(m => [...m, { type: 'user', content: outgoing }])
-    setInput('')
-    if (inputRef.current) inputRef.current.value = ''
-    setLoading(true)
+  const listRef = useRef(null);
+  useEffect(() => {
+    listRef.current?.lastElementChild?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages]);
+
+  const send = async () => {
+    const text = input.trim();
+    if (!text || loading) return;
+
+    setMessages(m => [...m, { type: 'user', content: text }]);
+    setInput('');
+    setLoading(true);
 
     try {
-      const res = await fetch('/api/chat', {
+      const r = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          message: outgoing,
-          conversationHistory: messages,
-          currentStep,
-          candidateNumber,
-          isNumberConfirmed,
-          sessionId,
-        }),
-      })
-      if (!res.ok) throw new Error('API error')
-      const data = await res.json()
+        body: JSON.stringify({ message: text, sessionId }),
+      });
+      const data = await r.json();
 
-      setMessages(m => [...m, { type: 'ai', content: data.response }])
+      setMessages(m => [...m, { type: 'ai', content: data.response }]);
 
-      if (typeof data.step === 'number') setCurrentStep(data.step)
-      if (typeof data.candidateNumber === 'string') setCandidateNumber(data.candidateNumber)
-      if (typeof data.isNumberConfirmed === 'boolean') setIsNumberConfirmed(data.isNumberConfirmed)
-
-      if (data.sessionData) {
-        setSessionData(prev => ({
-          ...prev,
-          ...data.sessionData,
-          mustConditions: arr(data.sessionData.mustConditions),
-          wantConditions: arr(data.sessionData.wantConditions),
-        }))
-      }
-    } catch {
-      setMessages(m => [...m, { type: 'ai', content: 'すみません、エラーが発生しました。もう一度お試しください。' }])
+      setState(s => ({
+        ...s,
+        step: typeof data.step === 'number' ? data.step : s.step,
+        candidateNumber: data.candidateNumber ?? s.candidateNumber,
+        qualificationText: data.sessionData?.qualificationText ?? s.qualificationText,
+        workplaceText: data.sessionData?.workplaceText ?? s.workplaceText
+      }));
+    } catch (e) {
+      setMessages(m => [...m, { type: 'ai', content: 'ごめん、通信でエラー。もう一度送って！' }]);
     } finally {
-      setLoading(false)
-      setInput('')
-      if (inputRef.current) inputRef.current.value = ''
-      scrollToBottom()
+      setLoading(false);
     }
-  }
-
-  const progress = Math.min(((currentStep + 1) / 6) * 100, 100)
+  };
 
   return (
-    <div className="root">
-      <Head>
-        <title>ほーぷちゃん</title>
-        <meta name="viewport" content="width=device-width, initial-scale=1" />
-      </Head>
+    <div className="min-h-screen bg-gradient-to-b from-purple-50 to-pink-50">
+      <Head><title>ほーぷちゃん｜一次ヒアリング</title></Head>
 
-      <header className="header">
-        <div className="header-row">
-          <div className="title">
-            <div className="title-main">ほーぷちゃん</div>
-            <div className="title-sub">一次ヒアリング（番号必須・タグ厳密整合）</div>
+      <header className="sticky top-0 z-10 bg-white/80 backdrop-blur border-b">
+        <div className="max-w-5xl mx-auto px-5 py-3 flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-semibold text-purple-700">ほーぷちゃん</h1>
+            <p className="text-xs text-slate-500">一次ヒアリング（番号必須・タグ厳密整合）</p>
           </div>
-          <div className="step">
-            <div className="step-line">Step <b>{currentStep + 1}</b>/6</div>
-            <div className="step-label">{steps[currentStep]?.label}</div>
-            {!isNumberConfirmed && currentStep === 0 &&
-              <div className="step-note">※求職者ID必須（メールに届いているID）</div>}
+          <div className="text-right text-sm">
+            <div>Step {Math.min(state.step + 1, 6)}/6</div>
+            <div className="text-pink-500 text-xs">※求職者ID必須（メールに届いているID）</div>
           </div>
         </div>
-
-        <div className="status">
-          <div className="chip"><span className="dot"/>番号：{statusText.id}</div>
-          <div className="chip"><span className="dot"/>職種：{statusText.qualification}</div>
-          <div className="chip"><span className="dot"/>勤務先：{statusText.workplace}</div>
-          <div className="chip"><span className="dot"/>転職理由：{statusText.reason}</div>
-          <div className="chip"><span className="dot"/>Must：{statusText.mustCount}件</div>
-          <div className="chip"><span className="dot"/>Want：{statusText.wantCount}件</div>
-          <div className="chip"><span className="dot"/>Can：{statusText.can}</div>
-          <div className="chip"><span className="dot"/>Will：{statusText.will}</div>
+        <div className="max-w-5xl mx-auto px-5 pb-3">
+          <HeaderBadges state={state} />
         </div>
-
-        <div className="progress"><div className="bar" style={{ width: `${progress}%` }}/></div>
       </header>
 
-      <main ref={scrollAreaRef} className="scroll">
-        <div className="msg-wrap">
+      <main className="max-w-5xl mx-auto px-5 py-6">
+        <div ref={listRef} className="space-y-4">
           {messages.map((m, i) => (
-            <div key={i} className={`row ${m.type === 'user' ? 'right' : 'left'}`}>
-              {m.type !== 'user' ? (
-                <div className="avatar ai">🤖</div>
-              ) : (
-                <div className="avatar user">
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>
-                  </svg>
-                </div>
-              )}
-              <div className={`bubble ${m.type}`}>
-                <div className="text">{m.content}</div>
+            <div key={i} className={`flex ${m.type === 'user' ? 'justify-end' : 'justify-start'}`}>
+              <div className={`max-w-3xl rounded-2xl px-4 py-3 shadow ${m.type === 'user' ? 'bg-gradient-to-r from-fuchsia-500 to-indigo-500 text-white' : 'bg-white'}`}>
+                <div className="whitespace-pre-wrap text-[15px] leading-7">{m.content}</div>
               </div>
             </div>
           ))}
           {loading && (
-            <div className="row left">
-              <div className="avatar ai">🤖</div>
-              <div className="bubble ai"><div className="text">●●● 回答を準備中…</div></div>
+            <div className="flex justify-start">
+              <div className="max-w-3xl rounded-2xl px-4 py-3 shadow bg-white text-slate-500">・・・回答を作成中</div>
             </div>
           )}
-          <div ref={bottomRef} />
         </div>
       </main>
 
-      <footer className="footer">
-        <div className="input-row">
-          <textarea
-            ref={inputRef}
+      <footer className="sticky bottom-0 bg-white/80 backdrop-blur border-t">
+        <div className="max-w-5xl mx-auto px-5 py-4 flex gap-3">
+          <input
+            className="flex-1 rounded-xl border px-4 py-3 outline-none"
+            placeholder="メッセージを入力してください…"
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            onCompositionStart={() => setIsComposing(true)}
-            onCompositionEnd={() => setIsComposing(false)}
-            placeholder={!isNumberConfirmed && currentStep === 0
-              ? '求職者IDを入力してください（メールに届いているID） ...'
-              : 'メッセージを入力...'}
-            className="textbox"
-            rows={1}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' && !e.shiftKey && !isComposing) { e.preventDefault(); onSend() }
-            }}
+            onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); } }}
           />
-          <button className="send" onClick={onSend} disabled={loading} aria-label="送信">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <line x1="22" y1="2" x2="11" y2="13"></line>
-              <polygon points="22,2 15,22 11,13 2,9"></polygon>
-            </svg>
+          <button
+            onClick={send}
+            disabled={loading}
+            className="px-4 py-3 rounded-xl bg-gradient-to-r from-fuchsia-500 to-indigo-500 text-white disabled:opacity-50"
+          >
+            送信
           </button>
         </div>
       </footer>
-
-      <style jsx>{`
-        .root { height: 100vh; display: flex; flex-direction: column; }
-        .header { position: sticky; top: 0; z-index: 10; background: rgba(255,255,255,.86); border-bottom: 1px solid rgba(236,72,153,.15); backdrop-filter: blur(8px); }
-        .header-row { max-width: 1100px; margin: 0 auto; padding: 12px 16px 6px; display: flex; justify-content: space-between; gap: 12px; }
-        .title-main { font-weight: 800; font-size: 24px; background: linear-gradient(135deg,#6366f1 0%,#a855f7 50%,#ec4899 100%); -webkit-background-clip: text; color: transparent; }
-        .title-sub { font-size: 12px; color: #475569; margin-top: 2px; }
-        .step { text-align: right; }
-        .step-line { font-size: 12px; color: #64748b; }
-        .step-label { font-size: 12px; font-weight: 700; background: linear-gradient(135deg,#6366f1 0%,#a855f7 50%,#ec4899 100%); -webkit-background-clip: text; color: transparent; }
-        .step-note { color: #ec4899; font-size: 11px; margin-top: 2px; }
-        .status { max-width: 1100px; margin: 0 auto; padding: 0 16px 10px; display: flex; flex-wrap: wrap; gap: 8px; }
-        .chip { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 999px; background: #fff; border: 1px solid rgba(236,72,153,.2); box-shadow: 0 1px 2px rgba(0,0,0,.04); font-size: 12px; color: #0f172a; }
-        .dot { width: 6px; height: 6px; border-radius: 999px; background: #a78bfa; }
-        .progress { max-width: 1100px; margin: 0 auto 6px; height: 6px; background: linear-gradient(90deg,#ffe4e6,#e0e7ff); border-radius: 999px; overflow: hidden; }
-        .bar { height: 100%; background: linear-gradient(90deg,#ec4899,#a855f7,#3b82f6); }
-        .scroll { flex: 1 1 auto; height: calc(100vh - 210px); overflow-y: auto; }
-        .msg-wrap { max-width: 920px; margin: 14px auto; padding: 0 16px 12px; display: flex; flex-direction: column; gap: 14px; }
-        .row { display: grid; grid-template-columns: 40px 1fr; align-items: start; gap: 10px; }
-        .row.right { grid-template-columns: 1fr 40px; }
-        .row.right .avatar { order: 2; }
-        .row.right .bubble { order: 1; justify-self: end; }
-        .avatar { width: 36px; height: 36px; border-radius: 999px; display: flex; align-items: center; justify-content: center; }
-        .avatar.ai { background: linear-gradient(135deg,#f1f5f9,#e2e8f0); border: 1px solid #fff; }
-        .avatar.user { background: linear-gradient(135deg,#ec4899,#a855f7,#3b82f6); color: #fff; box-shadow: 0 3px 10px rgba(0,0,0,.12); }
-        .bubble { max-width: 92%; border-radius: 16px; padding: 12px 14px; box-shadow: 0 2px 8px rgba(0,0,0,.04); border: 1px solid rgba(236,72,153,.15); background: #fff; }
-        .bubble.user { background: linear-gradient(135deg,#ffffff,#f8fafc); border: 1px solid rgba(59,130,246,.20); }
-        .text { white-space: pre-wrap; line-height: 1.7; font-size: 14px; color: #0f172a; }
-        .footer { position: sticky; bottom: 0; background: rgba(255,255,255,.92); border-top: 1px solid rgba(236,72,153,.15); backdrop-filter: blur(8px); }
-        .input-row { max-width: 920px; margin: 0 auto; padding: 10px 16px; display: flex; align-items: flex-end; gap: 10px; }
-        .textbox { flex: 1 1 auto; resize: none; border: 1px solid #fecdd3; border-radius: 14px; padding: 12px 14px; font-size: 14px; outline: none; color: #0f172a; }
-        .textbox:focus { border-color: #a78bfa; box-shadow: 0 0 0 2px #ddd6fe; }
-        .send { border: 0; border-radius: 14px; padding: 10px 12px; background: linear-gradient(135deg,#ec4899,#a855f7,#3b82f6); color: #fff; box-shadow: 0 4px 10px rgba(0,0,0,.08); cursor: pointer; }
-        .send:disabled { opacity: .6; cursor: not-allowed; }
-        @media (max-width: 640px) {
-          .scroll { height: calc(100vh - 240px); }
-          .bubble { max-width: 100%; }
-        }
-      `}</style>
     </div>
-  )
+  );
 }
