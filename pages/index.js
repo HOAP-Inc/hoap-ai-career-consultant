@@ -47,9 +47,29 @@ IDが確認できたら、そのあとで
   const bottomRef = useRef(null)
   const inputRef = useRef(null)
 
+  const valStr = (v) => (typeof v === 'string' ? v.trim() : '')
+  const isSet = (v) => valStr(v).length > 0
+
+  // ステータス判定を厳密化
+  const status = {
+    id: isNumberConfirmed && isSet(candidateNumber || sessionData.candidateNumber),
+    qualification: isSet(sessionData.qualification),
+    workplace: isSet(sessionData.workplace),
+    reason: isSet(sessionData.transferReason),
+    mustCount: Array.isArray(sessionData.mustConditions) ? sessionData.mustConditions.length : 0,
+    wantCount: Array.isArray(sessionData.wantConditions) ? sessionData.wantConditions.length : 0,
+    can: isSet(sessionData.canDo),
+    will: isSet(sessionData.willDo),
+  }
+
   const scrollToBottom = () => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' })
-    scrollAreaRef.current?.scrollTo({ top: scrollAreaRef.current.scrollHeight, behavior: 'smooth' })
+    if (scrollAreaRef.current) {
+      scrollAreaRef.current.scrollTo({
+        top: scrollAreaRef.current.scrollHeight,
+        behavior: 'smooth',
+      })
+    }
   }
   useEffect(() => { scrollToBottom() }, [messages, loading])
 
@@ -58,7 +78,7 @@ IDが確認できたら、そのあとで
     const outgoing = input.trim()
     setMessages(m => [...m, { type: 'user', content: outgoing }])
     setInput('')
-    inputRef.current && (inputRef.current.value = '')
+    if (inputRef.current) inputRef.current.value = ''
     setLoading(true)
 
     try {
@@ -78,6 +98,7 @@ IDが確認できたら、そのあとで
       const data = await res.json()
 
       setMessages(m => [...m, { type: 'ai', content: data.response }])
+
       if (typeof data.step === 'number') setCurrentStep(data.step)
       if (typeof data.candidateNumber === 'string') setCandidateNumber(data.candidateNumber)
       if (typeof data.isNumberConfirmed === 'boolean') setIsNumberConfirmed(data.isNumberConfirmed)
@@ -99,13 +120,12 @@ IDが確認できたら、そのあとで
     } finally {
       setLoading(false)
       setInput('')
-      inputRef.current && (inputRef.current.value = '')
+      if (inputRef.current) inputRef.current.value = ''
       scrollToBottom()
     }
   }
 
-  const valStr = v => (typeof v === 'string' ? v.trim() : '')
-  const badgeText = v => (valStr(v) ? '設定済' : '未入力')
+  const badge = (flag) => (flag ? '設定済' : '未入力')
   const progress = Math.min(((currentStep + 1) / 6) * 100, 100)
 
   return (
@@ -130,12 +150,14 @@ IDが確認できたら、そのあとで
         </div>
 
         <div className="status">
-          <div className="chip"><span className="dot"/>番号：{badgeText(sessionData.candidateNumber || candidateNumber)}</div>
-          <div className="chip"><span className="dot"/>職種：{badgeText(sessionData.qualification)}</div>
-          <div className="chip"><span className="dot"/>勤務先：{badgeText(sessionData.workplace)}</div>
-          <div className="chip"><span className="dot"/>転職理由：{badgeText(sessionData.transferReason)}</div>
-          <div className="chip"><span className="dot"/>Must：{Array.isArray(sessionData.mustConditions) ? sessionData.mustConditions.length : 0}件</div>
-          <div className="chip"><span className="dot"/>Want：{Array.isArray(sessionData.wantConditions) ? sessionData.wantConditions.length : 0}件</div>
+          <div className="chip"><span className="dot"/>番号：{badge(status.id)}</div>
+          <div className="chip"><span className="dot"/>職種：{badge(status.qualification)}</div>
+          <div className="chip"><span className="dot"/>勤務先：{badge(status.workplace)}</div>
+          <div className="chip"><span className="dot"/>転職理由：{badge(status.reason)}</div>
+          <div className="chip"><span className="dot"/>Must：{status.mustCount}件</div>
+          <div className="chip"><span className="dot"/>Want：{status.wantCount}件</div>
+          <div className="chip"><span className="dot"/>Can：{badge(status.can)}</div>
+          <div className="chip"><span className="dot"/>Will：{badge(status.will)}</div>
         </div>
 
         <div className="progress"><div className="bar" style={{ width: `${progress}%` }}/></div>
@@ -229,7 +251,7 @@ IDが確認できたら、そのあとで
         .send { border: 0; border-radius: 14px; padding: 10px 12px; background: linear-gradient(135deg,#ec4899,#a855f7,#3b82f6); color: #fff; box-shadow: 0 4px 10px rgba(0,0,0,.08); cursor: pointer; }
         .send:disabled { opacity: .6; cursor: not-allowed; }
         @media (max-width: 640px) {
-          .scroll { height: calc(100vh - 220px); }
+          .scroll { height: calc(100vh - 240px); }
           .bubble { max-width: 100%; }
         }
       `}</style>
