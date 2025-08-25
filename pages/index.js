@@ -115,15 +115,24 @@ export default function Home() {
 
       {/* チャット */}
       <main className="chat list" ref={listRef}>
-        {messages.map((m, i) => (
-          <div key={i} className={`msg ${m.type}`}>
-          　  <div className={`avatar ${m.type}`}>
-              {m.type === "ai" ? "🤖" : "👤"}
-            </div>
-            <div className="bubble">{m.content}</div>
-          </div>
-        ))}
-      </main>
+  {messages.map((m, i) => (
+    <div key={i} className={`msg ${m.type}`}>
+      {m.type === "ai" ? (
+        // AI は左（アイコン → 吹き出し）
+        <>
+          <div className="avatar ai">🤖</div>
+          <div className="bubble">{m.content}</div>
+        </>
+      ) : (
+        // ユーザーは右（吹き出し → アイコン）
+        <>
+          <div className="bubble">{m.content}</div>
+          <div className="avatar user">👤</div>
+        </>
+      )}
+    </div>
+  ))}
+</main>
 
       {/* 入力 */}
       <footer className="input-bar">
