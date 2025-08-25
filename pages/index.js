@@ -86,10 +86,10 @@ export default function Home() {
   return (
     <div className="container">
       {/* ヘッダ */}
-      <header className="header">
-        <div className="title">ほーぷちゃん</div>
-        <div className="step">Step {step + 1}/6　基本情報</div>
-      </header>
+     <header className="header">
+  <div className="title">AIキャリアエージェント：ほーぷちゃん</div>
+  <div className="step">Step {step + 1}/6　基本情報</div>
+</header>
 
       {/* ステータス */}
       <div className="status-row">
