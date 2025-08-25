@@ -1,15 +1,7 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
-
-:root{ --bg-from:#fdf2f8; --bg-mid:#faf5ff; --bg-to:#eff6ff; }
-html,body,#__next{height:100%;}
-body{-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;letter-spacing:.01em;font-feature-settings:"palt";}
-.gradient-bg{background:linear-gradient(135deg,var(--bg-from) 0%,var(--bg-mid) 50%,var(--bg-to) 100%);}
-.gradient-text{background:linear-gradient(135deg,#ec4899 0%,#8b5cf6 50%,#3b82f6 100%);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;}
-.card{background:rgba(255,255,255,.92);backdrop-filter:saturate(1.1) blur(6px);border:1px solid rgba(236,72,153,.15);border-radius:1rem;box-shadow:0 10px 30px rgba(0,0,0,.06);}
-.pill{display:inline-flex;align-items:center;gap:.5rem;border-radius:9999px;padding:.4rem .75rem;background:#fff;border:1px solid rgba(203,213,225,.6);font-size:.8rem;line-height:1rem;color:#0f172a;}
-.pill .label{color:#64748b;}
-.badge-dot{width:.5rem;height:.5rem;border-radius:9999px;background:linear-gradient(135deg,#ec4899,#8b5cf6,#3b82f6);}
-.message-enter{animation:slideIn .25s ease-out;}
-@keyframes slideIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
+html, body, #__next { height: 100%; margin: 0; padding: 0; }
+* { box-sizing: border-box; }
+body {
+  background: linear-gradient(135deg,#fdf2f8 0%,#faf5ff 50%,#eff6ff 100%);
+  color: #0f172a;
+  font-family: -apple-system, BlinkMacSystemFont, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji","Segoe UI Emoji";
+}
