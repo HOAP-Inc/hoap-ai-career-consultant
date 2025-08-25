@@ -1,142 +1,197 @@
 // pages/api/chat.js
 import OpenAI from 'openai'
 
-// OpenAIはStep2以降のみ使用。キー未設定でもUIは動く設計
-const openai = process.env.OPENAI_API_KEY ? new OpenAI({ apiKey: process.env.OPENAI_API_KEY }) : null
+const openai = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY,
+})
 
-// セッション（簡易・同一プロセス内）
+/** -------------------------
+ *  所有資格タグ辞書（正規化パターン）
+ *  入力（職種）→ qualificationTag を決定
+ * ------------------------- */
+const QUAL_TAGS = [
+  { tag: '看護師', patterns: ['看護師', '正看', '正看護師', 'rn'] },
+  { tag: '准看護師', patterns: ['准看', '准看護師'] },
+  { tag: '保健師', patterns: ['保健師'] },
+  { tag: '助産師', patterns: ['助産師'] },
+  { tag: '介護福祉士', patterns: ['介護福祉士', '介福'] },
+  { tag: '介護職（初任者研修）', patterns: ['初任者', '初任者研修', 'ヘルパー2級', 'ﾍﾙﾊﾟｰ2級'] },
+  { tag: '介護職（実務者研修）', patterns: ['実務者', '実務者研修', 'ヘルパー1級', 'ﾍﾙﾊﾟｰ1級'] },
+  { tag: '理学療法士', patterns: ['理学療法士', 'pt'] },
+  { tag: '作業療法士', patterns: ['作業療法士', 'ot'] },
+  { tag: '言語聴覚士', patterns: ['言語聴覚士', 'st'] },
+  { tag: '管理栄養士', patterns: ['管理栄養士'] },
+  { tag: '栄養士', patterns: ['栄養士'] },
+  { tag: '歯科衛生士', patterns: ['歯科衛生士', 'dh'] },
+  { tag: '歯科技工士', patterns: ['歯科技工士'] },
+  { tag: '歯科助手', patterns: ['歯科助手'] }, // 資格ではないが運用タグとして保持
+  { tag: '介護支援専門員（ケアマネ）', patterns: ['ケアマネ', '介護支援専門員'] },
+  { tag: '医療事務', patterns: ['医療事務'] },
+  { tag: '福祉用具専門相談員', patterns: ['福祉用具専門相談員', '福祉用具'] },
+  { tag: '保育士', patterns: ['保育士'] },
+]
+
+const norm = (s = '') =>
+  String(s)
+    .toLowerCase()
+    .replace(/\s+/g, '')
+    .replace(/[Ａ-Ｚａ-ｚ０-９]/g, (ch) =>
+      String.fromCharCode(ch.charCodeAt(0) - 0xfee0)
+    )
+
+function matchQualificationTag(input) {
+  const n = norm(input)
+  if (!n) return ''
+  for (const { tag, patterns } of QUAL_TAGS) {
+    for (const p of patterns) {
+      if (n.includes(norm(p))) return tag
+    }
+  }
+  return ''
+}
+
+/** -------------------------
+ *  セッション（簡易）
+ * ------------------------- */
 const sessions = new Map()
-const getSession = (id) => {
-  if (!sessions.has(id)) {
-    sessions.set(id, {
+function getSession(sessionId) {
+  if (!sessions.has(sessionId)) {
+    sessions.set(sessionId, {
       candidateNumber: '',
       qualification: '',
+      qualificationTag: '',
       workplace: '',
       transferReason: '',
       mustConditions: [],
       wantConditions: [],
       canDo: '',
-      willDo: ''
+      willDo: '',
+      deepDrillCount: 0,
+      currentCategory: null,
+      awaitingSelection: false,
+      selectionOptions: [],
     })
   }
-  return sessions.get(id)
+  return sessions.get(sessionId)
 }
 
+/** -------------------------
+ *  ハンドラ
+ * ------------------------- */
 export default async function handler(req, res) {
-  if (req.method !== 'POST') { return res.status(405).json({ message: 'Method not allowed' }) }
+  if (req.method !== 'POST') {
+    return res.status(405).json({ message: 'Method not allowed' })
+  }
 
   try {
-    const { message, conversationHistory = [], currentStep = 0, candidateNumber = '', isNumberConfirmed = false, sessionId = 'default' } = req.body
+    const {
+      message = '',
+      conversationHistory = [],
+      currentStep = 0,
+      candidateNumber = '',
+      isNumberConfirmed = false,
+      sessionId = 'default',
+    } = req.body
+
     const session = getSession(sessionId)
-    const text = (message || '').trim()
 
-    // Step 0: ID → 職種 → 勤務先 を“完全固定フロー”
-    if (currentStep === 0 && !isNumberConfirmed) {
-      const m = text.match(/\d{3,}/)
-      if (!m) {
-        return res.json({
-          response: `すみません、最初に【求職者ID】を教えてね。\n※IDは「メール」で届いているやつ（LINEじゃないよ）。\n一度に書いてOK（例：12345 看護師 総合病院）`,
-          step: 0
-        })
-      }
-      session.candidateNumber = m[0]
-      return res.json({
-        response: `求職者ID:${m[0]} で確認したよ！\n次は【今の職種（所有資格）】を教えてね。`,
-        candidateNumber: m[0],
-        isNumberConfirmed: true,
-        step: 0,
-        sessionData: session
-      })
-    }
-
-    if (currentStep === 0 && isNumberConfirmed) {
-      if (!session.qualification) {
-        session.qualification = text
-        return res.json({
-          response: `ありがとう！\n次は【今どこで働いてる？】を教えてね。`,
-          step: 0,
-          sessionData: session
-        })
-      }
-      if (!session.workplace) {
-        session.workplace = text
-        // ここでStep1へ遷移
-        return res.json({
-          response: `ありがとう！\nはじめに、今回の転職理由を教えてほしいな。きっかけってどんなことだった？\nしんどいと思ったこと、これはもう無理…と思ったこと、逆にこういうことに挑戦したい！って思ったこと、何でもOKだよ◎`,
-          step: 1,
-          sessionData: session
-        })
-      }
-    }
-
-    // Step1: 転職理由（OpenAIは任意。なければ共感テンプレで返す）
-    if (currentStep === 1) {
-      session.transferReason = text
-      let reply = `なるほど、その気持ちよくわかる！大事な転職のきっかけだね◎\nじゃあ次の質問！【絶対希望（Must）】を2〜3個だけ教えて。`
-      if (openai) {
-        try {
-          const completion = await openai.chat.completions.create({
-            model: 'gpt-4o-mini',
-            temperature: 0.2,
-            max_tokens: 180,
-            messages: [
-              { role: 'system', content: '短く前向きに共感して、次の質問へ誘導して。敬語禁止・圧は優しく。' },
-              { role: 'user', content: text }
-            ]
+    /** -------------------------
+     *  Step0：ID確認 → 職種（所有資格タグに整合）
+     * ------------------------- */
+    if (currentStep === 0) {
+      // 0-1) 求職者IDまだ：IDを確定（※数字限定にしない。メールID想定で非空を許容）
+      if (!isNumberConfirmed && !session.candidateNumber) {
+        const id = String(message).trim()
+        if (id && id.length >= 3) {
+          session.candidateNumber = id
+          return res.json({
+            response:
+              'OK、求職者ID確認したよ！\nつづいて【今の職種（所有資格）】と【今どこで働いてる？】を教えてね。\n（例）正看護師／〇〇病院 外来',
+            step: 0,
+            candidateNumber: id,
+            isNumberConfirmed: true,
+            sessionData: session,
           })
-          reply = completion.choices[0]?.message?.content || reply
-        } catch {}
-        reply += `\n\nじゃあ次の質問！【絶対希望（Must）】を2〜3個だけ教えて。`
+        }
+        return res.json({
+          response:
+            '最初に【求職者ID】を教えてね。※IDは「メール」で届いているやつ（LINEじゃないよ）。',
+          step: 0,
+          candidateNumber: session.candidateNumber,
+          isNumberConfirmed: false,
+          sessionData: session,
+        })
       }
-      return res.json({ response: reply, step: 2, sessionData: session })
-    }
 
-    // Step2: Must（カンマ/改行で配列化・重複除去）
-    if (currentStep === 2) {
-      const items = text.split(/[\n,、]/).map(s => s.trim()).filter(Boolean)
-      session.mustConditions = Array.from(new Set([...(session.mustConditions||[]), ...items]))
+      // 0-2) IDは確定済み：今回のメッセージを「職種」として受け取り、タグに整合
+      //      現職（workplace）はそのまま保存運用だが、ここでは職種タグ整合を最優先で実装
+      const text = String(message || '').trim()
+      if (text) {
+        // 一旦全文を職種フィールドに入れる（分割入力・一行入力どちらも吸収）
+        session.qualification = text
+        session.qualificationTag = matchQualificationTag(text)
+
+        // 現職は壊さない運用：もし「／」「,」「、」などで併記されていれば軽く推定（無理に分割しない）
+        // ※要件：推測で壊さない → 厳密分割は後続Stepで実装、ここでは未タッチでもOK
+      }
+
       return res.json({
-        response: `OK！それじゃ次に、こうだったらいいな（Want）を2〜3個だけ教えて。`,
-        step: 3,
-        sessionData: session
+        response:
+          '受け取ったよ！職種はタグに整合しておくね。\n次は【転職理由】を教えて。きっかけ・しんどかったこと・挑戦したいこと、何でもOK！',
+        step: 1,
+        candidateNumber: session.candidateNumber,
+        isNumberConfirmed: true,
+        sessionData: session,
       })
     }
 
-    // Step3: Want
-    if (currentStep === 3) {
-      const items = text.split(/[\n,、]/).map(s => s.trim()).filter(Boolean)
-      session.wantConditions = Array.from(new Set([...(session.wantConditions||[]), ...items]))
-      return res.json({
-        response: `質問は残り2つ！\nこれまで（Can）：やってきたこと・得意なことを教えて。`,
-        step: 4,
-        sessionData: session
-      })
-    }
+    /** -------------------------
+     *  Step1以降：既存ロジック（OpenAIに委譲）
+     *  ※ここはまだ粗くてもOK。Step0が要件を満たせればUIのチップ表示は揃う。
+     * ------------------------- */
+    const systemPrompt = `あなたは、HOAPの新規事業におけるAIキャリアエージェント。医療・介護・歯科の一次ヒアリングを行い、会話から要点をつかみ、登録済み知識に厳密整合する。
+- 会話トーンはフレンドリーだが断定せず、順序を守る。
+- 「絶対NG」は存在しない前提。Must/Want/Can/Willで整理する。
+- タグにない新規生成は禁止。タグ未一致は「未一致」として記録し原文保持。
+- 現在のステップ: ${currentStep}
+- セッション: ${JSON.stringify(session)}`
 
-    // Step4: Can
-    if (currentStep === 4) {
-      session.canDo = text
-      return res.json({
-        response: `これが最後の質問👏\nこれから（Will）：挑戦したいこと・成し遂げたいことを教えて。`,
-        step: 5,
-        sessionData: session
-      })
+    const msgs = [{ role: 'system', content: systemPrompt }]
+    for (const m of conversationHistory) {
+      msgs.push(
+        m.type === 'ai'
+          ? { role: 'assistant', content: m.content }
+          : { role: 'user', content: m.content }
+      )
     }
+    msgs.push({ role: 'user', content: message })
 
-    // Step5: Will → クローズ
-    if (currentStep === 5) {
-      session.willDo = text
-      return res.json({
-        response: `今日はたくさん話してくれてありがとう！\n要点をまとめるね：\n・転職理由：${session.transferReason || '（未入力）'}\n・Must：${(session.mustConditions||[]).join('／') || '（0件）'}\n・Want：${(session.wantConditions||[]).join('／') || '（0件）'}\n・Can：${session.canDo || '（未入力）'}\n・Will：${session.willDo || '（未入力）'}\n\n担当エージェントに引き継ぐよ。おつかれさま！`,
-        step: 6,
-        sessionData: session
-      })
-    }
+    const completion = await openai.chat.completions.create({
+      model: 'gpt-4o-mini',
+      messages: msgs,
+      temperature: 0.3,
+      max_tokens: 1000,
+    })
 
-    // フォールバック
-    return res.json({ response: '了解、続けよう。', step: currentStep, sessionData: session })
-  } catch (e) {
-    console.error(e)
-    return res.status(500).json({ message: 'Internal error', error: e.message })
+    const response = completion.choices?.[0]?.message?.content ?? '…'
+
+    // 簡易ステップ進行（暫定のまま）
+    let nextStep = currentStep
+    if (response.includes('じゃあ次の質問！') && currentStep === 1) nextStep = 2
+    else if (response.includes('それじゃあ次に、こうだったらいいな') && currentStep === 2) nextStep = 3
+    else if (response.includes('質問は残り2つ！') && currentStep === 3) nextStep = 4
+    else if (response.includes('これが最後の質問👏') && currentStep === 4) nextStep = 5
+    else if (response.includes('今日はたくさん話してくれてありがとう！') && currentStep === 5) nextStep = 6
+
+    return res.json({
+      response,
+      step: nextStep,
+      candidateNumber: session.candidateNumber,
+      isNumberConfirmed: Boolean(session.candidateNumber),
+      sessionData: session,
+    })
+  } catch (err) {
+    console.error('Error in chat API:', err)
+    return res.status(500).json({ message: 'Internal server error', error: err.message })
   }
 }
