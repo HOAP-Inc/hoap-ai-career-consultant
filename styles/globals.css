@@ -1,71 +1,57 @@
-/* 全体ベース */
-body {
-  margin: 0;
-  font-family: 'Helvetica Neue', Arial, sans-serif;
-  background: linear-gradient(to bottom, #fdfbfb, #ebedee);
-  color: #333;
+/* ✅ これがないとUI全部壊れる！必須3行 */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ===== 色カスタム用 ===== */
+:root {
+  /* ユーザー吹き出し（薄めグラデ） */
+  --bubble-user-from: #fde2f7;  /* 薄ピンク */
+  --bubble-user-to:   #e0f0ff;  /* 薄水色 */
+
+  /* ほーぷちゃん吹き出し（さらに淡いブルー） */
+  --bubble-bot-from:  #f3faff;
+  --bubble-bot-to:    #ffffff;
+
+  /* ユーザー／ボット アイコン背景 */
+  --icon-user-from:   #fde2f7;
+  --icon-user-to:     #e0f0ff;
+  --icon-bot-from:    #f3faff;
+  --icon-bot-to:      #ffffff;
+
+  /* 文字色は濃く維持 */
+  --bubble-text: #1f2937; /* slate-800 */
 }
 
-/* チャットコンテナ */
-.chat-container {
-  display: flex;
-  flex-direction: column;
-  gap: 1rem;
-  padding: 1rem;
-  max-width: 800px;
-  margin: 0 auto;
+/* ====== 吹き出しデザイン ====== */
+.bubble-user {
+  background: linear-gradient(135deg, var(--bubble-user-from), var(--bubble-user-to));
+  color: var(--bubble-text);
 }
 
-/* 共通の吹き出し */
-.message {
-  max-width: 70%;
-  padding: 12px 16px;
-  border-radius: 20px;
-  font-size: 15px;
-  line-height: 1.5;
-  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.05);
-  word-break: break-word;
+.bubble-bot {
+  background: linear-gradient(135deg, var(--bubble-bot-from), var(--bubble-bot-to));
+  color: var(--bubble-text);
 }
 
-/* ユーザー吹き出し（右側・薄いグラデ） */
-.user-message {
-  align-self: flex-end;
-  background: linear-gradient(135deg, #fbd6f2, #cde4fb); /* 薄めパステル */
-  color: #333; /* 字は濃い */
-}
-
-/* ほーぷちゃん吹き出し（左側・薄めブルー） */
-.bot-message {
-  align-self: flex-start;
-  background: linear-gradient(135deg, #e6f3ff, #f0f9ff); /* 薄い水色 */
-  color: #333;
-}
-
-/* アイコン共通 */
-.message-row {
-  display: flex;
-  align-items: flex-end;
-  gap: 0.5rem;
-}
-
-.user-icon, .bot-icon {
-  width: 36px;
-  height: 36px;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 18px;
-  color: white;
-}
-
-/* ユーザーアイコン（グラデ薄め） */
+/* ====== アイコンデザイン ====== */
 .user-icon {
-  background: linear-gradient(135deg, #fbd6f2, #cde4fb);
+  background: linear-gradient(135deg, var(--icon-user-from), var(--icon-user-to));
+  color: #ffffff;
 }
 
-/* ほーぷちゃんアイコン（淡いブルー） */
 .bot-icon {
-  background: linear-gradient(135deg, #e6f3ff, #f0f9ff);
-  color: #4a6fa5;
+  background: linear-gradient(135deg, var(--icon-bot-from), var(--icon-bot-to));
+  color: #3b82f6;
+}
+
+/* ===== 背景グラデ（全体） ===== */
+.gradient-bg {
+  background: linear-gradient(180deg, #fff5fb 0%, #f7f8ff 50%, #f2f6ff 100%);
+}
+
+/* ===== フォントの保険 ===== */
+body {
+  color: var(--bubble-text);
+  font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", sans-serif;
 }
