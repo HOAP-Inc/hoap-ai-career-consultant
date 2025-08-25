@@ -32,13 +32,16 @@ IDが確認できたら、そのあとで
   const [loading, setLoading] = useState(false)
   const [isComposing, setIsComposing] = useState(false)
 
+  // サーバから返る想定：タグ確定時は *Tag フィールドが入る
   const [sessionData, setSessionData] = useState({
     candidateNumber: '',
     qualification: '',
+    qualificationTag: '',       // ★追加：職種のタグ名
     workplace: '',
     transferReason: '',
-    mustConditions: [],
-    wantConditions: [],
+    transferReasonTag: '',      // ★追加：転職理由のタグ名（カテゴリ名）
+    mustConditions: [],         // タグ名配列
+    wantConditions: [],         // タグ名配列
     canDo: '',
     willDo: '',
   })
@@ -47,19 +50,36 @@ IDが確認できたら、そのあとで
   const bottomRef = useRef(null)
   const inputRef = useRef(null)
 
-  const valStr = (v) => (typeof v === 'string' ? v.trim() : '')
-  const isSet = (v) => valStr(v).length > 0
+  const val = (v) => (typeof v === 'string' ? v.trim() : '')
+  const arr = (a) => Array.isArray(a) ? a : []
 
-  // ステータス判定を厳密化
-  const status = {
-    id: isNumberConfirmed && isSet(candidateNumber || sessionData.candidateNumber),
-    qualification: isSet(sessionData.qualification),
-    workplace: isSet(sessionData.workplace),
-    reason: isSet(sessionData.transferReason),
-    mustCount: Array.isArray(sessionData.mustConditions) ? sessionData.mustConditions.length : 0,
-    wantCount: Array.isArray(sessionData.wantConditions) ? sessionData.wantConditions.length : 0,
-    can: isSet(sessionData.canDo),
-    will: isSet(sessionData.willDo),
+  const statusText = {
+    id: isNumberConfirmed && val(candidateNumber || sessionData.candidateNumber)
+      ? (candidateNumber || sessionData.candidateNumber)
+      : '未入力',
+    qualification: val(sessionData.qualificationTag) || val(sessionData.qualification) || '未入力',
+    workplace: val(sessionData.workplace) || '未入力',
+    reason: (() => {
+      if (val(sessionData.transferReasonTag)) return sessionData.transferReasonTag
+      if (val(sessionData.transferReason)) return '済'        // 入力はあるがタグ未マッチ
+      return '未入力'
+    })(),
+    must: (() => {
+      const list = arr(sessionData.mustConditions)
+      if (list.length === 0) return '0件'
+      const head = list.slice(0, 2).join('・')
+      const more = list.length > 2 ? ` 他${list.length - 2}件` : ''
+      return `${head}${more}`
+    })(),
+    want: (() => {
+      const list = arr(sessionData.wantConditions)
+      if (list.length === 0) return '0件'
+      const head = list.slice(0, 2).join('・')
+      const more = list.length > 2 ? ` 他${list.length - 2}件` : ''
+      return `${head}${more}`
+    })(),
+    can: val(sessionData.canDo) ? '済' : '未入力',
+    will: val(sessionData.willDo) ? '済' : '未入力',
   }
 
   const scrollToBottom = () => {
@@ -107,12 +127,8 @@ IDが確認できたら、そのあとで
         setSessionData(prev => ({
           ...prev,
           ...data.sessionData,
-          mustConditions: Array.isArray(data.sessionData.mustConditions)
-            ? Array.from(new Set(data.sessionData.mustConditions))
-            : prev.mustConditions,
-          wantConditions: Array.isArray(data.sessionData.wantConditions)
-            ? Array.from(new Set(data.sessionData.wantConditions))
-            : prev.wantConditions,
+          mustConditions: arr(data.sessionData.mustConditions),
+          wantConditions: arr(data.sessionData.wantConditions),
         }))
       }
     } catch {
@@ -125,7 +141,6 @@ IDが確認できたら、そのあとで
     }
   }
 
-  const badge = (flag) => (flag ? '設定済' : '未入力')
   const progress = Math.min(((currentStep + 1) / 6) * 100, 100)
 
   return (
@@ -150,14 +165,14 @@ IDが確認できたら、そのあとで
         </div>
 
         <div className="status">
-          <div className="chip"><span className="dot"/>番号：{badge(status.id)}</div>
-          <div className="chip"><span className="dot"/>職種：{badge(status.qualification)}</div>
-          <div className="chip"><span className="dot"/>勤務先：{badge(status.workplace)}</div>
-          <div className="chip"><span className="dot"/>転職理由：{badge(status.reason)}</div>
-          <div className="chip"><span className="dot"/>Must：{status.mustCount}件</div>
-          <div className="chip"><span className="dot"/>Want：{status.wantCount}件</div>
-          <div className="chip"><span className="dot"/>Can：{badge(status.can)}</div>
-          <div className="chip"><span className="dot"/>Will：{badge(status.will)}</div>
+          <div className="chip"><span className="dot"/>番号：{statusText.id}</div>
+          <div className="chip"><span className="dot"/>職種：{statusText.qualification}</div>
+          <div className="chip"><span className="dot"/>勤務先：{statusText.workplace}</div>
+          <div className="chip"><span className="dot"/>転職理由：{statusText.reason}</div>
+          <div className="chip"><span className="dot"/>Must：{statusText.must}</div>
+          <div className="chip"><span className="dot"/>Want：{statusText.want}</div>
+          <div className="chip"><span className="dot"/>Can：{statusText.can}</div>
+          <div className="chip"><span className="dot"/>Will：{statusText.will}</div>
         </div>
 
         <div className="progress"><div className="bar" style={{ width: `${progress}%` }}/></div>
