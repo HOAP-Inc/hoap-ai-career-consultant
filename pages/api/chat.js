@@ -64,12 +64,13 @@ function getSession(sessionId) {
       wantConditions: [],
       canDo: '',
       willDo: '',
-      // Step0 内のフェーズ管理
-      step0Phase: 'needId', // needId -> needQualification -> needWorkplace -> done
+      // Step0 内のフェーズ管理: needId -> needQualification -> needWorkplace -> done
+      step0Phase: 'needId',
       // 資格あいまい確認フラグ
       awaitingQualClarify: false,
       // 内部メモ
       notes: [],
+      // 以下、後工程用
       deepDrillCount: 0,
       currentCategory: null,
       awaitingSelection: false,
@@ -104,7 +105,7 @@ export default async function handler(req, res) {
         session.step0Phase = 'needQualification'
       }
 
-      // 0-1) ID
+      // 0-1) 求職者ID
       if (session.step0Phase === 'needId') {
         if (text && text.length >= 3) {
           session.candidateNumber = text
@@ -129,23 +130,18 @@ export default async function handler(req, res) {
 
       // 0-2) 職種（所有資格） — 曖昧入力対応
       if (session.step0Phase === 'needQualification') {
-        // すでに曖昧確認モードの場合 → 回答を判定
+        // すでに曖昧確認モード → 回答判定
         if (session.awaitingQualClarify) {
-          const n = norm(text)
-          let tag = matchQualificationTag(text)
-
-          // 無資格系の明示
+          const tag = matchQualificationTag(text)
           const noQual = /(無資格|資格なし|持ってない|なし|未取得)/.test(text)
 
           if (!tag && noQual) {
-            // タグは空で保存（UIは「済」表示）
             session.qualification = session.qualification || '介護（無資格）'
             session.qualificationTag = ''
           } else if (tag) {
             session.qualification = text
             session.qualificationTag = tag
           } else {
-            // 依然あいまい → タグ空でメモ保持
             session.qualification = text || session.qualification
             session.qualificationTag = ''
             session.notes.push(`資格あいまい回答: ${text}`)
@@ -163,7 +159,7 @@ export default async function handler(req, res) {
           })
         }
 
-        // まだ通常フロー
+        // 通常フロー
         if (!text) {
           return res.json({
             response: 'まず【今の職種（所有資格）】を教えてね。\n（例）正看護師',
@@ -177,7 +173,6 @@ export default async function handler(req, res) {
         const tag = matchQualificationTag(text)
 
         if (tag) {
-          // そのまま整合
           session.qualification = text
           session.qualificationTag = tag
           session.step0Phase = 'needWorkplace'
@@ -193,8 +188,8 @@ export default async function handler(req, res) {
 
         // タグ未一致：介護系の曖昧ワードなら確認質問を挟む
         if (looksAmbiguousCare(text)) {
-          session.qualification = text // 原文は保持
-          session.qualificationTag = '' // まだ未確定
+          session.qualification = text // 原文保持
+          session.qualificationTag = '' // 未確定
           session.awaitingQualClarify = true
           return res.json({
             response:
@@ -206,7 +201,7 @@ export default async function handler(req, res) {
           })
         }
 
-        // それ以外の未一致：タグは空で保存（UIは「済」表示）、現職へ
+        // その他の未一致：タグ空保存で現職へ
         session.qualification = text
         session.qualificationTag = ''
         session.step0Phase = 'needWorkplace'
@@ -233,30 +228,43 @@ export default async function handler(req, res) {
         }
         session.workplace = text
         session.step0Phase = 'done'
+        // ★ Step1 への誘導は “完全一致” セリフで固定（端折り禁止）
         return res.json({
           response:
-            'はじめに、今回の【転職理由】を教えて。きっかけ・しんどかったこと・挑戦したいこと、何でもOKだよ◎',
+            'はじめに、今回の転職理由を教えてほしいな。きっかけってどんなことだった？\nしんどいと思ったこと、これはもう無理って思ったこと、逆にこういうことに挑戦したい！って思ったこと、何でもOKだよ◎',
           step: 1,
           candidateNumber: session.candidateNumber,
           isNumberConfirmed: true,
           sessionData: session,
         })
       }
+
+      // 0-x) 既に done の場合も Step1 のフルセリフで案内
+      return res.json({
+        response:
+          'はじめに、今回の転職理由を教えてほしいな。きっかけってどんなことだった？\nしんどいと思ったこと、これはもう無理って思ったこと、逆にこういうことに挑戦したい！って思ったこと、何でもOKだよ◎',
+        step: 1,
+        candidateNumber: session.candidateNumber,
+        isNumberConfirmed: true,
+        sessionData: session,
+      })
     }
 
-    /** Step1以降（従来どおりGPTに委譲、システム制約を強める） */
+    /** Step1 以降（暫定はGPTに委譲。ほーぷちゃんの制約だけ強める） */
     const systemPrompt = `あなたは「ほーぷちゃん」。医療・介護・歯科の一次ヒアリングを行うAIキャリアエージェント。
-- ユーザーとフレンドリーに、順番制で必ず聞き切る。
-- 「絶対NG」は存在しない。Must/Want/Can/Willで整理する。
-- タグ未一致は新規生成しない。原文を保持し、タグは空。
+- フレンドリーだが順番制で必ず聞き切る。
+- 「絶対NG」は存在しない。Must/Want/Can/Willで整理。
+- タグ未一致は新規生成しない。原文を保持し、タグは空のまま。
 - 現在のステップ: ${currentStep}
 - セッション: ${JSON.stringify(session)}`
 
     const msgs = [{ role: 'system', content: systemPrompt }]
     for (const m of conversationHistory) {
-      msgs.push(m.type === 'ai'
-        ? { role: 'assistant', content: m.content }
-        : { role: 'user', content: m.content })
+      msgs.push(
+        m.type === 'ai'
+          ? { role: 'assistant', content: m.content }
+          : { role: 'user', content: m.content }
+      )
     }
     msgs.push({ role: 'user', content: message })
 
@@ -269,6 +277,7 @@ export default async function handler(req, res) {
 
     const response = completion.choices?.[0]?.message?.content ?? '…'
 
+    // 暫定の次ステップ判定（今後ここも厳密にする前提）
     let nextStep = currentStep
     if (response.includes('じゃあ次の質問！') && currentStep === 1) nextStep = 2
     else if (response.includes('それじゃあ次に、こうだったらいいな') && currentStep === 2) nextStep = 3
