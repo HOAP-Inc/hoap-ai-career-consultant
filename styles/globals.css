@@ -1,57 +1,69 @@
-/* ✅ これがないとUI全部壊れる！必須3行 */
+/* 必須：Tailwind の3行 */
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-/* ===== 色カスタム用 ===== */
+/* ===== 配色：直前の“元の見た目”に戻す ===== */
 :root {
-  /* ユーザー吹き出し（薄めグラデ） */
-  --bubble-user-from: #fde2f7;  /* 薄ピンク */
-  --bubble-user-to:   #e0f0ff;  /* 薄水色 */
+  /* 画面全体の淡い背景グラデ */
+  --bg-from: #fff5fb;   /* very light pink */
+  --bg-mid:  #f4f1ff;   /* very light violet */
+  --bg-to:   #edf6ff;   /* very light blue */
 
-  /* ほーぷちゃん吹き出し（さらに淡いブルー） */
-  --bubble-bot-from:  #f3faff;
-  --bubble-bot-to:    #ffffff;
+  /* 吹き出しは白カード（元のまま） */
+  --bubble-bg: #ffffff;
+  --bubble-border: rgba(226, 232, 240, 0.6); /* slate-200 相当 */
+  --bubble-text: #1f2937;                    /* slate-800（文字は濃いまま） */
 
-  /* ユーザー／ボット アイコン背景 */
-  --icon-user-from:   #fde2f7;
-  --icon-user-to:     #e0f0ff;
-  --icon-bot-from:    #f3faff;
-  --icon-bot-to:      #ffffff;
+  /* ユーザーのアイコン＆チップのグラデ（元のピンク→バイオレット→ブルー） */
+  --chip-from: #f472b6;  /* pink-400 */
+  --chip-via:  #a78bfa;  /* violet-400 */
+  --chip-to:   #60a5fa;  /* blue-400 */
 
-  /* 文字色は濃く維持 */
-  --bubble-text: #1f2937; /* slate-800 */
+  /* ほーぷちゃん側アイコン（白〜薄グレー） */
+  --bot-icon-from: #f8fafc;  /* slate-50 */
+  --bot-icon-to:   #ffffff;
 }
 
-/* ====== 吹き出しデザイン ====== */
-.bubble-user {
-  background: linear-gradient(135deg, var(--bubble-user-from), var(--bubble-user-to));
+/* 画面背景（上：ほんのりピンク → 下：薄いブルー） */
+.gradient-bg {
+  background: linear-gradient(180deg, var(--bg-from) 0%, var(--bg-mid) 40%, var(--bg-to) 100%);
+}
+
+/* 吹き出し：白カード＋薄い境界線（ユーザー/ボット共通） */
+.bubble {
+  background: var(--bubble-bg);
   color: var(--bubble-text);
+  border: 1px solid var(--bubble-border);
+  border-radius: 20px;
+  box-shadow:
+    0 1px 2px rgba(16, 24, 40, 0.04),
+    0 4px 12px rgba(16, 24, 40, 0.06);
 }
 
-.bubble-bot {
-  background: linear-gradient(135deg, var(--bubble-bot-from), var(--bubble-bot-to));
-  color: var(--bubble-text);
-}
+/* ユーザー吹き出しの見た目（必要なら個別に） */
+.bubble-user { @apply bubble; }
+/* ほーぷちゃん吹き出し（必要なら個別に） */
+.bubble-bot  { @apply bubble; }
 
-/* ====== アイコンデザイン ====== */
-.user-icon {
-  background: linear-gradient(135deg, var(--icon-user-from), var(--icon-user-to));
+/* ユーザーの丸アイコン／入力チップのグラデ（元の鮮やかグラデに戻す） */
+.user-icon, .user-chip {
+  background: linear-gradient(135deg, var(--chip-from), var(--chip-via), var(--chip-to));
   color: #ffffff;
 }
 
+/* ほーぷちゃんの丸アイコン（淡い） */
 .bot-icon {
-  background: linear-gradient(135deg, var(--icon-bot-from), var(--icon-bot-to));
-  color: #3b82f6;
+  background: linear-gradient(135deg, var(--bot-icon-from), var(--bot-icon-to));
+  color: #3b82f6; /* 少し青みのある絵文字色 */
 }
 
-/* ===== 背景グラデ（全体） ===== */
-.gradient-bg {
-  background: linear-gradient(180deg, #fff5fb 0%, #f7f8ff 50%, #f2f6ff 100%);
+/* ちょっとしたアニメ（元の雰囲気そのまま） */
+.message-enter { animation: slideIn .25s ease-out; }
+@keyframes slideIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
 }
 
-/* ===== フォントの保険 ===== */
-body {
-  color: var(--bubble-text);
-  font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", sans-serif;
-}
+/* 文字の保険 */
+body { color: var(--bubble-text); }
