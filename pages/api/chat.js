@@ -1,14 +1,20 @@
 // pages/api/chat.js
-// ほーぷちゃん 会話API（フロントは触らない）
-// 仕様：
-//  Step0: ID確認（メールに届いたID）→ OK後に Step0:sub=job → Step0:sub=place
-//  Step1: 転職理由（深掘り2回→候補提示2〜3件→確定）
-//  Step2: 絶対条件（Must）辞書マッチ（複数OK・「ない」で次へ）
-//  Step3: あったら良い条件（Want）辞書マッチ（複数OK・「ない」で次へ）
-//  Step4: できること（Can）テキスト保存（UI表示は「済」）
-//  Step5: やりたいこと（Will）テキスト保存（UI表示は「済」）→ クロージング
+// ほーぷちゃん：会話ロジック（Step厳密・深掘り2回・候補提示・ステータス算出）
 
-// --------------- 転職理由カテゴリ（タグは internal_options のみ使用） ---------------
+// ---- Step ラベル（UI用） ----
+const STEP_LABELS = {
+  0: "基本情報",
+  0.5: "基本情報",
+  1: "基本情報",
+  2: "転職理由",
+  3: "絶対条件",
+  4: "希望条件",
+  5: "これまで（Can）",
+  6: "これから（Will）",
+  7: "完了",
+};
+
+// ---- 転職理由カテゴリ（深掘りQ & 候補） ----
 const transferReasonFlow = {
   "経営・組織に関すること": {
     keywords: ["理念","方針","価値観","経営","運営","マネジメント","方向性","ビジョン","ミッション","考え方","姿勢","経営陣","トップ","風通し","意見","発言","評価制度","評価","昇給","昇格","公平","基準","教育体制","研修","マニュアル","OJT","フォロー","教育","サポート","経営者","医療職","現場理解","売上","数字"],
@@ -24,7 +30,7 @@ const transferReasonFlow = {
     deep2: ["それって改善されそうにない感じ？","他のスタッフも同じように感じてる？","具体的にはどんな場面で一番感じる？"],
   },
   "働く仲間に関すること": {
-    keywords: ["人間関係","職場の雰囲気","上司","先輩","同僚","チームワーク","いじめ","パワハラ","セクハラ","陰口","派閥","お局","理不尽","相談できない","孤立","コミュニケーション","ロールモデル","尊敬","憧れ","見習いたい","価値観","温度感","やる気","信頼","品格","一貫性","目標","手本","連携","助け合い","壁","分断","古株","権力","圧","支配"],
+    keywords: ["人間関係","職場の雰囲気","上司","先輩","同僚","チームワーク","いじめ","パワハラ","セクハラ","陰口","派閥","お局","理不尽","相談できない","孤立","コミュニケーション","ロールモデル","尊敬","憧れ","見習いたい","価値観","温度感","やる気","信頼","品格","一貫性","目標","手本","職種","連携","助け合い","壁","分断","古株","権力","圧","支配"],
     internal_options: [
       "人間関係のトラブルが少ない職場で働きたい",
       "同じ価値観を持つ仲間と働きたい",
@@ -72,12 +78,12 @@ const transferReasonFlow = {
     deep1: ["家庭との両立で困ってることがある？","プライベートの時間が取れない？","職場のイベントが負担？"],
     deep2: ["それって改善の余地はなさそう？","他にも両立で困ってることある？","理想的な働き方はどんな感じ？"],
   },
-  "職場環境・設備": { keywords: ["設備","環境","施設","器械","機器","システム","IT","デジタル","古い","新しい","最新","設置","導入","整備"], internal_options: [], deep1: [], deep2: [] },
-  "職場の安定性": { keywords: ["安定","将来性","経営状況","倒産","リストラ","不安","継続","持続","成長","発展","将来","先行き"], internal_options: [], deep1: [], deep2: [] },
-  "給与・待遇": { keywords: ["給料","給与","年収","月収","手取り","賞与","ボーナス","昇給","手当","待遇","福利厚生","安い","低い","上がらない","生活できない","お金"], internal_options: [], deep1: [], deep2: [] },
+  "職場環境・設備": { keywords: ["設備","環境","施設","機器","IT","デジタル","古い","新しい","最新","導入","整備"], internal_options: [], deep1: [], deep2: [] },
+  "職場の安定性": { keywords: ["安定","将来性","経営状況","倒産","リストラ","不安","継続","持続","成長","発展","先行き"], internal_options: [], deep1: [], deep2: [] },
+  "給与・待遇":   { keywords: ["給料","給与","年収","月収","手取り","賞与","ボーナス","昇給","手当","待遇","福利厚生","安い","低い","上がらない","生活できない","お金"], internal_options: [], deep1: [], deep2: [] },
 };
 
-// --------------- Must / Want 辞書（タグ名そのまま使用） ---------------
+// ---- Must/Want 辞書（tag_labelのみ） ----
 const mustWantItems = [
   "急性期病棟","回復期病棟","慢性期・療養型病院","一般病院","地域包括ケア病棟","療養病棟",
   "緩和ケア病棟（ホスピス）","クリニック","精神科病院","訪問看護ステーション",
@@ -108,349 +114,339 @@ const mustWantItems = [
   "院長・分院長候補","担当制"
 ];
 
-// --------------- セッション管理（簡易・プロセス内） ---------------
-const sessions = new Map();
-const initSession = (id) => {
-  if (!sessions.has(id)) {
-    sessions.set(id, {
-      step: 0,
-      sub: "id", // id -> job -> place
-      status: {
-        id: "未入力",
-        job: "未入力",     // 職種（所有資格）※タグ化は別仕様で
-        place: "未入力",   // 勤務先
-        reason: "未入力",  // 転職理由（tag_label確定後に反映）
-        must: [],          // タグ配列
-        want: [],          // タグ配列
-        can: "未入力",     // UIでは「済」表示想定
-        will: "未入力",    // UIでは「済」表示想定
-      },
-      memo: { rawJobText:"", rawPlaceText:"", rawReasonText:"", can:"", will:"" },
-      // Step1用
-      deepCount: 0,
-      currentCategory: null,
-      awaitingChoice: false,
-      choiceList: [], // ["A","B","C"]実体
-    });
+// ---- セッション ----
+const sessions = Object.create(null);
+function initSession() {
+  return {
+    step: 0,
+    isNumberConfirmed: false,
+    drill: { phase: null, count: 0, category: null, awaitingChoice: false, options: [] },
+    status: {
+      number: "",
+      role: "",
+      place: "",
+      reason: "",
+      reason_tag: "",
+      must: [],
+      want: [],
+      can: "",
+      will: "",
+      memo: { reason_raw: "", must_raw: [], want_raw: [] },
+    },
+  };
+}
+
+// ---- 入口 ----
+export default async function handler(req, res) {
+  if (req.method !== "POST") return res.status(405).json({ error: "Method Not Allowed" });
+
+  const { message = "", sessionId = "default" } = req.body || {};
+  const text = String(message || "").trim();
+
+  const s = sessions[sessionId] ?? (sessions[sessionId] = initSession());
+
+  // ID再質問ガード
+  const looksId = /^\s*\d{4,8}\s*$/.test(text);
+  if (s.isNumberConfirmed && (s.step === 0 || s.step == null)) s.step = 0.5;
+  if (s.isNumberConfirmed && looksId) {
+    return res.json(withMeta({
+      response: nextAfterId(s),
+      step: s.step,
+      status: s.status,
+      isNumberConfirmed: true,
+      candidateNumber: s.status.number,
+      debug: debugState(s),
+    }, s.step));
   }
-  return sessions.get(id);
-};
 
-// --------------- ユーティリティ ---------------
-const read = (v="") => String(v || "").trim();
-const hasNoMore = (t) => /^(ない|なし|もうない|大丈夫|特にない|以上)$/i.test(read(t));
-
-const extractId = (t) => {
-  const m = read(t).match(/\d{3,}/);
-  return m ? m[0] : null;
-};
-
-const splitJobAndPlace = (t) => {
-  const s = read(t);
-  if (s.includes("／")) {
-    const [job, ...rest] = s.split("／");
-    return { job: read(job) || "未入力", place: read(rest.join("／")) || "未入力" };
+  // ---- Step0：求職者ID ----
+  if (s.step === 0) {
+    if (!looksId) {
+      return res.json(withMeta({
+        response: "こんにちは！\n最初に【求職者ID】を教えてね。※IDは『メール』で届いているやつ（LINEじゃないよ）。",
+        step: 0, status: s.status, isNumberConfirmed: false, candidateNumber: "", debug: debugState(s)
+      }, 0));
+    }
+    s.status.number = text.replace(/\s+/g, "");
+    s.isNumberConfirmed = true;
+    s.step = 0.5;
+    return res.json(withMeta({
+      response: "OK、求職者ID確認したよ！\nまず【今の職種（所有資格）】を教えてね。\n（例）正看護師／介護福祉士／初任者研修 など",
+      step: 0.5, status: s.status, isNumberConfirmed: true, candidateNumber: s.status.number, debug: debugState(s)
+    }, 0.5));
   }
-  // スペースで緩く
-  const parts = s.split(/\s+/).filter(Boolean);
-  if (parts.length >= 2) return { job: parts[0], place: parts.slice(1).join(" ") };
-  return { job: s || "未入力", place: "未入力" };
-};
 
-// 転職理由：カテゴリ推定（最初に強く当たるもの1つ）
-const guessCategory = (t) => {
-  const s = read(t);
+  // ---- Step0.5：職種（所有資格） ----
+  if (s.step === 0.5) {
+    s.status.role = text || "";
+    if (/(介護|ヘルパー)/.test(text) && !/(初任者|実務者|介護福祉士)/.test(text)) {
+      s.step = 0.55;
+      return res.json(withMeta({
+        response: "介護系なんだね！\n初任者研修や実務者研修、介護福祉士などの資格は持ってる？なければ「ない」でOK！",
+        step: 0.55, status: s.status, isNumberConfirmed: true, candidateNumber: s.status.number, debug: debugState(s)
+      }, 0.5));
+    }
+    s.step = 1;
+    return res.json(withMeta({
+      response: "受け取ったよ！次に【今どこで働いてる？】を教えてね。\n（例）○○病院 外来／△△クリニック",
+      step: 1, status: s.status, isNumberConfirmed: true, candidateNumber: s.status.number, debug: debugState(s)
+    }, 1));
+  }
+  if (s.step === 0.55) {
+    s.status.role = `${s.status.role}（資格確認:${text || "未回答"}）`;
+    s.step = 1;
+    return res.json(withMeta({
+      response: "OK！じゃあ次に【今どこで働いてる？】を教えてね。\n（例）○○病院 外来／△△クリニック",
+      step: 1, status: s.status, isNumberConfirmed: true, candidateNumber: s.status.number, debug: debugState(s)
+    }, 1));
+  }
+
+  // ---- Step1：現職 ----
+  if (s.step === 1) {
+    s.status.place = text || "";
+    s.step = 2;
+    s.drill = { phase: "reason", count: 0, category: null, awaitingChoice: false, options: [] };
+    return res.json(withMeta({
+      response: "はじめに、今回の転職理由を教えてほしいな。きっかけってどんなことだった？\nしんどいと思ったこと、これはもう無理って思ったこと、逆にこういうことに挑戦したい！って思ったこと、何でもOKだよ◎",
+      step: 2, status: s.status, isNumberConfirmed: true, candidateNumber: s.status.number, debug: debugState(s)
+    }, 2));
+  }
+
+  // ---- Step2：転職理由（深掘り2回→候補提示） ----
+  if (s.step === 2) {
+    if (s.drill.phase === "reason" && s.drill.awaitingChoice && s.drill.options?.length) {
+      const pick = normalizePick(text);
+      const chosen = s.drill.options.find(o => o === pick);
+      if (chosen) {
+        const empathy = "なるほど、その気持ちよくわかる！大事な転職のきっかけだね◎";
+        const repeat = `つまり『${chosen}』ってことだね！`;
+        s.status.reason_tag = chosen;
+        s.step = 3;
+        return res.json(withMeta({
+          response: `${empathy}\n${repeat}\n\n${mustIntroText()}`,
+          step: 3, status: s.status, isNumberConfirmed: true, candidateNumber: s.status.number, debug: debugState(s)
+        }, 3));
+      }
+      return res.json(withMeta({
+        response: `ごめん、もう一度教えて！この中だとどれが一番近い？『${s.drill.options.map(x=>`［${x}］`).join("／")}』`,
+        step: 2, status: s.status, isNumberConfirmed: true, candidateNumber: s.status.number, debug: debugState(s)
+      }, 2));
+    }
+
+    if (s.drill.count === 0) {
+      s.status.reason = text || "";
+      s.status.memo.reason_raw = text || "";
+      const cat = pickReasonCategory(text);
+      if (!cat || noOptionCategory(cat)) {
+        const empathy = "なるほど、その気持ちよくわかる！大事な転職のきっかけだね◎";
+        s.step = 3;
+        return res.json(withMeta({
+          response: `${empathy}\n\n${mustIntroText()}`,
+          step: 3, status: s.status, isNumberConfirmed: true, candidateNumber: s.status.number, debug: debugState(s)
+        }, 3));
+      }
+      s.drill.category = cat;
+      s.drill.count = 1;
+      const q = transferReasonFlow[cat].deep1[0] || "それについて、もう少し詳しく教えて！";
+      return res.json(withMeta({
+        response: q, step: 2, status: s.status, isNumberConfirmed: true, candidateNumber: s.status.number, debug: debugState(s)
+      }, 2));
+    }
+
+    if (s.drill.count === 1) {
+      s.drill.count = 2;
+      const cat = s.drill.category;
+      const q = transferReasonFlow[cat].deep2[0] || "なるほど。他に具体例があれば教えて！";
+      return res.json(withMeta({
+        response: q, step: 2, status: s.status, isNumberConfirmed: true, candidateNumber: s.status.number, debug: debugState(s)
+      }, 2));
+    }
+
+    if (s.drill.count === 2) {
+      const cat = s.drill.category;
+      const options = (transferReasonFlow[cat].internal_options || []).slice(0, 3);
+      if (!options.length) {
+        const empathy = "なるほど、その気持ちよくわかる！大事な転職のきっかけだね◎";
+        s.step = 3;
+        return res.json(withMeta({
+          response: `${empathy}\n\n${mustIntroText()}`,
+          step: 3, status: s.status, isNumberConfirmed: true, candidateNumber: s.status.number, debug: debugState(s)
+        }, 3));
+      }
+      s.drill.awaitingChoice = true;
+      s.drill.options = options;
+      return res.json(withMeta({
+        response: `この中だとどれが一番近い？『${options.map(x=>`［${x}］`).join("／")}』`,
+        step: 2, status: s.status, isNumberConfirmed: true, candidateNumber: s.status.number, debug: debugState(s)
+      }, 2));
+    }
+  }
+
+  // ---- Step3：絶対に外せない条件（Must） ----
+  if (s.step === 3) {
+    if (isNone(text)) {
+      s.step = 4;
+      return res.json(withMeta({
+        response: "ありがとう！それじゃあ次は【あったらいいな（希望条件）】を教えてね。",
+        step: 4, status: s.status, isNumberConfirmed: true, candidateNumber: s.status.number, debug: debugState(s)
+      }, 4));
+    }
+    const tags = matchTags(text, mustWantItems);
+    if (tags.length) {
+      const added = [];
+      for (const t of tags.slice(0, 3)) {
+        if (!s.status.must.includes(t)) { s.status.must.push(t); added.push(t); }
+      }
+      const line = added.map(t => `そっか、『${t}』が絶対ってことだね！`).join("\n");
+      return res.json(withMeta({
+        response: `${line}\n他にも絶対条件はある？（なければ「ない」って返してね）`,
+        step: 3, status: s.status, isNumberConfirmed: true, candidateNumber: s.status.number, debug: debugState(s)
+      }, 3));
+    } else {
+      s.status.memo.must_raw ??= [];
+      s.status.memo.must_raw.push(text);
+      return res.json(withMeta({
+        response: "そっか、わかった！大事な希望だね◎\n他にも絶対条件はある？（なければ「ない」って返してね）",
+        step: 3, status: s.status, isNumberConfirmed: true, candidateNumber: s.status.number, debug: debugState(s)
+      }, 3));
+    }
+  }
+
+  // ---- Step4：あったらいいな（Want） ----
+  if (s.step === 4) {
+    if (isNone(text)) {
+      s.step = 5;
+      return res.json(withMeta({
+        response: "質問は残り2つ！\nまずは【いま出来ること・得意なこと（Can）】を教えてね。自由に書いてOKだよ。",
+        step: 5, status: s.status, isNumberConfirmed: true, candidateNumber: s.status.number, debug: debugState(s)
+      }, 5));
+    }
+    const tags = matchTags(text, mustWantItems);
+    if (tags.length) {
+      const added = [];
+      for (const t of tags.slice(0, 3)) {
+        if (!s.status.want.includes(t)) { s.status.want.push(t); added.push(t); }
+      }
+      const line = added.map(t => `了解！『${t}』だと嬉しいってことだね！`).join("\n");
+      return res.json(withMeta({
+        response: `${line}\n他にもあったらいいなっていうのはある？（なければ「ない」って返してね）`,
+        step: 4, status: s.status, isNumberConfirmed: true, candidateNumber: s.status.number, debug: debugState(s)
+      }, 4));
+    } else {
+      s.status.memo.want_raw ??= [];
+      s.status.memo.want_raw.push(text);
+      return res.json(withMeta({
+        response: "了解！気持ちは受け取ったよ◎\n他にもあったらいいなっていうのはある？（なければ「ない」って返してね）",
+        step: 4, status: s.status, isNumberConfirmed: true, candidateNumber: s.status.number, debug: debugState(s)
+      }, 4));
+    }
+  }
+
+  // ---- Step5：Can ----
+  if (s.step === 5) {
+    s.status.can = text || "";
+    s.step = 6;
+    return res.json(withMeta({
+      response: "これが最後の質問👏\n【これから挑戦したいこと（Will）】を教えてね。自由に書いてOKだよ。",
+      step: 6, status: s.status, isNumberConfirmed: true, candidateNumber: s.status.number, debug: debugState(s)
+    }, 6));
+  }
+
+  // ---- Step6：Will ----
+  if (s.step === 6) {
+    s.status.will = text || "";
+    s.step = 7;
+    return res.json(withMeta({
+      response: "今日はたくさん話してくれてありがとう！\n整理した内容は担当エージェントにしっかり共有するね。面談でさらに具体化していこう！",
+      step: 7, status: s.status, isNumberConfirmed: true, candidateNumber: s.status.number, debug: debugState(s)
+    }, 7));
+  }
+
+  // ここには来ない想定（フォールバック廃止）
+  return res.json(withMeta({
+    response: "（内部エラー）", step: s.step, status: s.status, isNumberConfirmed: s.isNumberConfirmed, candidateNumber: s.status.number, debug: debugState(s)
+  }, s.step));
+}
+
+// ---- ヘルパ ----
+function withMeta(payload, step) {
+  const statusBar = buildStatusBar(payload.status);
+  return {
+    ...payload,
+    meta: {
+      step,
+      step_label: STEP_LABELS[step] ?? "",
+      statusBar,
+      debug: payload.debug,
+    },
+  };
+}
+function buildStatusBar(st) {
+  return {
+    求職者ID: st.number || "",
+    職種: st.role || "",
+    現職: st.place || "",
+    転職目的: st.reason_tag ? st.reason_tag : (st.reason ? "済" : ""),
+    Must: st.must.length ? `${st.must.length}件` : (st.memo?.must_raw?.length ? "済" : ""),
+    Want: st.want.length ? `${st.want.length}件` : (st.memo?.want_raw?.length ? "済" : ""),
+    Can: st.can ? "済" : "",
+    Will: st.will ? "済" : "",
+  };
+}
+function debugState(s) {
+  return {
+    drill: { ...s.drill },
+    reasonCategory: s.drill.category,
+    awaitingChoice: s.drill.awaitingChoice,
+    reasonTag: s.status.reason_tag,
+    mustCount: s.status.must.length,
+    wantCount: s.status.want.length,
+  };
+}
+function nextAfterId(s) {
+  switch (s.step) {
+    case 0.5:
+      return "IDは確認済だよ！まず【今の職種（所有資格）】を教えてね。\n（例）正看護師／介護福祉士／初任者研修 など";
+    case 1:
+      return "IDは確認済だよ！次に【今どこで働いてる？】を教えてね。\n（例）○○病院 外来／△△クリニック";
+    case 2:
+      return "IDは確認済だよ！\nはじめに、今回の転職理由を教えてほしいな。きっかけってどんなことだった？\nしんどいと思ったこと、これはもう無理って思ったこと、逆にこういうことに挑戦したい！って思ったこと、何でもOKだよ◎";
+    default:
+      return "IDは確認済だよ！";
+  }
+}
+function mustIntroText() {
+  return "ありがとう！それじゃあ【絶対に外せない条件】を教えてね。\n\n" +
+         "仕事内容でも、制度でも、条件でもOK◎\n\n" +
+         "例えば・・・\n" +
+         "「絶対土日休みじゃないと困る！」\n" +
+         "「絶対オンコールはできない！」\n\n" +
+         "後から『あるといいな』『ないといいな』についても聞くから、今は『絶対！』というものだけ教えてね。";
+}
+function noOptionCategory(cat) {
+  return cat === "職場環境・設備" || cat === "職場の安定性" || cat === "給与・待遇";
+}
+function pickReasonCategory(text) {
+  const t = (text || "").toLowerCase();
   let best = null, score = 0;
   for (const [cat, def] of Object.entries(transferReasonFlow)) {
-    const hit = (def.keywords || []).reduce((acc, kw) => acc + (s.includes(kw) ? 1 : 0), 0);
+    const hit = (def.keywords || []).reduce((acc, kw) => acc + (t.includes(String(kw).toLowerCase()) ? 1 : 0), 0);
     if (hit > score) { score = hit; best = cat; }
   }
-  return score > 0 ? best : null;
-};
-
-// 候補提示：内部候補から2〜3件（上限3）
-const pickOptions = (cat) => {
-  const opts = (transferReasonFlow[cat]?.internal_options || []).slice(0, 3);
-  return opts.slice(0, Math.max(2, Math.min(3, opts.length))); // 2〜3件
-};
-
-// テキストから mustWantItems を含むタグを抽出（重複排除）
-const findMustWantTags = (t) => {
-  const s = read(t);
+  return best;
+}
+function matchTags(text, dict) {
+  const t = (text || "").toLowerCase();
   const hits = [];
-  for (const tag of mustWantItems) {
-    if (s.includes(tag)) hits.push(tag);
+  for (const item of dict) {
+    if (t.includes(item.toLowerCase())) hits.push(item);
   }
-  return Array.from(new Set(hits));
-};
-
-// 選択肢プロンプトの整形
-const formatChoices = (list) => {
-  // 『［A］／［B］／［C］』
-  return `『［${list.join("］／［")}］』`;
-};
-
-// --------------- ハンドラ ---------------
-export default async function handler(req, res) {
-  if (req.method !== "POST") return res.status(405).json({ message: "Method not allowed" });
-
-  try {
-    const { message = "", sessionId = "default" } = req.body || {};
-    const text = read(message);
-    const sess = initSession(sessionId);
-
-    // ===== Step0: ID → job → place =====
-    if (sess.step === 0) {
-      if (sess.sub === "id") {
-        const id = extractId(text);
-        if (!id) {
-          return res.json({
-            response: "最初に【求職者ID】を教えてね。※IDは「メール」に届いているものだよ（LINEじゃないよ）",
-            step: 0,
-            status: sess.status,
-          });
-        }
-        sess.status.id = id;
-        sess.sub = "job";
-        return res.json({
-          response: "OK、求職者ID確認したよ！\nつづいて【今の職種（所有資格）】を教えてね。\n（例）正看護師",
-          step: 0,
-          status: sess.status,
-        });
-      }
-      if (sess.sub === "job") {
-        if (!text) {
-          return res.json({
-            response: "【今の職種（所有資格）】を教えてね。（例）正看護師",
-            step: 0,
-            status: sess.status,
-          });
-        }
-        const { job } = splitJobAndPlace(text);
-        sess.status.job = job || "未入力";
-        sess.memo.rawJobText = text;
-        sess.sub = "place";
-        return res.json({
-          response: "【今どこで働いてる？】を教えてね。（例）〇〇病院 外来／〇〇クリニック",
-          step: 0,
-          status: sess.status,
-        });
-      }
-      if (sess.sub === "place") {
-        const { place } = splitJobAndPlace(text);
-        sess.status.place = place || "未入力";
-        sess.memo.rawPlaceText = text;
-        // Step1へ
-        sess.step = 1;
-        sess.sub = null;
-        return res.json({
-          response:
-            "はじめに、今回の【転職理由】を教えてほしいな。きっかけってどんなことだった？\nしんどいと思ったこと、これはもう無理って思ったこと、逆にこういうことに挑戦したい！って思ったこと、何でもOKだよ◎",
-          step: 1,
-          status: sess.status,
-        });
-      }
-    }
-
-    // ===== Step1: 転職理由（深掘り→候補提示→確定） =====
-    if (sess.step === 1) {
-      // すでに候補提示済みで選択待ち
-      if (sess.awaitingChoice && sess.choiceList.length) {
-        const picked = sess.choiceList.find((c) => text.includes(c));
-        if (picked) {
-          // 〔共感→復唱→保存〕
-          sess.status.reason = picked; // tag_label そのまま
-          sess.memo.rawReasonText && (sess.memo.rawReasonText = sess.memo.rawReasonText); // 内部保持（そのまま）
-          // 次へ
-          sess.step = 2;
-          sess.awaitingChoice = false;
-          sess.choiceList = [];
-          return res.json({
-            response: `なるほど、それは大事だよね！\nつまり『${picked}』ってことだね！保存しておくね。\n\nありがとう！じゃあ次は、【絶対に外せない条件】を教えてね。タグにある言葉で書いても、自由に書いてもOKだよ。`,
-            step: 2,
-            status: sess.status,
-          });
-        }
-        // 違う返答 → 選び直し要求（再提示）
-        return res.json({
-          response: `ごめん、選択肢から選んでね。この中だとどれが一番近い？ ${formatChoices(sess.choiceList)}`,
-          step: 1,
-          status: sess.status,
-        });
-      }
-
-      // まだ深掘り段階
-      if (sess.deepCount < 2) {
-        // 最初の入力でカテゴリ推定
-        if (sess.deepCount === 0) {
-          sess.memo.rawReasonText = text; // 原文保持
-          const cat = guessCategory(text);
-          sess.currentCategory = cat;
-          // カテゴリ別の深掘り1回目 or 汎用
-          const q =
-            (cat && transferReasonFlow[cat].deep1[0]) ||
-            "そのことについて、もう少し詳しく教えてもらっていい？";
-          sess.deepCount++;
-          return res.json({
-            response: q,
-            step: 1,
-            status: sess.status,
-          });
-        }
-        // 2回目の深掘り
-        if (sess.deepCount === 1) {
-          const cat = sess.currentCategory || guessCategory(text);
-          sess.currentCategory = cat;
-          const q =
-            (cat && transferReasonFlow[cat].deep2[0]) ||
-            "なるほど。具体的にはどんな場面でそう感じた？";
-          sess.deepCount++;
-          return res.json({
-            response: q,
-            step: 1,
-            status: sess.status,
-          });
-        }
-      }
-
-      // 3回目（=ユーザー発話後）は候補提示
-      if (sess.deepCount >= 2) {
-        const cat = sess.currentCategory || guessCategory(text);
-        // マッチしない場合（未マッチ処理）
-        if (!cat || !(transferReasonFlow[cat]?.internal_options?.length)) {
-          // 「給与・待遇」「職場環境・設備」「職場の安定性」にも内部候補なし → 共感のみ
-          sess.step = 2; // ステップは進める
-          return res.json({
-            response:
-              "なるほど、その気持ちよくわかる！大事な転職のきっかけだね◎\n\nありがとう！じゃあ次は、【絶対に外せない条件】を教えてね。",
-            step: 2,
-            status: sess.status,
-          });
-        }
-        // 候補提示（2〜3件固定）
-        const options = pickOptions(cat);
-        sess.choiceList = options;
-        sess.awaitingChoice = true;
-        return res.json({
-          response: `この中だとどれが一番近い？ ${formatChoices(options)}`,
-          step: 1,
-          status: sess.status,
-        });
-      }
-    }
-
-    // ===== Step2: Must（辞書マッチ） =====
-    if (sess.step === 2) {
-      if (hasNoMore(text)) {
-        // 次へ
-        sess.step = 3;
-        return res.json({
-          response: "ありがとう！それじゃあ次は、【あったら良い条件】を教えてね。",
-          step: 3,
-          status: sess.status,
-        });
-      }
-      const hits = findMustWantTags(text);
-      if (hits.length === 0) {
-        // 未マッチ
-        return res.json({
-          response: "そっか、わかった！大事な希望だね◎\n他にも絶対条件はある？（なければ「ない」でOK）",
-          step: 2,
-          status: sess.status,
-        });
-      }
-      // マッチしたタグを1つずつ確定（複数OK）
-      const added = [];
-      for (const tag of hits) {
-        if (!sess.status.must.includes(tag)) {
-          sess.status.must.push(tag);
-          added.push(tag);
-        }
-      }
-      const msg = added.length
-        ? `そっか、${added[0]}が絶対ってことだね！` // 1件目のフォーマット提示（複数でも1件ずつの想定）
-        : "追加はなかったみたいだね。";
-      return res.json({
-        response: `${msg}\n他にも絶対条件はある？（なければ「ない」でOK）`,
-        step: 2,
-        status: sess.status,
-      });
-    }
-
-    // ===== Step3: Want（辞書マッチ） =====
-    if (sess.step === 3) {
-      if (hasNoMore(text)) {
-        // 次へ
-        sess.step = 4;
-        return res.json({
-          response: "質問は残り2つ！まずは、【今できること・得意なこと】を自由に教えてね。",
-          step: 4,
-          status: sess.status,
-        });
-      }
-      const hits = findMustWantTags(text);
-      if (hits.length === 0) {
-        // 未マッチ
-        return res.json({
-          response: "了解！気持ちは受け取ったよ◎\n他にもあったら良い条件はある？（なければ「ない」でOK）",
-          step: 3,
-          status: sess.status,
-        });
-      }
-      const added = [];
-      for (const tag of hits) {
-        if (!sess.status.want.includes(tag)) {
-          sess.status.want.push(tag);
-          added.push(tag);
-        }
-      }
-      const msg = added.length
-        ? `了解！${added[0]}だと嬉しいってことだね！`
-        : "追加はなかったみたいだね。";
-      return res.json({
-        response: `${msg}\n他にもあったら良い条件はある？（なければ「ない」でOK）`,
-        step: 3,
-        status: sess.status,
-      });
-    }
-
-    // ===== Step4: Can（自由記述→保存） =====
-    if (sess.step === 4) {
-      if (text) {
-        sess.memo.can = text;
-        sess.status.can = "済"; // UIは「済」を表示
-      }
-      // 次へ
-      sess.step = 5;
-      return res.json({
-        response: "OK！じゃあ最後に、【これからやりたいこと】を教えてね。自由に書いて大丈夫！",
-        step: 5,
-        status: sess.status,
-      });
-    }
-
-    // ===== Step5: Will（自由記述→保存→締め） =====
-    if (sess.step === 5) {
-      if (text) {
-        sess.memo.will = text;
-        sess.status.will = "済";
-      }
-      return res.json({
-        response:
-          "今日はたくさん話してくれてありがとう！整理はほーぷちゃんが担当エージェントにしっかり共有するね。\nこのあとの日程調整や紹介は、担当から連絡するよ！",
-        step: 5,
-        status: sess.status,
-      });
-    }
-
-    // 予期しない状態でも落ちずに返す（現ステップ維持）
-    return res.json({
-      response: "了解！続き、同じ流れで教えてね。",
-      step: sess.step,
-      status: sess.status,
-    });
-  } catch (e) {
-    console.error("API error:", e);
-    return res.status(500).json({ message: "Internal server error", error: String(e?.message || e) });
-  }
+  return hits;
+}
+function normalizePick(text) {
+  return String(text || "").replace(/[［\[\]］]/g, "").trim();
+}
+function isNone(text) {
+  const t = (text || "").trim();
+  return /^(ない|特にない|無し|なし|no)$/i.test(t);
 }
