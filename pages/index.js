@@ -11,7 +11,6 @@ const steps = [
 ]
 
 export default function Home() {
-  // 初期メッセージ（文面確定）
   const [messages, setMessages] = useState([{
     type: 'ai',
     content:
@@ -26,22 +25,22 @@ IDが確認できたら、そのあとで
   }])
 
   const [currentStep, setCurrentStep] = useState(0)
-  const [candidateNumber, setCandidateNumber] = useState('') // サーバ互換名
+  const [candidateNumber, setCandidateNumber] = useState('')
   const [isNumberConfirmed, setIsNumberConfirmed] = useState(false)
   const [sessionId] = useState(() => Math.random().toString(36).slice(2))
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
 
-  // サマリー表示用（APIからの内容を反映）
+  // サマリー用（APIから反映）
   const [sessionData, setSessionData] = useState({
     candidateNumber: '',
-    qualification: '',   // （所有資格タグに整合／未マッチは空）
+    qualification: '',   // 所有資格タグ（未マッチは空）
     workplace: '',       // 原文
     transferReason: '',  // タグ名（未マッチは空）
-    mustConditions: [],  // タグ配列
-    wantConditions: [],  // タグ配列
-    canDo: '',           // 原文（空OK）
-    willDo: '',          // 原文（空OK）
+    mustConditions: [],
+    wantConditions: [],
+    canDo: '',
+    willDo: '',
   })
 
   const listRef = useRef(null)
@@ -76,7 +75,6 @@ IDが確認できたら、そのあとで
       if (typeof data.candidateNumber === 'string') setCandidateNumber(data.candidateNumber)
       if (typeof data.isNumberConfirmed === 'boolean') setIsNumberConfirmed(data.isNumberConfirmed)
 
-      // サマリー反映（配列は重複排除）
       if (data.sessionData && typeof data.sessionData === 'object') {
         setSessionData(prev => ({
           ...prev,
@@ -100,16 +98,12 @@ IDが確認できたら、そのあとで
 
   const progress = Math.min(((currentStep + 1) / 6) * 100, 100)
 
-  // —— 表示ルール（UI崩れの根本直し）——
-  // ・未到達 → 「未入力」
-  // ・到達後で値が空 → 「済」
-  // ・値あり → 値を表示（配列は／区切り）
+  // 表示ルール
   const showStatus = (value, reached) => {
     if (!reached) return '未入力'
     if (Array.isArray(value)) return value.length ? value.join('／') : '済'
     return (typeof value === 'string' && value.trim().length) ? value : '済'
   }
-  // 到達判定：Step1に入るまでは職種/現職も未入力のまま
   const reached = {
     id: true,                      // IDは常に表示（空なら未入力）
     qualification: currentStep >= 1,
@@ -133,42 +127,38 @@ IDが確認できたら、そのあとで
         <div className='max-w-5xl mx-auto px-4 sm:px-6 py-4'>
           <div className='flex items-start sm:items-center justify-between gap-3'>
             <div>
-              <h1 className='text-2xl sm:text-3xl font-bold gradient-text'>HOAP AI エージェント</h1>
-              <p className='text-slate-600 text-xs sm:text-sm'>キャリア相談・一次ヒアリング</p>
+              <h1 className='text-3xl font-bold gradient-text tracking-tight'>HOAP AI エージェント</h1>
+              <p className='text-slate-600 text-sm mt-0.5'>キャリア相談・一次ヒアリング</p>
             </div>
             <div className='text-right'>
-              <div className='text-xs sm:text-sm text-slate-500'>Step <span>{currentStep + 1}</span>/6</div>
-              <div className='text-[11px] sm:text-xs gradient-text font-medium'>
+              <div className='text-sm text-slate-500'>Step <span>{currentStep + 1}</span>/6</div>
+              <div className='text-xs gradient-text font-medium'>
                 <span>{steps[currentStep]?.label}</span>
                 {!isNumberConfirmed && currentStep === 0 && (
-                  <span className='block text-red-400 text-[11px] sm:text-xs mt-1'>
-                    ※求職者ID必須（メールに届いているID）
-                  </span>
+                  <span className='block text-red-400 text-xs mt-1'>※求職者ID必須（メールに届いているID）</span>
                 )}
               </div>
             </div>
           </div>
 
-          {/* 進捗サマリー（崩れ防止：行間/文字サイズ/グリッド最適化） */}
-          <div className='mt-3 text-[12px] sm:text-xs text-slate-700'>
-            <div className='grid grid-cols-2 md:grid-cols-4 gap-x-4 gap-y-1 leading-snug'>
-              <div><span className='text-slate-500'>求職者ID：</span>{sessionData.candidateNumber || '未入力'}</div>
-              <div><span className='text-slate-500'>職種：</span>{showStatus(sessionData.qualification, reached.qualification)}</div>
-              <div><span className='text-slate-500'>現職：</span>{showStatus(sessionData.workplace, reached.workplace)}</div>
-              <div><span className='text-slate-500'>転職目的：</span>{showStatus(sessionData.transferReason, reached.transfer)}</div>
-              <div><span className='text-slate-500'>Must：</span>{showStatus(sessionData.mustConditions, reached.must)}</div>
-              <div><span className='text-slate-500'>Want：</span>{showStatus(sessionData.wantConditions, reached.want)}</div>
-              <div><span className='text-slate-500'>Can：</span>{showStatus(sessionData.canDo, reached.can)}</div>
-              <div><span className='text-slate-500'>Will：</span>{showStatus(sessionData.willDo, reached.will)}</div>
+          {/* 進捗サマリー（カード化＋安定グリッド） */}
+          <div className='mt-3 card border border-pink-100 rounded-xl p-3 sm:p-4 shadow-soft'>
+            <div className='grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-2'>
+              <div className='badge'><span className='label'>求職者ID：</span><span className='value'>{sessionData.candidateNumber || '未入力'}</span></div>
+              <div className='badge'><span className='label'>職種：</span><span className='value'>{showStatus(sessionData.qualification, reached.qualification)}</span></div>
+              <div className='badge'><span className='label'>現職：</span><span className='value'>{showStatus(sessionData.workplace, reached.workplace)}</span></div>
+              <div className='badge'><span className='label'>転職目的：</span><span className='value'>{showStatus(sessionData.transferReason, reached.transfer)}</span></div>
+              <div className='badge'><span className='label'>Must：</span><span className='value'>{showStatus(sessionData.mustConditions, reached.must)}</span></div>
+              <div className='badge'><span className='label'>Want：</span><span className='value'>{showStatus(sessionData.wantConditions, reached.want)}</span></div>
+              <div className='badge'><span className='label'>Can：</span><span className='value'>{showStatus(sessionData.canDo, reached.can)}</span></div>
+              <div className='badge'><span className='label'>Will：</span><span className='value'>{showStatus(sessionData.willDo, reached.will)}</span></div>
             </div>
           </div>
 
           {/* プログレスバー */}
           <div className='mt-4 bg-gradient-to-r from-pink-100 to-blue-100 rounded-full h-1'>
-            <div
-              className='bg-gradient-to-r from-pink-500 via-purple-500 to-blue-500 h-1 rounded-full transition-all duration-500 shadow-sm'
-              style={{ width: `${progress}%` }}
-            />
+            <div className='bg-gradient-to-r from-pink-500 via-purple-500 to-blue-500 h-1 rounded-full transition-all duration-500 shadow-sm'
+                 style={{ width: `${progress}%` }}/>
           </div>
         </div>
       </header>
@@ -178,8 +168,8 @@ IDが確認できたら、そのあとで
         <div ref={listRef} className='space-y-4 sm:space-y-6'>
           {messages.map((m, i) => (
             <div key={i} className={`flex ${m.type === 'user' ? 'justify-end' : 'justify-start'} message-enter`}>
-              <div className={`flex max-w-xs sm:max-w-2xl ${m.type === 'user' ? 'flex-row-reverse' : 'flex-row'} items-start gap-3`}>
-                <div className={`flex-shrink-0 w-8 h-8 sm:w-10 sm:h-10 rounded-full flex items-center justify-center overflow-hidden ${m.type === 'user' ? 'bg-gradient-to-r from-pink-400 via-purple-400 to-blue-400 text-white shadow-md' : 'bg-gradient-to-r from-gray-100 to-gray-200 shadow-md border-2 border-white'}`}>
+              <div className={`flex max-w-[90%] sm:max-w-2xl ${m.type === 'user' ? 'flex-row-reverse' : 'flex-row'} items-start gap-3`}>
+                <div className={`flex-shrink-0 w-9 h-9 sm:w-10 sm:h-10 rounded-full flex items-center justify-center overflow-hidden ${m.type === 'user' ? 'bg-gradient-to-r from-pink-400 via-purple-400 to-blue-400 text-white shadow-md' : 'bg-gradient-to-r from-gray-100 to-gray-200 shadow-md border-2 border-white'}`}>
                   {m.type === 'user' ? (
                     <svg width={16} height={16} viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth={2}>
                       <path d='M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2'></path>
@@ -189,7 +179,9 @@ IDが確認できたら、そのあとで
                     <span className='text-lg sm:text-xl'>🤖</span>
                   )}
                 </div>
-                <div className={`${m.type === 'user' ? 'bg-gradient-to-r from-pink-500 via-purple-500 to-blue-500 text-white ml-auto shadow-lg' : 'bg-white/90 backdrop-blur-sm text-slate-700 border border-pink-100/50'} rounded-2xl px-3 py-2 sm:px-4 sm:py-3 shadow-sm`}>
+                <div className={`${m.type === 'user'
+                    ? 'bg-gradient-to-r from-pink-500 via-purple-500 to-blue-500 text-white ml-auto shadow-lg'
+                    : 'card text-slate-700 border border-pink-100/60'} rounded-2xl px-3 py-2 sm:px-4 sm:py-3 shadow-soft`}>
                   <div className='text-[13px] sm:text-sm whitespace-pre-wrap leading-relaxed'>{m.content}</div>
                 </div>
               </div>
@@ -198,10 +190,10 @@ IDが確認できたら、そのあとで
           {loading && (
             <div className='flex justify-start'>
               <div className='flex items-start gap-3'>
-                <div className='flex-shrink-0 w-8 h-8 sm:w-10 sm:h-10 rounded-full bg-gradient-to-r from-gray-100 to-gray-200 shadow-md border-2 border-white flex items-center justify-center'>
+                <div className='flex-shrink-0 w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-gradient-to-r from-gray-100 to-gray-200 shadow-md border-2 border-white flex items-center justify-center'>
                   <span className='text-lg sm:text-xl'>🤖</span>
                 </div>
-                <div className='bg-white/90 backdrop-blur-sm border border-pink-100/50 rounded-2xl px-3 py-2 sm:px-4 sm:py-3 shadow-sm'>
+                <div className='card border border-pink-100/60 rounded-2xl px-3 py-2 sm:px-4 sm:py-3 shadow-soft'>
                   <div className='flex items-center gap-2 text-slate-500 text-[13px] sm:text-sm'>
                     <span className='animate-pulse'>●●●</span>
                     <span className='ml-1'>回答を準備中...</span>
@@ -222,7 +214,7 @@ IDが確認できたら、そのあとで
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 placeholder={!isNumberConfirmed && currentStep === 0 ? '求職者IDを入力してください（メールに届いているID）...' : 'メッセージを入力...'}
-                className='w-full bg-white border border-pink-200 rounded-xl px-3 py-3 sm:px-4 sm:py-3 text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-purple-400 focus:border-transparent min-h-[48px] sm:min-h-[52px] max-h-32 shadow-sm'
+                className='w-full bg-white border border-pink-200 rounded-xl px-3 py-3 sm:px-4 sm:py-3 text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-purple-400 focus:border-transparent min-h-[48px] sm:min-h-[52px] max-h-32 shadow-soft'
                 rows={1}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter' && !e.shiftKey) {
@@ -235,7 +227,7 @@ IDが確認できたら、そのあとで
             <button
               onClick={onSend}
               disabled={loading}
-              className='bg-gradient-to-r from-pink-500 via-purple-500 to-blue-500 hover:from-pink-600 hover:via-purple-600 hover:to-blue-600 disabled:from-gray-300 disabled:to-gray-400 disabled:cursor-not-allowed text-white rounded-xl p-2.5 sm:p-3 transition-all duration-200 shadow-lg hover:shadow-xl transform hover:scale-105'
+              className='bg-gradient-to-r from-pink-500 via-purple-500 to-blue-500 hover:from-pink-600 hover:via-purple-600 hover:to-blue-600 disabled:from-gray-300 disabled:to-gray-400 disabled:cursor-not-allowed text-white rounded-xl p-2.5 sm:p-3 transition-all duration-200 shadow-soft hover:shadow-xl transform hover:scale-105'
               aria-label='送信'
             >
               <svg width={18} height={18} viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth={2}>
