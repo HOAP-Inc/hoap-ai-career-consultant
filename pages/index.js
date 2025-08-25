@@ -1,102 +1,138 @@
-import { useState } from 'react';
+// pages/index.js
+import { useEffect, useRef, useState } from "react";
+
+const statusInit = {
+  number: "未入力",
+  job: "未入力",
+  place: "未入力",
+  reason: "未入力",
+  must: "0件",
+  want: "0件",
+  can: "未入力",
+  will: "未入力",
+};
+
+const firstAI =
+  "こんにちは！\n担当エージェントとの面談がスムーズに進むように、**ほーぷちゃん**に少しだけ話を聞かせてね。\n\n最初に【求職者ID】を教えてね。※IDは「メール」で届いているやつ（LINEじゃないよ）。\nIDが確認できたら、そのあとで\n・今の職種（所有資格）\n・今どこで働いてる？\nも続けて聞いていくよ。気楽にどうぞ！";
 
 export default function Home() {
   const [messages, setMessages] = useState([
-    {
-      role: 'assistant',
-      content: `こんにちは！  
-担当エージェントとの面談がスムーズに進むように、HOAPのAIエージェントに少しだけ話を聞かせてね。  
-
-最初に【求職者ID】を教えてね。※IDは「メール」で届いているやつ（LINEじゃないよ）。  
-IDが確認できたら、そのあとで  
-・今の職種（所有資格）  
-・今どこで働いてる？  
-も続けて聞いていくよ。気楽にどうぞ！`,
-    },
+    { type: "ai", content: firstAI },
   ]);
-  const [input, setInput] = useState('');
-  const [step] = useState(1);
+  const [status, setStatus] = useState(statusInit);
+  const [input, setInput] = useState("");
+  const [sending, setSending] = useState(false);
+  const [sessionId] = useState(() => Math.random().toString(36).slice(2));
+  const [step, setStep] = useState(0); // 0:ID, 1:職種/勤務先, …
+  const listRef = useRef(null);
+  const taRef = useRef(null);
 
-  const handleSend = (e) => {
-    e.preventDefault();
-    if (!input.trim()) return;
+  // 常に最下部へ
+  useEffect(() => {
+    listRef.current?.lastElementChild?.scrollIntoView({ behavior: "smooth" });
+  }, [messages, sending]);
 
-    const newMessages = [
-      ...messages,
-      { role: 'user', content: input },
-      { role: 'assistant', content: `OK、求職者ID：${input} で確認したよ！\nまず「今の職種（所有資格）」を教えてね。\n（例）正看護師／介護福祉士／初任者研修 など` },
-    ];
-    setMessages(newMessages);
-    setInput('');
+  const pushUser = (text) => {
+    setMessages((m) => [...m, { type: "user", content: text }]);
+  };
+  const pushAI = (text) => {
+    setMessages((m) => [...m, { type: "ai", content: text }]);
+  };
+
+  const onSend = async () => {
+    const outgoing = input.trim();
+    if (!outgoing || sending) return;
+
+    // 先に表示＆入力クリア（確実に残らない）
+    pushUser(outgoing);
+    setInput("");
+    setSending(true);
+
+    try {
+      const res = await fetch("/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          sessionId,
+          step,
+          status,
+          message: outgoing,
+          history: messages.slice(-12), // 直近のみ送る（軽量）
+        }),
+      });
+      if (!res.ok) throw new Error("API error");
+      const data = await res.json();
+
+      // ステート反映
+      if (data.status) setStatus(data.status);
+      if (typeof data.step === "number") setStep(data.step);
+      if (data.response) pushAI(data.response);
+    } catch (e) {
+      pushAI("ごめん、通信でエラーが出たみたい。もう一度送ってみてね。");
+    } finally {
+      setSending(false);
+      // 送信後もフォーカスは保持
+      taRef.current?.focus();
+    }
+  };
+
+  const onKeyDown = (e) => {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      onSend();
+    }
   };
 
   return (
-    <div className="min-h-screen flex flex-col bg-gradient-to-b from-purple-100 via-pink-100 to-blue-100">
-      {/* ヘッダー */}
-      <header className="p-6 border-b border-gray-200">
-        <h1 className="text-2xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-purple-500 via-pink-500 to-blue-500">
-          ほーぷちゃん
-        </h1>
-        <p className="text-sm text-gray-500">一次ヒアリング（番号必須・タグ厳密整合）</p>
-        <div className="flex flex-wrap gap-2 mt-2 text-xs">
-          <span className="px-2 py-1 rounded-full bg-gray-100">番号：未入力</span>
-          <span className="px-2 py-1 rounded-full bg-gray-100">職種：未入力</span>
-          <span className="px-2 py-1 rounded-full bg-gray-100">勤務地：未入力</span>
-          <span className="px-2 py-1 rounded-full bg-gray-100">転職理由：未入力</span>
-          <span className="px-2 py-1 rounded-full bg-gray-100">Must: 0件</span>
-          <span className="px-2 py-1 rounded-full bg-gray-100">Want: 0件</span>
-          <span className="px-2 py-1 rounded-full bg-gray-100">Can: 未入力</span>
-          <span className="px-2 py-1 rounded-full bg-gray-100">Will: 未入力</span>
-        </div>
-        <div className="mt-2 h-1 w-full bg-gradient-to-r from-purple-500 via-pink-500 to-blue-500 rounded"></div>
-        <p className="text-xs text-right text-purple-600 mt-1">Step {step}/6 基本情報</p>
+    <div className="container">
+      {/* ヘッダ */}
+      <header className="header">
+        <div className="title">ほーぷちゃん</div>
+        <div className="step">Step {step + 1}/6　基本情報</div>
       </header>
 
-      {/* チャットエリア */}
-      <main className="flex-1 p-6 overflow-y-auto">
-        <div className="space-y-4">
-          {messages.map((msg, i) => (
-            <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-              {msg.role === 'assistant' && (
-                <div className="flex-shrink-0 w-8 h-8 rounded-full bg-gradient-to-r from-purple-500 via-pink-500 to-blue-500 flex items-center justify-center text-white mr-2">
-                  🤖
-                </div>
-              )}
-              <div
-                className={`px-4 py-2 rounded-2xl shadow ${
-                  msg.role === 'user'
-                    ? 'bg-gradient-to-r from-purple-500 via-pink-500 to-blue-500 text-white ml-auto'
-                    : 'bg-white text-gray-800'
-                }`}
-              >
-                {msg.content}
-              </div>
-              {msg.role === 'user' && (
-                <div className="flex-shrink-0 w-8 h-8 rounded-full bg-gradient-to-r from-purple-500 via-pink-500 to-blue-500 flex items-center justify-center text-white ml-2">
-                  🧑
-                </div>
-              )}
+      {/* ステータス */}
+      <div className="status-row">
+        <span className="badge">番号：{status.number}</span>
+        <span className="badge">職種：{status.job}</span>
+        <span className="badge">勤務先：{status.place}</span>
+        <span className="badge">転職理由：{status.reason}</span>
+        <span className="badge">Must：{status.must}</span>
+        <span className="badge">Want：{status.want}</span>
+        <span className="badge">Can：{status.can}</span>
+        <span className="badge">Will：{status.will}</span>
+      </div>
+
+      {/* チャット */}
+      <main className="chat list" ref={listRef}>
+        {messages.map((m, i) => (
+          <div key={i} className={`msg ${m.type}`}>
+            <div className={`avatar ${m.type}`}>
+              {m.type === "ai" ? "🤖" : ""}
             </div>
-          ))}
-        </div>
+            <div className="bubble">{m.content}</div>
+          </div>
+        ))}
       </main>
 
-      {/* 入力エリア */}
-      <form onSubmit={handleSend} className="p-4 border-t border-gray-200 flex items-center">
-        <input
-          type="text"
-          placeholder="メッセージを入力..."
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          className="flex-1 px-4 py-2 border rounded-full shadow-sm focus:outline-none focus:ring-2 focus:ring-purple-400"
-        />
-        <button
-          type="submit"
-          className="ml-2 px-4 py-2 rounded-full text-white shadow bg-gradient-to-r from-purple-500 via-pink-500 to-blue-500 hover:opacity-90"
-        >
-          ➤
-        </button>
-      </form>
+      {/* 入力 */}
+      <footer className="input-bar">
+        <div className="input-inner">
+          <textarea
+            ref={taRef}
+            className="textarea"
+            placeholder={
+              step === 0 ? "求職者IDを入力してください（メールに届いているID）…" : "メッセージを入力…"
+            }
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            onKeyDown={onKeyDown}
+          />
+          <button className="send" onClick={onSend} disabled={sending}>
+            ➤
+          </button>
+        </div>
+      </footer>
     </div>
   );
 }
