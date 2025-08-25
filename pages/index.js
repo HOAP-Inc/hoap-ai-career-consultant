@@ -15,7 +15,7 @@ export default function Home() {
     type: 'ai',
     content:
 `こんにちは！
-担当エージェントとの面談がスムーズに進むように、HOAPのAIエージェントに少しだけ話を聞かせてね。
+担当エージェントとの面談がスムーズに進むように、**ほーぷちゃん**に少しだけ話を聞かせてね。
 
 最初に【求職者ID】を教えてね。※IDは「メール」で届いているやつ（LINEじゃないよ）。
 IDが確認できたら、そのあとで
@@ -135,14 +135,14 @@ IDが確認できたら、そのあとで
   return (
     <div className="root">
       <Head>
-        <title>HOAP AI エージェント</title>
+        <title>ほーぷちゃん</title>
         <meta name="viewport" content="width=device-width, initial-scale=1" />
       </Head>
 
       <header className="header">
         <div className="header-row">
           <div className="title">
-            <div className="title-main">HOAP AI エージェント</div>
+            <div className="title-main">ほーぷちゃん</div>
             <div className="title-sub">一次ヒアリング（番号必須・タグ厳密整合）</div>
           </div>
           <div className="step">
