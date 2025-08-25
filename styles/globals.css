@@ -2,42 +2,35 @@
 @tailwind components;
 @tailwind utilities;
 
-/* ===== 共通レイアウト/色 ===== */
-:root {
-  --hoap-bg-from: #fdf2f8; /* pink-50 */
-  --hoap-bg-mid:  #faf5ff; /* purple-50 */
-  --hoap-bg-to:   #eff6ff; /* blue-50 */
+/* ===== HOAP 共通 ===== */
+:root{
+  --hoap-bg-from:#fdf2f8; /* pink-50 */
+  --hoap-bg-mid:#faf5ff;  /* purple-50 */
+  --hoap-bg-to:#eff6ff;   /* blue-50 */
 }
-html, body, #__next { height: 100%; }
-body {
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-  font-feature-settings: "palt";
-}
-.gradient-bg {
-  background: linear-gradient(135deg, var(--hoap-bg-from) 0%, var(--hoap-bg-mid) 50%, var(--hoap-bg-to) 100%);
-}
-.gradient-text {
-  background: linear-gradient(135deg, #ec4899 0%, #8b5cf6 50%, #3b82f6 100%);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
+html,body,#__next{height:100%;}
+body{
+  -webkit-font-smoothing:antialiased;
+  -moz-osx-font-smoothing:grayscale;
+  font-feature-settings:"palt";
 }
 
-/* ===== アニメーション ===== */
-.message-enter { animation: slideIn .25s ease-out; }
-@keyframes slideIn {
-  from { opacity: 0; transform: translateY(6px); }
-  to   { opacity: 1; transform: translateY(0); }
+/* 背景グラデ */
+.gradient-bg{
+  background:linear-gradient(135deg,var(--hoap-bg-from) 0%,var(--hoap-bg-mid) 50%,var(--hoap-bg-to) 100%);
 }
 
-/* ===== 入力UI安定化 ===== */
-textarea {
-  outline: none;
-  -webkit-tap-highlight-color: transparent;
-  resize: none;
+/* 文字グラデ */
+.gradient-text{
+  background:linear-gradient(135deg,#ec4899 0%,#8b5cf6 50%,#3b82f6 100%);
+  -webkit-background-clip:text;
+  -webkit-text-fill-color:transparent;
+  background-clip:text;
 }
-button:disabled { opacity:.7; }
 
-/* ===== 小パーツ ===== */
-.shadow-soft { box-shadow: 0 6px 20px rgba(0,0,0,.06); }
+/* ふわっと表示 */
+.message-enter{animation:slideIn .25s ease-out;}
+@keyframes slideIn{
+  from{opacity:0;transform:translateY(6px);}
+  to{opacity:1;transform:translateY(0);}
+}
