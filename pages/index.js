@@ -89,76 +89,77 @@ export default function Home() {
       onSend();
     }
   };
-
-  return (
+return (
+  <div className="container">
+    {/* ステータス進捗バー */}
     <div className="status-progress">
-  <div
-    className="status-progress__inner"
-    style={{ width: `${progress}%` }}
-  />
-</div>
-    <div className="container">
-    <div className="status-row">
-  {["求職者ID","職種","現職","転職目的","Must","Want","Can","Will"].map((k) => (
-  <span key={k} className="badge">{k}：{status[k] ?? ""}</span>
- ))}
- </div>
-
-   <div className="status-progress">
-  <div className="status-progress__inner" style={{ width: `${progress}%` }} />
-</div>
-      <header className="header">
-        <div className="title">
-          <div>AIキャリアエージェント</div>
-          <div>ほーぷちゃん</div>
-        </div>
-           <div className="step">Step {step + 1}/6　{statusStepLabel(step)}</div>
-      </header>
-
-      <main className="chat list" ref={listRef}>
-        {messages.map((m, i) => (
-          <div key={i} className={`msg ${m.type}`}>
-            {m.type === "ai" ? (
-              <>
-                <div className="avatar ai">🤖</div>
-                <div className="bubble">{m.content}</div>
-              </>
-            ) : (
-              <>
-                <div className="bubble">{m.content}</div>
-                <div className="avatar user">👤</div>
-              </>
-            )}
-          </div>
-        ))}
-      </main>
-
-      <footer className="input-bar">
-        <div className="input-inner">
-          <textarea
-            ref={taRef}
-            className="textarea"
-            placeholder={
-              step === 0
-                ? "求職者IDを入力してください（メールに届いているID）…"
-                : "メッセージを入力…"
-            }
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={onKeyDown}
-            onCompositionStart={() => setIsComposing(true)}
-            onCompositionEnd={() => setIsComposing(false)}
-            onBlur={() => setIsComposing(false)}
-            autoComplete="off"
-          />
-          <button type="button" className="send" onClick={onSend} disabled={sending}>
-            ➤
-          </button>
-        </div>
-      </footer>
+      <div className="status-progress__inner" style={{ width: `${progress}%` }} />
     </div>
-  );
-}
+
+    {/* ステータスバッジ */}
+    <div className="status-row">
+      {["求職者ID","職種","現職","転職目的","Must","Want","Can","Will"].map((k) => (
+        <span key={k} className="badge">
+          {k}：{status[k] ?? ""}
+        </span>
+      ))}
+    </div>
+
+    {/* ヘッダ */}
+    <header className="header">
+      <div className="title">
+        <div>AIキャリアエージェント</div>
+        <div>ほーぷちゃん</div>
+      </div>
+      <div className="step">Step {step + 1}/6　{statusStepLabel(step)}</div>
+    </header>
+
+    {/* チャット */}
+    <main className="chat list" ref={listRef}>
+      {messages.map((m, i) => (
+        <div key={i} className={`msg ${m.type}`}>
+          {m.type === "ai" ? (
+            <>
+              <div className="avatar ai">🤖</div>
+              <div className="bubble">{m.content}</div>
+            </>
+          ) : (
+            <>
+              <div className="bubble">{m.content}</div>
+              <div className="avatar user">👤</div>
+            </>
+          )}
+        </div>
+      ))}
+    </main>
+
+    {/* 入力欄 */}
+    <footer className="input-bar">
+      <div className="input-inner">
+        <textarea
+          ref={taRef}
+          className="textarea"
+          placeholder={
+            step === 0
+              ? "求職者IDを入力してください（メールに届いているID）…"
+              : "メッセージを入力…"
+          }
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
+          onKeyDown={onKeyDown}
+          onCompositionStart={() => setIsComposing(true)}
+          onCompositionEnd={() => setIsComposing(false)}
+          onBlur={() => setIsComposing(false)}
+          autoComplete="off"
+        />
+        <button type="button" className="send" onClick={onSend} disabled={sending}>
+          ➤
+        </button>
+      </div>
+    </footer>
+  </div>
+);
+  
 function statusStepLabel(step) {
   // サーバ側 STEP_LABELS と一致させる（UI崩れ防止）
   const map = {
