@@ -1,16 +1,16 @@
 // pages/index.js
-import { useEffect, useRef, useState } from "react";
++ import React, { useEffect, useRef, useState, Fragment } from "react";
 
-const statusInit = {
-  number: "未入力",
-  job: "未入力",
-  place: "未入力",
-  reason: "未入力",
-  must: "0件",
-  want: "0件",
-  can: "未入力",
-  will: "未入力",
-};
++ const statusInit = {
++   求職者ID: "",
++   職種: "",
++   現職: "",
++   転職目的: "",
++   Must: "",
++   Want: "",
++   Can: "",
++   Will: "",
++ };
 
 const firstAI =
   "こんにちは！\n担当エージェントとの面談がスムーズに進むように、**ほーぷちゃん**に少しだけ話を聞かせてね。\n\n最初に【求職者ID】を教えてね。※IDは「メール」で届いているやつ（LINEじゃないよ）。\nIDが確認できたら、そのあとで\n・今の職種（所有資格）\n・今どこで働いてる？\nも続けて聞いていくよ。気楽にどうぞ！";
@@ -59,10 +59,12 @@ export default function Home() {
         }),
       });
       if (!res.ok) throw new Error("API error");
-      const data = await res.json();
-      if (data.status) setStatus(data.status);
-      if (typeof data.step === "number") setStep(data.step);
-      if (data.response) pushAI(data.response);
+     +      const data = await res.json();
++      // ステータスバー（サーバが整形済みの meta.statusBar を使う）
++      if (data?.meta?.statusBar) setStatus(data.meta.statusBar);
++      // Step は数値とラベルを両方保持
++      if (typeof data.step === "number") setStep(data.step);
++      if (data.response) pushAI(data.response);
     } catch {
       pushAI("ごめん、通信でエラーが出たみたい。もう一度送ってみてね。");
     } finally {
@@ -89,19 +91,14 @@ export default function Home() {
           <div>AIキャリアエージェント</div>
           <div>ほーぷちゃん</div>
         </div>
-        <div className="step">Step {step + 1}/6　基本情報</div>
+        +        <div className="step">Step {step + 1}/6　{statusStepLabel(step)}</div>
       </header>
 
-      <div className="status-row">
-        <span className="badge">番号：{status.number}</span>
-        <span className="badge">職種：{status.job}</span>
-        <span className="badge">勤務先：{status.place}</span>
-        <span className="badge">転職理由：{status.reason}</span>
-        <span className="badge">Must：{status.must}</span>
-        <span className="badge">Want：{status.want}</span>
-        <span className="badge">Can：{status.can}</span>
-        <span className="badge">Will：{status.will}</span>
-      </div>
+      +      <div className="status-row">
++        {["求職者ID","職種","現職","転職目的","Must","Want","Can","Will"].map((k) => (
++          <span key={k} className="badge">{k}：{status[k] ?? ""}</span>
++        ))}
++      </div>
 
       <main className="chat list" ref={listRef}>
         {messages.map((m, i) => (
@@ -146,4 +143,19 @@ export default function Home() {
       </footer>
     </div>
   );
+}
+function statusStepLabel(step) {
+  // サーバ側 STEP_LABELS と一致させる（UI崩れ防止）
+  const map = {
+    0: "基本情報",
+    0.5: "基本情報",
+    1: "基本情報",
+    2: "転職理由",
+    3: "絶対条件",
+    4: "希望条件",
+    5: "これまで（Can）",
+    6: "これから（Will）",
+    7: "完了",
+  };
+  return map[step] ?? "";
 }
