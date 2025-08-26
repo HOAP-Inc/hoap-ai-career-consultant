@@ -131,10 +131,22 @@ body{
 
 /* 入力バー */
 .input-bar{
-  position:fixed; left:0; right:0; bottom:0;
-  background: #ffffffd9;
-  backdrop-filter: blur(10px);
-  border-top:1px solid #f3e8ff;
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+
+  /* ← 背景を透明にして色ムラをなくす */
+  background: transparent;
+
+  /* ← ぼかしも外す（ムラの原因） */
+  backdrop-filter: none;
+
+  /* ← 薄い区切り線だけ残す。少し濃いめに調整 */
+  border-top: 1px solid #eadcff;
+
+  /* iPhone のセーフエリア対応（あってもなくても可） */
+  padding-bottom: env(safe-area-inset-bottom, 0);
 }
 .input-inner{
   max-width:1040px; margin: 12px auto;
