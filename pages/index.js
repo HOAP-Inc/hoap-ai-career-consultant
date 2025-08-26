@@ -41,46 +41,42 @@ export default function Home() {
   };
 
     const onSend = async () => {
-    const outgoing = input.trim();
-    if (!outgoing || sending) return;
+  const outgoing = input.trim();
+  if (!outgoing || sending) return;
 
-    // 先に表示＆入力クリア（確実に残らない）
-    pushUser(outgoing);
--   setInput("");
-+   setInput("");
-+   // iOS/Safari で残る対策：DOM も明示的に空にする
-+   if (taRef.current) {
-+     taRef.current.value = "";
-+   }
-    setSending(true);
+  // 先に表示＆入力クリア（Enterでも確実に消える）
+  pushUser(outgoing);
+  setInput("");
+  if (taRef.current) {
+    taRef.current.value = "";
+  }
+  setSending(true);
 
-    try {
-      const res = await fetch("/api/chat", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          sessionId,
-          step,
-          status,
-          message: outgoing,
-          history: messages.slice(-12), // 直近のみ送る（軽量）
-        }),
-      });
-      if (!res.ok) throw new Error("API error");
-      const data = await res.json();
+  try {
+    const res = await fetch("/api/chat", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        sessionId,
+        step,
+        status,
+        message: outgoing,
+        history: messages.slice(-12),
+      }),
+    });
+    if (!res.ok) throw new Error("API error");
+    const data = await res.json();
 
-      // ステート反映
-      if (data.status) setStatus(data.status);
-      if (typeof data.step === "number") setStep(data.step);
-      if (data.response) pushAI(data.response);
-    } catch (e) {
-      pushAI("ごめん、通信でエラーが出たみたい。もう一度送ってみてね。");
-    } finally {
-      setSending(false);
-      // 送信後もフォーカスは保持
-      taRef.current?.focus();
-    }
-  };
+    if (data.status) setStatus(data.status);
+    if (typeof data.step === "number") setStep(data.step);
+    if (data.response) pushAI(data.response);
+  } catch (e) {
+    pushAI("ごめん、通信でエラーが出たみたい。もう一度送ってみてね。");
+  } finally {
+    setSending(false);
+    taRef.current?.focus();
+  }
+};
 
   const onKeyDown = (e) => {
     if (e.key === "Enter" && !e.shiftKey) {
