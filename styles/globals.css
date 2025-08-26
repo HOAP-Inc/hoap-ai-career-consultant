@@ -25,10 +25,21 @@
 *{ box-sizing:border-box; }
 html,body,#__next{ height:100%; }
 
+/* ---- ページ全体に固定グラデ背景（iOSでも切れない） ---- */
+html::before{
+  content:"";
+  position: fixed;   /* スクロールしても常に画面全体を覆う */
+  inset: 0;
+  z-index: -1;       /* 最背面 */
+  background: linear-gradient(180deg, var(--bg-from) 0%, var(--bg-via) 45%, var(--bg-to) 100%);
+  background-repeat: no-repeat;
+  background-size: 100% 100%;
+  pointer-events: none;
+}
+
 body{
   margin:0;
   color:var(--text);
-  background: linear-gradient(180deg, var(--bg-from) 0%, var(--bg-via) 45%, var(--bg-to) 100%);
   -webkit-font-smoothing:antialiased;
   -moz-osx-font-smoothing:grayscale;
   font-family: ui-sans-serif, system-ui, "Helvetica Neue", Arial, "Noto Sans JP", "Hiragino Kaku Gothic ProN", Meiryo, sans-serif;
