@@ -26,6 +26,7 @@ export default function Home() {
   const [step, setStep] = useState(0); // 0:ID, 1:職種/勤務先, …
   const listRef = useRef(null);
   const taRef = useRef(null);
+  const [composing, setComposing] = useState(false); // ★IME入力中かどうか
 
   // 常に最下部へ
   useEffect(() => {
@@ -145,20 +146,20 @@ export default function Home() {
       {/* 入力 */}
       <footer className="input-bar">
         <div className="input-inner">
-          <textarea
-    ref={taRef}
-    className="textarea"
-    placeholder={
-      step === 0 ? "求職者IDを入力してください（メールに届いているID）…" : "メッセージを入力…"
-    }
-    value={input}
-    onChange={(e) => setInput(e.target.value)}
-    onKeyDown={onKeyDown}
-    autoComplete="off"
-    autoCorrect="off"
-    spellCheck={false}
-    enterKeyHint="send"
-  />
+         <textarea
+  ref={taRef}
+  className="textarea"
+  placeholder={step === 0 ? "求職者IDを入力してください（メールに届いているID）…" : "メッセージを入力…"}
+  value={input}
+  onChange={(e) => setInput(e.target.value)}
+  onKeyDown={onKeyDown}
+  onCompositionStart={() => setComposing(true)}   // ★追加
+  onCompositionEnd={() => setComposing(false)}    // ★追加
+  autoComplete="off"
+  autoCorrect="off"                               // ★追加
+  spellCheck={false}                              // ★追加
+  enterKeyHint="send"                             // ★追加（モバイルのキーボードに送信を出す）
+/>
           <button className="send" onClick={onSend} disabled={sending}>
             ➤
           </button>
