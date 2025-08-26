@@ -138,15 +138,16 @@ export default function Home() {
       <footer className="input-bar">
         <div className="input-inner">
           <textarea
-            ref={taRef}
-            className="textarea"
-            placeholder={
-              step === 0 ? "求職者IDを入力してください（メールに届いているID）…" : "メッセージを入力…"
-            }
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={onKeyDown}
-          />
+  ref={taRef}
+  className="textarea"
+  placeholder={
+    step === 0 ? "求職者IDを入力してください（メールに届いているID）…" : "メッセージを入力…"
+  }
+  value={input}
+  onChange={(e) => setInput(e.target.value)}
+  onKeyDown={onKeyDown}
+  autoComplete="off"     // ★これを追加
+/>
           <button className="send" onClick={onSend} disabled={sending}>
             ➤
           </button>
