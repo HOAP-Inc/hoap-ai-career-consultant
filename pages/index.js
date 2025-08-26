@@ -45,7 +45,10 @@ export default function Home() {
     });
     const data = await res.json();
 
-    setMessages([{ type: "ai", content: data.response }]);
+    setMessages((prev) => [
+  ...prev,
+  { type: "ai", content: data.response }
+]);
     if (data.meta) {
       setStep(data.meta.step ?? 0);
       setStatus(data.meta.statusBar ?? statusInit);
