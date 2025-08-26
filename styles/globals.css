@@ -47,13 +47,16 @@ body{
   gap:16px; margin-bottom:14px;
 }
 .title {
-  font-size: clamp(26px, 3vw, 34px);
-  font-weight: 900;
-  letter-spacing: .02em;
-  background: linear-gradient(90deg, #ec4899, #8b5cf6, #3b82f6); /* 濃いピンク→紫→青 */
+  font-size: clamp(20px, 4vw, 28px);
+  font-weight: 800;
+  line-height: 1.2;   /* ← 行間を詰める */
+  background: linear-gradient(90deg,#ec4899,#3b82f6);
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
+  display: flex;
+  flex-direction: column; /* ← これで縦並び */
+  align-items: flex-start; /* 左揃え */
 }
 .step{
   font-size:12px; color:#6b7280;
