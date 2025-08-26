@@ -306,15 +306,12 @@ export default async function handler(req, res) {
 }
       const line = added.map(t => `そっか、『${t}』が絶対ってことだね！`).join("\n");
             // --- Must の ID 紐づけ追加 ---
-      for (const label of added) {
-        const found = mustWantItems.find(item => item === label);
-        if (found) {
-          const id = mustWantItems.indexOf(found) + 1; // IDは配列の位置＋1
-          if (!s.status.must_ids.includes(id)) {
-            s.status.must_ids.push(id);
-          }
-        }
-      }
+     for (const label of added) {
+  const id = tagIdByName.get(label);
+  if (id && !s.status.must_ids.includes(id)) {
+    s.status.must_ids.push(id);
+  }
+}
       return res.json(withMeta({
         response: `${line}\n他にも絶対条件はある？（なければ「ない」って返してね）`,
         step: 3, status: s.status, isNumberConfirmed: true, candidateNumber: s.status.number, debug: debugState(s)
@@ -349,14 +346,12 @@ if (s.step === 4) {
     const line = added.map(t => `了解！『${t}』だと嬉しいってことだね！`).join("\n");
 
     // --- Want の ID 紐づけ追加 ---
-    if (!s.status.want_ids) s.status.want_ids = [];
     for (const label of added) {
-      const found = mustWantItems.find(item => item === label);
-      if (found) {
-        const id = mustWantItems.indexOf(found) + 1;
-        if (!s.status.want_ids.includes(id)) s.status.want_ids.push(id);
-      }
-    }
+  const id = tagIdByName.get(label);
+  if (id && !s.status.must_ids.includes(id)) {
+    s.status.must_ids.push(id);
+  }
+}
 
     return res.json(withMeta({
       response: `${line}\n他にもあったらいいなっていうのはある？（なければ「ない」って返してね）`,
