@@ -300,7 +300,7 @@ export default async function handler(req, res) {
     const tags = matchTags(text, mustWantItems);
     if (tags.length) {
       const added = [];
-      ffor (const label of added) {
+      for (const label of added) {
   const id = tagIdByName.get(label);
   if (id && !s.status.must_ids.includes(id)) s.status.must_ids.push(id);
 }
