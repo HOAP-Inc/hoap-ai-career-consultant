@@ -1,19 +1,17 @@
 // pages/api/chat.js
 // ほーぷちゃん：会話ロジック（Step厳密・深掘り2回・候補提示・ステータス算出）
-const tags = require("../../tags.json");                 // ← ここを require に
-const tagIdByName = new Map(tags.map(t => [t.name, t.id]));
-// ---- Step ラベル（UI用） ----
-const STEP_LABELS = {
-  0: "基本情報",
-  0.5: "基本情報",
-  1: "基本情報",
-  2: "転職理由",
-  3: "絶対条件",
-  4: "希望条件",
-  5: "これまで（Can）",
-  6: "これから（Will）",
-  7: "完了",
-};
+const { tags: tagList } = require("../../tags.json");
+
+// 「名称 → ID」のマップを両表記で作る
+const tagIdByName = new Map();
+for (const t of tagList) {
+  const name = String(t.name);
+  const fullWidth = name.replace(/\(/g, "（").replace(/\)/g, "）").replace(/~/g, "～");
+  const halfWidth = name.replace(/（/g, "(").replace(/）/g, ")").replace(/～/g, "~");
+  tagIdByName.set(name, t.id);
+  tagIdByName.set(fullWidth, t.id);
+  tagIdByName.set(halfWidth, t.id);
+}
 
 // ---- 転職理由カテゴリ（深掘りQ & 候補） ----
 const transferReasonFlow = {
@@ -289,44 +287,44 @@ export default async function handler(req, res) {
   }
 
   // ---- Step3：絶対に外せない条件（Must） ----
-  if (s.step === 3) {
-    if (isNone(text)) {
-      s.step = 4;
-      return res.json(withMeta({
-        response: "ありがとう！それじゃあ次は【あったらいいな（希望条件）】を教えてね。",
-        step: 4, status: s.status, isNumberConfirmed: true, candidateNumber: s.status.number, debug: debugState(s)
-      }, 4));
-    }
-    const tags = matchTags(text, mustWantItems);
-    if (tags.length) {
-      const added = [];
-      for (const label of added) {
-  const id = tagIdByName.get(label);
-  if (id && !s.status.must_ids.includes(id)) s.status.must_ids.push(id);
-}
-      const line = added.map(t => `そっか、『${t}』が絶対ってことだね！`).join("\n");
-            // --- Must の ID 紐づけ追加 ---
-     for (const label of added) {
-  const id = tagIdByName.get(label);
-  if (id && !s.status.must_ids.includes(id)) {
-    s.status.must_ids.push(id);
-  }
-}
-      return res.json(withMeta({
-        response: `${line}\n他にも絶対条件はある？（なければ「ない」って返してね）`,
-        step: 3, status: s.status, isNumberConfirmed: true, candidateNumber: s.status.number, debug: debugState(s)
-      }, 3));
-    } else {
-      s.status.memo.must_raw ??= [];
-      s.status.memo.must_raw.push(text);
-      return res.json(withMeta({
-        response: "そっか、わかった！大事な希望だね◎\n他にも絶対条件はある？（なければ「ない」って返してね）",
-        step: 3, status: s.status, isNumberConfirmed: true, candidateNumber: s.status.number, debug: debugState(s)
-      }, 3));
-    }
+if (s.step === 3) {
+  if (isNone(text)) {
+    s.step = 4;
+    return res.json(withMeta({
+      response: "ありがとう！それじゃあ次は【あったらいいな（希望条件）】を教えてね。",
+      step: 4, status: s.status, isNumberConfirmed: true, candidateNumber: s.status.number, debug: debugState(s)
+    }, 4));
   }
 
- // ---- Step4：あったらいいな（Want） ----
+  const tags = matchTags(text, mustWantItems);
+  if (tags.length) {
+    const added = [];
+    for (const t of tags.slice(0, 3)) {
+      if (!s.status.must.includes(t)) { s.status.must.push(t); added.push(t); }
+    }
+
+    // ID ひも付け（Must）
+    for (const label of added) {
+      const id = tagIdByName.get(label);
+      if (id && !s.status.must_ids.includes(id)) s.status.must_ids.push(id);
+    }
+
+    const line = added.map(t => `そっか、『${t}』が絶対ってことだね！`).join("\n");
+    return res.json(withMeta({
+      response: `${line}\n他にも絶対条件はある？（なければ「ない」って返してね）`,
+      step: 3, status: s.status, isNumberConfirmed: true, candidateNumber: s.status.number, debug: debugState(s)
+    }, 3));
+  }
+
+  s.status.memo.must_raw ??= [];
+  s.status.memo.must_raw.push(text);
+  return res.json(withMeta({
+    response: "そっか、わかった！大事な希望だね◎\n他にも絶対条件はある？（なければ「ない」って返してね）",
+    step: 3, status: s.status, isNumberConfirmed: true, candidateNumber: s.status.number, debug: debugState(s)
+  }, 3));
+}
+
+// ---- Step4：あったらいいな（Want） ----
 if (s.step === 4) {
   if (isNone(text)) {
     s.step = 5;
@@ -339,20 +337,17 @@ if (s.step === 4) {
   const tags = matchTags(text, mustWantItems);
   if (tags.length) {
     const added = [];
+    for (const t of tags.slice(0, 3)) {
+      if (!s.status.want.includes(t)) { s.status.want.push(t); added.push(t); }
+    }
+
+    // ID ひも付け（Want）
     for (const label of added) {
-  const id = tagIdByName.get(label);
-  if (id && !s.status.want_ids.includes(id)) s.status.want_ids.push(id);
-}
+      const id = tagIdByName.get(label);
+      if (id && !s.status.want_ids.includes(id)) s.status.want_ids.push(id);
+    }
+
     const line = added.map(t => `了解！『${t}』だと嬉しいってことだね！`).join("\n");
-
-    // --- Want の ID 紐づけ追加 ---
-    for (const label of added) {
-  const id = tagIdByName.get(label);
-  if (id && !s.status.must_ids.includes(id)) {
-    s.status.must_ids.push(id);
-  }
-}
-
     return res.json(withMeta({
       response: `${line}\n他にもあったらいいなっていうのはある？（なければ「ない」って返してね）`,
       step: 4, status: s.status, isNumberConfirmed: true, candidateNumber: s.status.number, debug: debugState(s)
