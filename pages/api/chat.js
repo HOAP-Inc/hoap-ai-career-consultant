@@ -13,6 +13,19 @@ for (const t of tagList) {
   tagIdByName.set(halfWidth, t.id);
 }
 
+// ---- Step ラベル（UI用） ----
+const STEP_LABELS = {
+  0: "基本情報",
+  0.5: "基本情報",
+  1: "基本情報",
+  2: "転職理由",
+  3: "絶対条件",
+  4: "希望条件",
+  5: "これまで（Can）",
+  6: "これから（Will）",
+  7: "完了",
+};
+
 // ---- 転職理由カテゴリ（深掘りQ & 候補） ----
 const transferReasonFlow = {
   "経営・組織に関すること": {
