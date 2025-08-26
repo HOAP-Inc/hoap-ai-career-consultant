@@ -146,6 +146,9 @@ export default async function handler(req, res) {
 
   const s = sessions[sessionId] ?? (sessions[sessionId] = initSession());
 
+  if (!s.status.must_ids) s.status.must_ids = [];
+  if (!s.status.want_ids) s.status.want_ids = [];
+
   // ID再質問ガード
   const looksId = /^\s*\d{4,8}\s*$/.test(text);
   if (s.isNumberConfirmed && (s.step === 0 || s.step == null)) s.step = 0.5;
@@ -299,6 +302,16 @@ export default async function handler(req, res) {
         if (!s.status.must.includes(t)) { s.status.must.push(t); added.push(t); }
       }
       const line = added.map(t => `そっか、『${t}』が絶対ってことだね！`).join("\n");
+            // --- Must の ID 紐づけ追加 ---
+      for (const label of added) {
+        const found = mustWantItems.find(item => item === label);
+        if (found) {
+          const id = mustWantItems.indexOf(found) + 1; // IDは配列の位置＋1
+          if (!s.status.must_ids.includes(id)) {
+            s.status.must_ids.push(id);
+          }
+        }
+      }
       return res.json(withMeta({
         response: `${line}\n他にも絶対条件はある？（なければ「ない」って返してね）`,
         step: 3, status: s.status, isNumberConfirmed: true, candidateNumber: s.status.number, debug: debugState(s)
@@ -329,6 +342,13 @@ export default async function handler(req, res) {
         if (!s.status.want.includes(t)) { s.status.want.push(t); added.push(t); }
       }
       const line = added.map(t => `了解！『${t}』だと嬉しいってことだね！`).join("\n");
+      // Want の確定ラベル → ID ひも付け
+{
+  const id = tagIdByName.get(confirmedLabel); // 例: "日勤のみ" → 123
+  if (id && !sess.status.want_tag_ids.includes(id)) {
+    sess.status.want_tag_ids.push(id);
+  }
+}
       return res.json(withMeta({
         response: `${line}\n他にもあったらいいなっていうのはある？（なければ「ない」って返してね）`,
         step: 4, status: s.status, isNumberConfirmed: true, candidateNumber: s.status.number, debug: debugState(s)
