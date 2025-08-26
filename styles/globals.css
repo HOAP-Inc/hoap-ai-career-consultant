@@ -143,8 +143,10 @@ body{
 .send{
   width:48px; height:48px; border-radius:14px;
   border:none; cursor:pointer;
-  background: linear-gradient(135deg,#f0abfc,#93c5fd);
-  color:white; display:flex; align-items:center; justify-content:center;
+  background: linear-gradient(135deg,#a855f7,#2563eb); /* 濃い紫→青 */
+  color:white;
+  font-weight: 700;   /* アイコン文字も太字に */
+  display:flex; align-items:center; justify-content:center;
   box-shadow: var(--card-shadow);
 }
 .send:disabled{ opacity:.6; cursor:not-allowed; }
