@@ -18,7 +18,7 @@ const firstAI =
   "最初に【求職者ID】を教えてね。※メールに届いているIDだよ。";
 
 export default function Home() {
-  const [messages, setMessages] = useState([]); 
+  const [messages, setMessages] = useState([{ type: "ai", content: firstAI }]);
   const [status, setStatus] = useState(statusInit);
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
@@ -29,33 +29,11 @@ export default function Home() {
   const taRef = useRef(null);
 
   // 進捗バー用
-  const MAX_STEP = 7;
+  const MAX_STEP = 8;
   const progress = Math.min(
     100,
     Math.max(0, Math.round((step / MAX_STEP) * 100))
   );
-
-  useEffect(() => {
-  // 初回にサーバーへ「空メッセージ」を送って挨拶を取得
-  const init = async () => {
-    const res = await fetch("/api/chat", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ message: "", sessionId }),
-    });
-    const data = await res.json();
-
-    setMessages((prev) => [
-  ...prev,
-  { type: "ai", content: data.response }
-]);
-    if (data.meta) {
-      setStep(data.meta.step ?? 0);
-      setStatus(data.meta.statusBar ?? statusInit);
-    }
-  };
-  init();
-}, [sessionId]);
 
   // スクロール最下部へ
   useEffect(() => {
@@ -109,14 +87,14 @@ export default function Home() {
   function statusStepLabel(step) {
     const map = {
       0: "基本情報",
-      0.5: "基本情報",
       1: "基本情報",
-      2: "転職理由",
-      3: "絶対条件",
-      4: "希望条件",
-      5: "これまで（Can）",
-      6: "これから（Will）",
-      7: "完了",
+      2: "基本情報",
+      3: "転職理由",
+      4: "絶対条件",
+      5: "希望条件",
+      6: "これまで（Can）",
+      7: "これから（Will）",
+      8: "完了",
     };
     return map[step] ?? "";
   }
