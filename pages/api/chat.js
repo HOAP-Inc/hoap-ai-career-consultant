@@ -1,6 +1,6 @@
 // pages/api/chat.js
 // ほーぷちゃん：会話ロジック（Step厳密・深掘り2回・候補提示・ステータス算出）
-import tags from "../../tags.json";
+const tags = require("../../tags.json");                 // ← ここを require に
 const tagIdByName = new Map(tags.map(t => [t.name, t.id]));
 // ---- Step ラベル（UI用） ----
 const STEP_LABELS = {
@@ -300,9 +300,10 @@ export default async function handler(req, res) {
     const tags = matchTags(text, mustWantItems);
     if (tags.length) {
       const added = [];
-      for (const t of tags.slice(0, 3)) {
-        if (!s.status.must.includes(t)) { s.status.must.push(t); added.push(t); }
-      }
+      ffor (const label of added) {
+  const id = tagIdByName.get(label);
+  if (id && !s.status.must_ids.includes(id)) s.status.must_ids.push(id);
+}
       const line = added.map(t => `そっか、『${t}』が絶対ってことだね！`).join("\n");
             // --- Must の ID 紐づけ追加 ---
       for (const label of added) {
@@ -341,9 +342,10 @@ if (s.step === 4) {
   const tags = matchTags(text, mustWantItems);
   if (tags.length) {
     const added = [];
-    for (const t of tags.slice(0, 3)) {
-      if (!s.status.want.includes(t)) { s.status.want.push(t); added.push(t); }
-    }
+    for (const label of added) {
+  const id = tagIdByName.get(label);
+  if (id && !s.status.want_ids.includes(id)) s.status.want_ids.push(id);
+}
     const line = added.map(t => `了解！『${t}』だと嬉しいってことだね！`).join("\n");
 
     // --- Want の ID 紐づけ追加 ---
