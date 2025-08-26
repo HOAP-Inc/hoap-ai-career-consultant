@@ -18,7 +18,7 @@ const firstAI =
   "最初に【求職者ID】を教えてね。※メールに届いているIDだよ。";
 
 export default function Home() {
-  const [messages, setMessages] = useState([{ type: "ai", content: firstAI }]);
+  const [messages, setMessages] = useState([]); 
   const [status, setStatus] = useState(statusInit);
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
