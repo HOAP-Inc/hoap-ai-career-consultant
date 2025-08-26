@@ -35,6 +35,25 @@ export default function Home() {
     Math.max(0, Math.round((step / MAX_STEP) * 100))
   );
 
+  useEffect(() => {
+  // 初回にサーバーへ「空メッセージ」を送って挨拶を取得
+  const init = async () => {
+    const res = await fetch("/api/chat", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ message: "", sessionId }),
+    });
+    const data = await res.json();
+
+    setMessages([{ type: "ai", content: data.response }]);
+    if (data.meta) {
+      setStep(data.meta.step ?? 0);
+      setStatus(data.meta.statusBar ?? statusInit);
+    }
+  };
+  init();
+}, [sessionId]);
+
   // スクロール最下部へ
   useEffect(() => {
     if (listRef.current) {
