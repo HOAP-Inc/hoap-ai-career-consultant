@@ -39,13 +39,18 @@ export default function Home() {
     setMessages((m) => [...m, { type: "ai", content: text }]);
   };
 
-  const onSend = async () => {
+    const onSend = async () => {
     const outgoing = input.trim();
     if (!outgoing || sending) return;
 
     // 先に表示＆入力クリア（確実に残らない）
     pushUser(outgoing);
-    setInput("");
+-   setInput("");
++   setInput("");
++   // iOS/Safari で残る対策：DOM も明示的に空にする
++   if (taRef.current) {
++     taRef.current.value = "";
++   }
     setSending(true);
 
     try {
