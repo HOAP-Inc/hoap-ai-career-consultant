@@ -90,9 +90,9 @@ body{
   border:2px solid #fff;
   overflow:hidden;
 }
-.avatar.ai {
-  background:#eef2ff;   /* 濃いめの薄紫 */
-  opacity: 1;           /* ← 薄くしない */
+.avatar.user{
+  background: linear-gradient(135deg,#ec4899,#3b82f6); /* ピンク→ブルーの濃いグラデ */
+  opacity: 1;  /* 完全表示に */
 }
 .avatar.user {
   background: linear-gradient(135deg, var(--user-grad-from), var(--user-grad-via) 50%, var(--user-grad-to));
