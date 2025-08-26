@@ -305,9 +305,9 @@ if (s.step === 3) {
 
     // ID ひも付け（Must）
     for (const label of added) {
-      const id = tagIdByName.get(label);
-      if (id && !s.status.must_ids.includes(id)) s.status.must_ids.push(id);
-    }
+  const id = tagIdByName.get(label);
+  if (id && !s.status.must_ids.includes(id)) s.status.must_ids.push(id);
+}
 
     const line = added.map(t => `そっか、『${t}』が絶対ってことだね！`).join("\n");
     return res.json(withMeta({
@@ -343,9 +343,9 @@ if (s.step === 4) {
 
     // ID ひも付け（Want）
     for (const label of added) {
-      const id = tagIdByName.get(label);
-      if (id && !s.status.want_ids.includes(id)) s.status.want_ids.push(id);
-    }
+  const id = tagIdByName.get(label);
+  if (id && !s.status.want_ids.includes(id)) s.status.want_ids.push(id);
+}
 
     const line = added.map(t => `了解！『${t}』だと嬉しいってことだね！`).join("\n");
     return res.json(withMeta({
