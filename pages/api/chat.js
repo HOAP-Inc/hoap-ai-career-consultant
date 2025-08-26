@@ -123,17 +123,19 @@ function initSession() {
     isNumberConfirmed: false,
     drill: { phase: null, count: 0, category: null, awaitingChoice: false, options: [] },
     status: {
-      number: "",
-      role: "",
-      place: "",
-      reason: "",
-      reason_tag: "",
-      must: [],
-      want: [],
-      can: "",
-      will: "",
-      memo: { reason_raw: "", must_raw: [], want_raw: [] },
-    },
+  number: "",
+  role: "",
+  place: "",
+  reason: "",
+  reason_tag: "",
+  must: [],
+  want: [],
+  must_ids: [],   // ←これ追加
+  want_ids: [],   // ←これ追加
+  can: "",
+  will: "",
+  memo: { reason_raw: "", must_raw: [], want_raw: [] },
+},
   };
 }
 
@@ -326,42 +328,49 @@ export default async function handler(req, res) {
     }
   }
 
-  // ---- Step4：あったらいいな（Want） ----
-  if (s.step === 4) {
-    if (isNone(text)) {
-      s.step = 5;
-      return res.json(withMeta({
-        response: "質問は残り2つ！\nまずは【いま出来ること・得意なこと（Can）】を教えてね。自由に書いてOKだよ。",
-        step: 5, status: s.status, isNumberConfirmed: true, candidateNumber: s.status.number, debug: debugState(s)
-      }, 5));
+ // ---- Step4：あったらいいな（Want） ----
+if (s.step === 4) {
+  if (isNone(text)) {
+    s.step = 5;
+    return res.json(withMeta({
+      response: "質問は残り2つ！\nまずは【いま出来ること・得意なこと（Can）】を教えてね。自由に書いてOKだよ。",
+      step: 5, status: s.status, isNumberConfirmed: true, candidateNumber: s.status.number, debug: debugState(s)
+    }, 5));
+  }
+
+  const tags = matchTags(text, mustWantItems);
+  if (tags.length) {
+    const added = [];
+    for (const t of tags.slice(0, 3)) {
+      if (!s.status.want.includes(t)) { s.status.want.push(t); added.push(t); }
     }
-    const tags = matchTags(text, mustWantItems);
-    if (tags.length) {
-      const added = [];
-      for (const t of tags.slice(0, 3)) {
-        if (!s.status.want.includes(t)) { s.status.want.push(t); added.push(t); }
+    const line = added.map(t => `了解！『${t}』だと嬉しいってことだね！`).join("\n");
+
+    // --- Want の ID 紐づけ追加 ---
+    if (!s.status.want_ids) s.status.want_ids = [];
+    for (const label of added) {
+      const found = mustWantItems.find(item => item === label);
+      if (found) {
+        const id = mustWantItems.indexOf(found) + 1; // ID は配列位置＋1
+        if (!s.status.want_ids.includes(id)) {
+          s.status.want_ids.push(id);
+        }
       }
-      const line = added.map(t => `了解！『${t}』だと嬉しいってことだね！`).join("\n");
-      // Want の確定ラベル → ID ひも付け
-{
-  const id = tagIdByName.get(confirmedLabel); // 例: "日勤のみ" → 123
-  if (id && !sess.status.want_tag_ids.includes(id)) {
-    sess.status.want_tag_ids.push(id);
+    }
+
+    return res.json(withMeta({
+      response: `${line}\n他にもあったらいいなっていうのはある？（なければ「ない」って返してね）`,
+      step: 4, status: s.status, isNumberConfirmed: true, candidateNumber: s.status.number, debug: debugState(s)
+    }, 4));
+  } else {
+    s.status.memo.want_raw ??= [];
+    s.status.memo.want_raw.push(text);
+    return res.json(withMeta({
+      response: "了解！気持ちは受け取ったよ◎\n他にもあったらいいなっていうのはある？（なければ「ない」って返してね）",
+      step: 4, status: s.status, isNumberConfirmed: true, candidateNumber: s.status.number, debug: debugState(s)
+    }, 4));
   }
 }
-      return res.json(withMeta({
-        response: `${line}\n他にもあったらいいなっていうのはある？（なければ「ない」って返してね）`,
-        step: 4, status: s.status, isNumberConfirmed: true, candidateNumber: s.status.number, debug: debugState(s)
-      }, 4));
-    } else {
-      s.status.memo.want_raw ??= [];
-      s.status.memo.want_raw.push(text);
-      return res.json(withMeta({
-        response: "了解！気持ちは受け取ったよ◎\n他にもあったらいいなっていうのはある？（なければ「ない」って返してね）",
-        step: 4, status: s.status, isNumberConfirmed: true, candidateNumber: s.status.number, debug: debugState(s)
-      }, 4));
-    }
-  }
 
   // ---- Step5：Can ----
   if (s.step === 5) {
