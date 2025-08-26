@@ -21,12 +21,11 @@ export default function Home() {
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
   const [sessionId] = useState(() => Math.random().toString(36).slice(2));
-  const [step, setStep] = useState(0);                 // 0:ID, 1:職種/勤務先, …
-  const [isComposing, setIsComposing] = useState(false); // IME入力中フラグ
+  const [step, setStep] = useState(0);
+  const [isComposing, setIsComposing] = useState(false);
   const listRef = useRef(null);
   const taRef = useRef(null);
 
-  // 常に最下部へ
   useEffect(() => {
     listRef.current?.lastElementChild?.scrollIntoView({ behavior: "smooth" });
   }, [messages, sending]);
@@ -34,14 +33,17 @@ export default function Home() {
   const pushUser = (text) => setMessages((m) => [...m, { type: "user", content: text }]);
   const pushAI = (text) => setMessages((m) => [...m, { type: "ai", content: text }]);
 
-  const onSend = async () => {
-    const outgoing = input.trim();
-    if (!outgoing || sending) return;
-
-    // 先に表示＆確実クリア（State と DOM の両方を空にする）
-    pushUser(outgoing);
+  const clearInput = () => {
     setInput("");
     if (taRef.current) taRef.current.value = "";
+  };
+
+  const onSend = async () => {
+    const outgoing = (input || "").trim();
+    if (!outgoing || sending) return;
+
+    pushUser(outgoing);
+    clearInput();
 
     setSending(true);
     try {
@@ -58,7 +60,6 @@ export default function Home() {
       });
       if (!res.ok) throw new Error("API error");
       const data = await res.json();
-
       if (data.status) setStatus(data.status);
       if (typeof data.step === "number") setStep(data.step);
       if (data.response) pushAI(data.response);
@@ -71,7 +72,11 @@ export default function Home() {
   };
 
   const onKeyDown = (e) => {
-    if (e.key === "Enter" && !e.shiftKey && !isComposing) {
+    const imeNow =
+      isComposing ||
+      e.nativeEvent?.isComposing ||
+      e.keyCode === 229; // 一部ブラウザのIME判定
+    if (e.key === "Enter" && !e.shiftKey && !imeNow) {
       e.preventDefault();
       onSend();
     }
@@ -79,7 +84,6 @@ export default function Home() {
 
   return (
     <div className="container">
-      {/* ヘッダ */}
       <header className="header">
         <div className="title">
           <div>AIキャリアエージェント</div>
@@ -88,7 +92,6 @@ export default function Home() {
         <div className="step">Step {step + 1}/6　基本情報</div>
       </header>
 
-      {/* ステータス */}
       <div className="status-row">
         <span className="badge">番号：{status.number}</span>
         <span className="badge">職種：{status.job}</span>
@@ -100,7 +103,6 @@ export default function Home() {
         <span className="badge">Will：{status.will}</span>
       </div>
 
-      {/* チャット */}
       <main className="chat list" ref={listRef}>
         {messages.map((m, i) => (
           <div key={i} className={`msg ${m.type}`}>
@@ -119,21 +121,27 @@ export default function Home() {
         ))}
       </main>
 
-      {/* 入力 */}
       <footer className="input-bar">
         <div className="input-inner">
           <textarea
             ref={taRef}
             className="textarea"
-            placeholder={step === 0 ? "求職者IDを入力してください（メールに届いているID）…" : "メッセージを入力…"}
+            placeholder={
+              step === 0
+                ? "求職者IDを入力してください（メールに届いているID）…"
+                : "メッセージを入力…"
+            }
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={onKeyDown}
             onCompositionStart={() => setIsComposing(true)}
             onCompositionEnd={() => setIsComposing(false)}
+            onBlur={() => setIsComposing(false)}
             autoComplete="off"
           />
-          <button type="button" className="send" onClick={onSend} disabled={sending}>➤</button>
+          <button type="button" className="send" onClick={onSend} disabled={sending}>
+            ➤
+          </button>
         </div>
       </footer>
     </div>
