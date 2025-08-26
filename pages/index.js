@@ -59,7 +59,7 @@ export default function Home() {
         }),
       });
       if (!res.ok) throw new Error("API error");
-     +      const data = await res.json();
+      const data = await res.json();
  // ステータスバー（サーバが整形済みの meta.statusBar を使う）
  if (data?.meta?.statusBar) setStatus(data.meta.statusBar);
 // Step は数値とラベルを両方保持
@@ -91,10 +91,10 @@ export default function Home() {
           <div>AIキャリアエージェント</div>
           <div>ほーぷちゃん</div>
         </div>
-        +        <div className="step">Step {step + 1}/6　{statusStepLabel(step)}</div>
+           <div className="step">Step {step + 1}/6　{statusStepLabel(step)}</div>
       </header>
 
-      +      <div className="status-row">
+       <div className="status-row">
   {["求職者ID","職種","現職","転職目的","Must","Want","Can","Will"].map((k) => (
   <span key={k} className="badge">{k}：{status[k] ?? ""}</span>
  ))}
