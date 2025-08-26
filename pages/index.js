@@ -26,6 +26,12 @@ export default function Home() {
   const listRef = useRef(null);
   const taRef = useRef(null);
 
+  const MAX_STEP = 7;
+  const progress = Math.min(
+    100,
+    Math.max(0, Math.round((step / MAX_STEP) * 100))
+  );
+
   useEffect(() => {
     listRef.current?.lastElementChild?.scrollIntoView({ behavior: "smooth" });
   }, [messages, sending]);
@@ -85,6 +91,12 @@ export default function Home() {
   };
 
   return (
+    <div className="status-progress">
+  <div
+    className="status-progress__inner"
+    style={{ width: `${progress}%` }}
+  />
+</div>
     <div className="container">
       <header className="header">
         <div className="title">
