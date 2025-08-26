@@ -16,70 +16,62 @@ const firstAI =
   "こんにちは！\n担当エージェントとの面談がスムーズに進むように、**ほーぷちゃん**に少しだけ話を聞かせてね。\n\n最初に【求職者ID】を教えてね。※IDは「メール」で届いているやつ（LINEじゃないよ）。\nIDが確認できたら、そのあとで\n・今の職種（所有資格）\n・今どこで働いてる？\nも続けて聞いていくよ。気楽にどうぞ！";
 
 export default function Home() {
-  const [messages, setMessages] = useState([
-    { type: "ai", content: firstAI },
-  ]);
+  const [messages, setMessages] = useState([{ type: "ai", content: firstAI }]);
   const [status, setStatus] = useState(statusInit);
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
   const [sessionId] = useState(() => Math.random().toString(36).slice(2));
-  const [step, setStep] = useState(0); // 0:ID, 1:職種/勤務先, …
+  const [step, setStep] = useState(0);                 // 0:ID, 1:職種/勤務先, …
+  const [isComposing, setIsComposing] = useState(false); // IME入力中フラグ
   const listRef = useRef(null);
   const taRef = useRef(null);
-  const [composing, setComposing] = useState(false); // ★IME入力中かどうか
 
   // 常に最下部へ
   useEffect(() => {
     listRef.current?.lastElementChild?.scrollIntoView({ behavior: "smooth" });
   }, [messages, sending]);
 
-  const pushUser = (text) => {
-    setMessages((m) => [...m, { type: "user", content: text }]);
+  const pushUser = (text) => setMessages((m) => [...m, { type: "user", content: text }]);
+  const pushAI = (text) => setMessages((m) => [...m, { type: "ai", content: text }]);
+
+  const onSend = async () => {
+    const outgoing = input.trim();
+    if (!outgoing || sending) return;
+
+    // 先に表示＆確実クリア（State と DOM の両方を空にする）
+    pushUser(outgoing);
+    setInput("");
+    if (taRef.current) taRef.current.value = "";
+
+    setSending(true);
+    try {
+      const res = await fetch("/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          sessionId,
+          step,
+          status,
+          message: outgoing,
+          history: messages.slice(-12),
+        }),
+      });
+      if (!res.ok) throw new Error("API error");
+      const data = await res.json();
+
+      if (data.status) setStatus(data.status);
+      if (typeof data.step === "number") setStep(data.step);
+      if (data.response) pushAI(data.response);
+    } catch {
+      pushAI("ごめん、通信でエラーが出たみたい。もう一度送ってみてね。");
+    } finally {
+      setSending(false);
+      taRef.current?.focus();
+    }
   };
-  const pushAI = (text) => {
-    setMessages((m) => [...m, { type: "ai", content: text }]);
-  };
-
-    const onSend = async () => {
-  const outgoing = input.trim();
-  if (!outgoing || sending) return;
-
-  // 先に表示＆入力クリア（Enterでも確実に消える）
-  pushUser(outgoing);
-  setInput("");
-  if (taRef.current) {
-    taRef.current.value = "";
-  }
-  setSending(true);
-
-  try {
-    const res = await fetch("/api/chat", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        sessionId,
-        step,
-        status,
-        message: outgoing,
-        history: messages.slice(-12),
-      }),
-    });
-    if (!res.ok) throw new Error("API error");
-    const data = await res.json();
-
-    if (data.status) setStatus(data.status);
-    if (typeof data.step === "number") setStep(data.step);
-    if (data.response) pushAI(data.response);
-  } catch (e) {
-    pushAI("ごめん、通信でエラーが出たみたい。もう一度送ってみてね。");
-  } finally {
-    setSending(false);
-    taRef.current?.focus();
-  }
-};
 
   const onKeyDown = (e) => {
-    if (e.key === "Enter" && !e.shiftKey) {
+    if (e.key === "Enter" && !e.shiftKey && !isComposing) {
       e.preventDefault();
       onSend();
     }
@@ -88,13 +80,13 @@ export default function Home() {
   return (
     <div className="container">
       {/* ヘッダ */}
-    <header className="header">
-  <div className="title">
-    <div>AIキャリアエージェント</div>
-    <div>ほーぷちゃん</div>
-  </div>
-  <div className="step">Step {step + 1}/6　基本情報</div>
-</header>
+      <header className="header">
+        <div className="title">
+          <div>AIキャリアエージェント</div>
+          <div>ほーぷちゃん</div>
+        </div>
+        <div className="step">Step {step + 1}/6　基本情報</div>
+      </header>
 
       {/* ステータス */}
       <div className="status-row">
@@ -107,58 +99,41 @@ export default function Home() {
         <span className="badge">Can：{status.can}</span>
         <span className="badge">Will：{status.will}</span>
       </div>
- {/* 進捗バー */}
-<div className="status-progress" aria-hidden="true">
-  <div
-    className="status-progress__inner"
-    style={{
-      // Step を 1/6, 2/6…で見せたい場合は (step+1)。0始まりのままで良ければ step に戻してOK
-      width: `${Math.min(Math.max(((step + 1) / 6) * 100, 0), 100)}%`,
-    }}
-  />
-</div>
 
       {/* チャット */}
       <main className="chat list" ref={listRef}>
-  {messages.map((m, i) => (
-    <div key={i} className={`msg ${m.type}`}>
-      {m.type === "ai" ? (
-        // AI は左（アイコン → 吹き出し）
-        <>
-          <div className="avatar ai">🤖</div>
-          <div className="bubble">{m.content}</div>
-        </>
-      ) : (
-        // ユーザーは右（吹き出し → アイコン）
-        <>
-          <div className="bubble">{m.content}</div>
-          <div className="avatar user">👤</div>
-        </>
-      )}
-    </div>
-  ))}
-</main>
+        {messages.map((m, i) => (
+          <div key={i} className={`msg ${m.type}`}>
+            {m.type === "ai" ? (
+              <>
+                <div className="avatar ai">🤖</div>
+                <div className="bubble">{m.content}</div>
+              </>
+            ) : (
+              <>
+                <div className="bubble">{m.content}</div>
+                <div className="avatar user">👤</div>
+              </>
+            )}
+          </div>
+        ))}
+      </main>
 
       {/* 入力 */}
       <footer className="input-bar">
         <div className="input-inner">
-         <textarea
-  ref={taRef}
-  className="textarea"
-  placeholder={step === 0 ? "求職者IDを入力してください（メールに届いているID）…" : "メッセージを入力…"}
-  value={input}
-  onChange={(e) => setInput(e.target.value)}
-  onKeyDown={onKeyDown}
-  onCompositionStart={() => setComposing(true)}   // ★追加
-  onCompositionEnd={() => setComposing(false)}    // ★追加
-  autoComplete="off"
-  autoCorrect="off"                               // ★追加
-  spellCheck={false}                              // ★追加
-  enterKeyHint="send"                             // ★追加（モバイルのキーボードに送信を出す）
-/>
-          <button className="send" onClick={onSend} disabled={sending}>
-            ➤
-          </button>
+          <textarea
+            ref={taRef}
+            className="textarea"
+            placeholder={step === 0 ? "求職者IDを入力してください（メールに届いているID）…" : "メッセージを入力…"}
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            onKeyDown={onKeyDown}
+            onCompositionStart={() => setIsComposing(true)}
+            onCompositionEnd={() => setIsComposing(false)}
+            autoComplete="off"
+          />
+          <button type="button" className="send" onClick={onSend} disabled={sending}>➤</button>
         </div>
       </footer>
     </div>
