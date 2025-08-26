@@ -1,6 +1,7 @@
 // pages/api/chat.js
 // ほーぷちゃん：会話ロジック（Step厳密・深掘り2回・候補提示・ステータス算出）
-
+import tags from "../../tags.json";
+const tagIdByName = new Map(tags.map(t => [t.name, t.id]));
 // ---- Step ラベル（UI用） ----
 const STEP_LABELS = {
   0: "基本情報",
