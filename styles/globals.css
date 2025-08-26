@@ -82,22 +82,27 @@ body{
   justify-content: flex-end;    /* ユーザーは右 */
 }
 .avatar{
+/* --- Avatars（ --- */
+.avatar{
   width:36px; height:36px; border-radius:999px;
-  box-shadow: var(--card-shadow);
   display:flex; align-items:center; justify-content:center;
-  font-size: 18px;
+  font-size:18px; color:#fff;
+  box-shadow: 0 6px 16px rgba(0,0,0,0.15);
   flex:0 0 auto;
-  border:2px solid #fff;
-  overflow:hidden;
 }
+
+/* ほーぷちゃん（AI）アイコン */
+.avatar.ai{
+  background:#e8eaff;      /* うっすら紫系でOKならコレ */
+  color:#4b5563;           /* 絵文字を見やすく */
+  border:none;             /* 余計な白縁を付けない */
+}
+
+/* 求職者（ユーザー）アイコン：濃いグラデ固定 */
 .avatar.user{
-  background: linear-gradient(135deg,#ec4899,#3b82f6); /* ピンク→ブルーの濃いグラデ */
-  opacity: 1;  /* 完全表示に */
-}
-.avatar.user {
-  background: linear-gradient(135deg, var(--user-grad-from), var(--user-grad-via) 50%, var(--user-grad-to));
-  box-shadow: var(--card-shadow);
-  opacity: 1;   /* ← ここを1に固定（もしくは行を削除） */
+  background: linear-gradient(135deg,#ec4899,#3b82f6); /* ピンク→ブルー */
+  opacity: 1;      /* 透過なし */
+  border:none;     /* 白縁で薄く見えるのを回避 */
 }
 
 .bubble{
