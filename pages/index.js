@@ -100,6 +100,10 @@ export default function Home() {
  ))}
  </div>
 
+   <div className="status-progress">
+  <div className="status-progress__inner" style={{ width: `${progress}%` }} />
+</div>
+
       <main className="chat list" ref={listRef}>
         {messages.map((m, i) => (
           <div key={i} className={`msg ${m.type}`}>
