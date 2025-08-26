@@ -351,10 +351,8 @@ if (s.step === 4) {
     for (const label of added) {
       const found = mustWantItems.find(item => item === label);
       if (found) {
-        const id = mustWantItems.indexOf(found) + 1; // ID は配列位置＋1
-        if (!s.status.want_ids.includes(id)) {
-          s.status.want_ids.push(id);
-        }
+        const id = mustWantItems.indexOf(found) + 1;
+        if (!s.status.want_ids.includes(id)) s.status.want_ids.push(id);
       }
     }
 
@@ -362,16 +360,15 @@ if (s.step === 4) {
       response: `${line}\n他にもあったらいいなっていうのはある？（なければ「ない」って返してね）`,
       step: 4, status: s.status, isNumberConfirmed: true, candidateNumber: s.status.number, debug: debugState(s)
     }, 4));
-  } else {
-    s.status.memo.want_raw ??= [];
-    s.status.memo.want_raw.push(text);
-    return res.json(withMeta({
-      response: "了解！気持ちは受け取ったよ◎\n他にもあったらいいなっていうのはある？（なければ「ない」って返してね）",
-      step: 4, status: s.status, isNumberConfirmed: true, candidateNumber: s.status.number, debug: debugState(s)
-    }, 4));
   }
-}
 
+  s.status.memo.want_raw ??= [];
+  s.status.memo.want_raw.push(text);
+  return res.json(withMeta({
+    response: "了解！気持ちは受け取ったよ◎\n他にもあったらいいなっていうのはある？（なければ「ない」って返してね）",
+    step: 4, status: s.status, isNumberConfirmed: true, candidateNumber: s.status.number, debug: debugState(s)
+  }, 4));
+}
   // ---- Step5：Can ----
   if (s.step === 5) {
     s.status.can = text || "";
