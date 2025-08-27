@@ -158,7 +158,7 @@ if (data.meta?.step != null) setStep(data.meta.step);
     </div>
 
     {/* チャット画面 */}
-    <main className="chat list" ref={listRef}>
+    <main className="chat" ref={listRef}>
       {messages.map((m, i) => (
         <div key={i} className={`msg ${m.type}`}>
           {m.type === "ai" ? (
