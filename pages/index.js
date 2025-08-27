@@ -12,13 +12,9 @@ const statusInit = {
   Will: "未入力",
 };
 
-const firstAI =
-  "こんにちは！私はAIキャリアエージェント『ほーぷちゃん』です🤖✨\n" +
-  "担当との面談の前に、あなたの希望条件や想いを整理していくね！\n\n" +
-  "最初に【求職者ID】を教えてね。※メールに届いているIDだよ。";
-
 export default function Home() {
-  const [messages, setMessages] = useState([{ type: "ai", content: firstAI }]);
+  // ← 最初は空配列でOK（ここは触らない）
+  const [messages, setMessages] = useState([]);
   const [status, setStatus] = useState(statusInit);
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
@@ -28,13 +24,34 @@ export default function Home() {
   const listRef = useRef(null);
   const taRef = useRef(null);
 
-  // 進捗バー用
+  // 進捗バー
   const MAX_STEP = 8;
-  const progress = Math.min(
-    100,
-    Math.max(0, Math.round((step / MAX_STEP) * 100))
-  );
+  const progress = Math.min(100, Math.max(0, Math.round((step / MAX_STEP) * 100)));
 
+  // ★最初の挨拶をサーバーから1回だけ取得
+  useEffect(() => {
+    let aborted = false;
+    (async () => {
+      try {
+        const res = await fetch("/api/chat", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ message: "", sessionId }),
+        });
+        const data = await res.json();
+        if (aborted) return;
+
+        setMessages([{ type: "ai", content: data.response }]); // ← 1回だけ入れる
+        if (data.meta) {
+          setStep(data.meta.step ?? 0);
+          setStatus(data.meta.statusBar ?? statusInit);
+        }
+      } catch (e) {
+        setMessages([{ type: "ai", content: "初期メッセージの取得に失敗したよ🙏" }]);
+      }
+    })();
+    return () => { aborted = true; };
+  }, [sessionId]);
   // スクロール最下部へ
   useEffect(() => {
     if (listRef.current) {
