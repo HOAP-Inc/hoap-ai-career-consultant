@@ -23,7 +23,6 @@ export default function Home() {
   const [isComposing, setIsComposing] = useState(false);
   const listRef = useRef(null);
   const taRef = useRef(null);
-  const bottomRef = useRef(null);
 
   // 進捗バー
   const MAX_STEP = 9;
@@ -52,12 +51,12 @@ export default function Home() {
   
   // 最下部へスクロール（レイアウト確定後に実行）
 useLayoutEffect(() => {
-   const el = bottomRef.current;
-   if (!el) return;
-   const id = requestAnimationFrame(() => {
-     el.scrollIntoView({ behavior: "smooth", block: "end" });
-   });
-   return () => cancelAnimationFrame(id);
+  const scroller = listRef.current;
+  if (!scroller) return;
+  const id = requestAnimationFrame(() => {
+    scroller.scrollTop = scroller.scrollHeight;
+  });
+  return () => cancelAnimationFrame(id);
 }, [messages.length, step]);
   // 送信処理
   async function onSend() {
@@ -176,8 +175,7 @@ if (data.meta?.step != null) setStep(data.meta.step);
           )}
         </div>
       ))}
-{/* 最下部へのスクロール目印 */}
-<div ref={bottomRef} />
+
     </main>
 
     {/* 入力欄 */}
