@@ -17,33 +17,42 @@ try {
   licenses = {};
 }
 
-// 所有資格の「別名→正式ラベル」マップを構築（安全化）
-const licenseMap = new Map();
+// 所有資格の「別名→候補ラベル複数」マップを構築
+const licenseMap = new Map(); // Map<string, string[]>
+
 try {
   for (const [, arr] of Object.entries(licenses || {})) {
-    if (!Array.isArray(arr)) continue; // 想定外構造を無視
+    if (!Array.isArray(arr)) continue;
     for (const item of arr) {
       const label = typeof item === "string" ? item : item?.label;
       if (!label) continue;
 
+      // ある別名に複数ラベルをぶら下げる
+      const put = (alias, l) => {
+        if (!alias) return;
+        const curr = licenseMap.get(alias) || [];
+        if (!curr.includes(l)) curr.push(l);
+        licenseMap.set(alias, curr);
+      };
+
       // ラベル自体
-      licenseMap.set(label, label);
+      put(label, label);
 
       // 全角/半角ゆらぎ
       const fwLabel = label.replace(/\(/g, "（").replace(/\)/g, "）").replace(/~/g, "～");
       const hwLabel = label.replace(/（/g, "(").replace(/）/g, ")").replace(/～/g, "~");
-      licenseMap.set(fwLabel, label);
-      licenseMap.set(hwLabel, label);
+      put(fwLabel, label);
+      put(hwLabel, label);
 
       // 別名
       const aliases = (typeof item === "object" && Array.isArray(item.aliases)) ? item.aliases : [];
       for (const a of aliases) {
         if (!a) continue;
-        licenseMap.set(a, label);
+        put(a, label);
         const fw = a.replace(/\(/g, "（").replace(/\)/g, "）").replace(/~/g, "～");
         const hw = a.replace(/（/g, "(").replace(/）/g, ")").replace(/～/g, "~");
-        licenseMap.set(fw, label);
-        licenseMap.set(hw, label);
+        put(fw, label);
+        put(hw, label);
       }
     }
   }
@@ -281,16 +290,59 @@ export default async function handler(req, res) {
   }
 
   // ---- Step2：職種（所有資格） ----
-  if (s.step === 2) {
-    const found = matchLicensesInText(text);     // 複数拾い
-    s.status.licenses = found;
-    s.status.role = found.length ? found.join("／") : (text || "");
+if (s.step === 2) {
+  // すでに選択肢を出している場合の応答
+  if (s.drill.phase === "license" && s.drill.awaitingChoice && s.drill.options?.length) {
+    const pick = normalizePick(text);
+    const chosen = s.drill.options.find(o => o === pick);
+    if (chosen) {
+      s.status.role = chosen;           // 表示用は選ばれた正式ラベル
+      s.status.licenses = [chosen];     // 所有資格も確定（単一）
+      s.drill = { phase: null, count: 0, category: null, awaitingChoice: false, options: [] };
+      s.step = 3;
+      return res.json(withMeta({
+        response: "受け取ったよ！次に【今どこで働いてる？】を教えてね。\n（例）○○病院 外来／△△クリニック",
+        step: 3, status: s.status, isNumberConfirmed: true, candidateNumber: s.status.number, debug: debugState(s)
+      }, 3));
+    }
+    // 再提示
+    return res.json(withMeta({
+      response: `ごめん、もう一度教えて！この中だとどれが一番近い？『${s.drill.options.map(x=>`［${x}］`).join("／")}』`,
+      step: 2, status: s.status, isNumberConfirmed: true, candidateNumber: s.status.number, debug: debugState(s)
+    }, 2));
+  }
+
+  const found = matchLicensesInText(text);     // 候補を全部拾う
+  if (found.length === 0) {
+    // 候補ゼロ：入力そのまま
+    s.status.role = text || "";
+    s.status.licenses = [];
     s.step = 3;
     return res.json(withMeta({
       response: "受け取ったよ！次に【今どこで働いてる？】を教えてね。\n（例）○○病院 外来／△△クリニック",
       step: 3, status: s.status, isNumberConfirmed: true, candidateNumber: s.status.number, debug: debugState(s)
     }, 3));
   }
+  if (found.length === 1) {
+    // 候補1つ：自動確定
+    s.status.role = found[0];
+    s.status.licenses = [found[0]];
+    s.step = 3;
+    return res.json(withMeta({
+      response: "受け取ったよ！次に【今どこで働いてる？】を教えてね。\n（例）○○病院 外来／△△クリニック",
+      step: 3, status: s.status, isNumberConfirmed: true, candidateNumber: s.status.number, debug: debugState(s)
+    }, 3));
+  }
+  // 候補が複数：選択肢を提示
+  const options = found.slice(0, 6);
+  s.drill.phase = "license";
+  s.drill.awaitingChoice = true;
+  s.drill.options = options;
+  return res.json(withMeta({
+    response: `どれが一番近い？『${options.map(x=>`［${x}］`).join("／")}』`,
+    step: 2, status: s.status, isNumberConfirmed: true, candidateNumber: s.status.number, debug: debugState(s)
+  }, 2));
+}
 
   // ---- Step3：現職 ----
   if (s.step === 3) {
@@ -567,18 +619,14 @@ function isNone(text) {
   return /^(ない|特にない|無し|なし|no)$/i.test(t);
 }
 
-// ---- ここから追記（ヘルパー末尾） ----
-
-// 複数の資格ラベルを拾う（エイリアスも含めて重複排除）
+// 入力に含まれる資格ラベル候補をすべて返す（同一ラベルは重複排除）
 function matchLicensesInText(text = "") {
   const norm = String(text).trim();
-  const results = [];
-  for (const [alias, label] of licenseMap.entries()) {
-    if (alias && norm.includes(alias)) {
-      if (!results.includes(label)) results.push(label);
-    }
+  const set = new Set();
+  for (const [alias, labels] of licenseMap.entries()) {
+    if (!alias || !norm.includes(alias)) continue;
+    for (const l of labels) set.add(l);
   }
-  return results;
+  return Array.from(set);
 }
 
-// ---- 追記ここまで ----
