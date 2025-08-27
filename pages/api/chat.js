@@ -203,21 +203,48 @@ function initSession() {
 
 // ---- 入口 ----
 export default async function handler(req, res) {
-  if (req.method !== "POST") return res.status(405).json({ error: "Method Not Allowed" });
+  const method = req.method || "GET";
 
-  const { message = "", sessionId = "default" } = req.body || {};
-  const text = String(message || "").trim();
+  // セッションIDの取得（GET は query、POST は body）
+  const sessionId =
+    method === "GET"
+      ? (req.query && req.query.sessionId ? String(req.query.sessionId) : "default")
+      : (req.body && req.body.sessionId ? String(req.body.sessionId) : "default");
 
+  // セッションを用意
   const s = sessions[sessionId] ?? (sessions[sessionId] = initSession());
 
-  // 念のため配列を初期化
+  // --- 初回読み込み（GET）: 初期メッセージを返す ---
+  if (method === "GET") {
+    return res.status(200).json(withMeta({
+      response:
+        "こんにちは！私はAIキャリアエージェント『ほーぷちゃん』です🤖✨\n" +
+        "担当との面談の前に、あなたの希望条件や想いを整理していくね！\n\n" +
+        "最初に【求職者ID】を教えてね。※メールに届いているIDだよ。",
+      step: s.step,                       // 1
+      status: s.status,
+      isNumberConfirmed: s.isNumberConfirmed,
+      candidateNumber: s.status.number,
+      debug: debugState(s),
+    }, s.step));
+  }
+
+  // --- ここからは従来どおり POST のみ ---
+  if (method !== "POST") {
+    return res.status(405).json({ error: "Method Not Allowed" });
+  }
+
+  const { message = "" } = req.body || {};
+  const text = String(message || "").trim();
+
+  // 念のため配列を初期化（既存のまま）
   if (!s.status.must_ids) s.status.must_ids = [];
   if (!s.status.want_ids) s.status.want_ids = [];
 
   // IDフォーマット判定（4〜8桁の数字）
   const looksId = /^\s*\d{4,8}\s*$/.test(text);
 
-  // 既にID確認済みで、さらにIDっぽい入力が来たら「次へ進む」案内を返す
+  // 既にID確認済みで、さらにIDっぽい入力が来たら「次へ進む」案内
   if (s.isNumberConfirmed && looksId) {
     return res.json(withMeta({
       response: nextAfterId(s),
@@ -249,6 +276,9 @@ export default async function handler(req, res) {
     }, 2));
   }
 
+  // ---- 以降（Step2〜想定外フォールバック）は現状のまま ----
+  // （この下はあなたの現在の実装をそのまま残してください）
+}
   // ---- Step2：職種（所有資格） ----
 if (s.step === 2) {
   // ① 複数資格を抽出して正規化（aliases対応）
