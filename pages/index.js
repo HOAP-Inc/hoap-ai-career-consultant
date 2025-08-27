@@ -80,8 +80,8 @@ export default function Home() {
       // AI応答
       setMessages((m) => [...m, { type: "ai", content: data.response }]);
 
-      // ステータス・ステップ更新（statusBar を必ず使う）
-setStatus(data.meta?.statusBar ?? statusInit);
+      // ステータス・ステップ更新（meta.statusBar を使う）
+if (data.meta?.statusBar) setStatus(data.meta.statusBar);
 if (data.meta?.step != null) setStep(data.meta.step);
     } catch (err) {
       console.error(err);
