@@ -180,7 +180,9 @@ export default async function handler(req, res) {
   if (s.step === 0) {
     if (!looksId) {
       return res.json(withMeta({
-        response: "こんにちは！\n最初に【求職者ID】を教えてね。※IDは『メール』で届いているやつ（LINEじゃないよ）。",
+        response: "こんにちは！私はAIキャリアエージェント『ほーぷちゃん』です🤖✨\n" 
+        "担当との面談の前に、あなたの希望条件や想いを整理していくね！\n\n" 
+        "最初に【求職者ID】を教えてね。※メールに届いているIDだよ。",
         step: 0, status: s.status, isNumberConfirmed: false, candidateNumber: "", debug: debugState(s)
       }, 0));
     }
