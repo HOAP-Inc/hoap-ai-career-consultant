@@ -242,6 +242,10 @@ html, body, #__next { height: 100%; }
 
 .status-progress {
   position: sticky;
-  top: 96px;  /* ステータスバッジの下に配置 */
-  z-index: 18;
+  ttop: 96px;   /* header(約56px) + status-row(約40px) */
+   z-index: 18;
+   background: #e5e7eb;
+   height: 6px;
+   border-radius: 999px;
+   overflow: hidden;
 }
