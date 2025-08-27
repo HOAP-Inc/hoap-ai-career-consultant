@@ -1,6 +1,43 @@
 // pages/api/chat.js
 // ほーぷちゃん：会話ロジック（Step厳密・深掘り2回・候補提示・ステータス算出）
 const { tags: tagList } = require("../../tags.json");
+const licenses = require("../../所有資格.json");
+
+// 所有資格の「別名→正式ラベル」マップを構築
+const licenseMap = new Map();
+for (const [, arr] of Object.entries(licenses)) {
+  for (const item of arr) {
+    const label = item.label;
+    if (!label) continue;
+
+    // ラベル自体
+    licenseMap.set(label, label);
+
+    // 全角/半角ゆらぎも登録
+    const fwLabel = label.replace(/\(/g,"（").replace(/\)/g,"）").replace(/~/g,"～");
+    const hwLabel = label.replace(/（/g,"(").replace(/）/g,")").replace(/～/g,"~");
+    licenseMap.set(fwLabel, label);
+    licenseMap.set(hwLabel, label);
+
+    // 別名
+    for (const a of item.aliases || []) {
+      licenseMap.set(a, label);
+      const fw = a.replace(/\(/g,"（").replace(/\)/g,"）").replace(/~/g,"～");
+      const hw = a.replace(/（/g,"(").replace(/）/g,")").replace(/～/g,"~");
+      licenseMap.set(fw, label);
+      licenseMap.set(hw, label);
+    }
+  }
+}
+
+// 入力テキストに含まれる資格の正式ラベルを返す（なければ null）
+function matchLicenseInText(text = "") {
+  const norm = String(text).trim();
+  for (const [alias, label] of licenseMap.entries()) {
+    if (alias && norm.includes(alias)) return label;
+  }
+  return null;
+}
 
 // 「名称 → ID」のマップを両表記で作る
 const tagIdByName = new Map();
@@ -201,7 +238,7 @@ export default async function handler(req, res) {
   // ---- Step2：職種（所有資格） ----
 if (s.step === 2) {
   // 回答そのまま保存（ステータスバー用に使う）
-  s.status.role = text || "";
+  s.status.role = matchLicenseInText(text) || (text || "");
 
   // 所有資格と tags.json の整合（名称一致でIDをひも付け）
   // 例）「正看護師」「介護福祉士」などが tags.json にあれば must_ids へ入れる
