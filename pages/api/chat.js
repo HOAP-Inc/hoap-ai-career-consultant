@@ -214,6 +214,10 @@ export default async function handler(req, res) {
   // セッションを用意
   const s = sessions[sessionId] ?? (sessions[sessionId] = initSession());
 
+  // 初期化（保険）
+  if (!s.status.must_ids) s.status.must_ids = [];
+  if (!s.status.want_ids) s.status.want_ids = [];
+
   // --- 初回読み込み（GET）: 初期メッセージを返す ---
   if (method === "GET") {
     return res.status(200).json(withMeta({
@@ -221,7 +225,7 @@ export default async function handler(req, res) {
         "こんにちは！私はAIキャリアエージェント『ほーぷちゃん』です🤖✨\n" +
         "担当との面談の前に、あなたの希望条件や想いを整理していくね！\n\n" +
         "最初に【求職者ID】を教えてね。※メールに届いているIDだよ。",
-      step: s.step,                       // 1
+      step: s.step,
       status: s.status,
       isNumberConfirmed: s.isNumberConfirmed,
       candidateNumber: s.status.number,
@@ -229,7 +233,7 @@ export default async function handler(req, res) {
     }, s.step));
   }
 
-  // --- ここからは従来どおり POST のみ ---
+  // ここからは従来どおり POST
   if (method !== "POST") {
     return res.status(405).json({ error: "Method Not Allowed" });
   }
@@ -237,14 +241,10 @@ export default async function handler(req, res) {
   const { message = "" } = req.body || {};
   const text = String(message || "").trim();
 
-  // 念のため配列を初期化（既存のまま）
-  if (!s.status.must_ids) s.status.must_ids = [];
-  if (!s.status.want_ids) s.status.want_ids = [];
-
   // IDフォーマット判定（4〜8桁の数字）
   const looksId = /^\s*\d{4,8}\s*$/.test(text);
 
-  // 既にID確認済みで、さらにIDっぽい入力が来たら「次へ進む」案内
+  // 既にID確認済みで、さらにIDっぽい入力が来たら「次へ進む」案内を返す
   if (s.isNumberConfirmed && looksId) {
     return res.json(withMeta({
       response: nextAfterId(s),
@@ -276,28 +276,23 @@ export default async function handler(req, res) {
     }, 2));
   }
 
-  // ---- 以降（Step2〜想定外フォールバック）は現状のまま ----
-  // （この下はあなたの現在の実装をそのまま残してください）
-}
   // ---- Step2：職種（所有資格） ----
-if (s.step === 2) {
-  // ① 複数資格を抽出して正規化（aliases対応）
-  const found = matchLicensesInText(text);     // ← 末尾で定義した複数拾い関数
+  if (s.step === 2) {
+    // 複数資格を抽出して正規化（aliases対応）
+    const found = matchLicensesInText(text);
 
-  // ② 状態に保存
-  s.status.licenses = found;                              // 例: ["正看護師","介護福祉士"]
-  s.status.role = found.length ? found.join("／") : (text || ""); // バッジ表示に使う文字列
+    // 状態に保存
+    s.status.licenses = found;
+    s.status.role = found.length ? found.join("／") : (text || "");
 
-  // ③ tags.json の ID（must_ids 等）には一切触らない（←ここが重要）
-  //    ※ 所有資格は「条件」ではないため、must_ids へは入れない。
+    // 次ステップへ
+    s.step = 3;
+    return res.json(withMeta({
+      response: "受け取ったよ！次に【今どこで働いてる？】を教えてね。\n（例）○○病院 外来／△△クリニック",
+      step: 3, status: s.status, isNumberConfirmed: true, candidateNumber: s.status.number, debug: debugState(s)
+    }, 3));
+  }
 
-  // 次ステップへ
-  s.step = 3;
-  return res.json(withMeta({
-    response: "受け取ったよ！次に【今どこで働いてる？】を教えてね。\n（例）○○病院 外来／△△クリニック",
-    step: 3, status: s.status, isNumberConfirmed: true, candidateNumber: s.status.number, debug: debugState(s)
-  }, 3));
-}
   // ---- Step3：現職 ----
   if (s.step === 3) {
     s.status.place = text || "";
