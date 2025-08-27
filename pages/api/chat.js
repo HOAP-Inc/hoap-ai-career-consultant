@@ -199,14 +199,24 @@ export default async function handler(req, res) {
   }
 
   // ---- Step2：職種（所有資格） ----
-  if (s.step === 2) {
-    s.status.role = text || "";
-    s.step = 3;
-    return res.json(withMeta({
-      response: "受け取ったよ！次に【今どこで働いてる？】を教えてね。\n（例）○○病院 外来／△△クリニック",
-      step: 3, status: s.status, isNumberConfirmed: true, candidateNumber: s.status.number, debug: debugState(s)
-    }, 3));
+if (s.step === 2) {
+  // 回答そのまま保存（ステータスバー用に使う）
+  s.status.role = text || "";
+
+  // 所有資格と tags.json の整合（名称一致でIDをひも付け）
+  // 例）「正看護師」「介護福祉士」などが tags.json にあれば must_ids へ入れる
+  const id = tagIdByName.get(s.status.role);
+  if (id && !s.status.must_ids.includes(id)) {
+    s.status.must_ids.push(id);
   }
+
+  // 次ステップへ
+  s.step = 3;
+  return res.json(withMeta({
+    response: "受け取ったよ！次に【今どこで働いてる？】を教えてね。\n（例）○○病院 外来／△△クリニック",
+    step: 3, status: s.status, isNumberConfirmed: true, candidateNumber: s.status.number, debug: debugState(s)
+  }, 3));
+}
 
   // ---- Step3：現職 ----
   if (s.step === 3) {
