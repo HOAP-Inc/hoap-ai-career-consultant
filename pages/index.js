@@ -1,5 +1,5 @@
 // pages/index.js
-import React, { useEffect, useRef, useState, Fragment } from "react";
+import React, { useEffect, useLayoutEffect, useRef, useState, Fragment } from "react";
 
 const statusInit = {
   求職者ID: "未入力",
@@ -51,16 +51,14 @@ export default function Home() {
 }, [sessionId]);
   
   // 最下部へスクロール（レイアウト確定後に実行）
-useEffect(() => {
-  const el = bottomRef.current;
-  if (!el) return;
-  // レイアウトが反映されてからスクロールしたいので rAF を挟む
-  const id = requestAnimationFrame(() => {
-    el.scrollIntoView({ behavior: "smooth", block: "end" });
-  });
-  return () => cancelAnimationFrame(id);
-}, [messages, step]);
-
+useLayoutEffect(() => {
+   const el = bottomRef.current;
+   if (!el) return;
+   const id = requestAnimationFrame(() => {
+     el.scrollIntoView({ behavior: "smooth", block: "end" });
+   });
+   return () => cancelAnimationFrame(id);
+}, [messages.length, step]);
   // 送信処理
   async function onSend() {
     if (!input.trim() || sending) return;
