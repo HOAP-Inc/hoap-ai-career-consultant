@@ -51,12 +51,8 @@ export default function Home() {
   
   // 最下部へスクロール（レイアウト確定後に実行）
 useLayoutEffect(() => {
-  const scroller = listRef.current;
-  if (!scroller) return;
-  const id = requestAnimationFrame(() => {
-    scroller.scrollTop = scroller.scrollHeight;
-  });
-  return () => cancelAnimationFrame(id);
+  const el = bottomRef.current;
+  if (el) el.scrollIntoView({ behavior: "smooth", block: "end" });
 }, [messages.length, step]);
   // 送信処理
   async function onSend() {
