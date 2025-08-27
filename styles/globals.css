@@ -98,18 +98,24 @@ body{
 
 /* --- Avatars --- */
 .avatar{
-  width:36px; height:36px; border-radius:999px;
+  width:60px;               /* ← 大きくする */
+  height:60px;
+  border-radius:999px;
   display:flex; align-items:center; justify-content:center;
-  font-size:18px; color:#fff;
-  box-shadow: 0 6px 16px rgba(0,0,0,0.15);
   flex:0 0 auto;
+  box-shadow: var(--card-shadow);
+  background: transparent;  /* 画像を活かすため背景は透明に */
+  border: none;
+  padding: 0;
 }
 
 /* ほーぷちゃん（AI）アイコン */
-.avatar.ai{
-  background:#e8eaff;      /* うっすら紫系でOKならコレ */
-  color:#4b5563;           /* 絵文字を見やすく */
-  border:none;             /* 余計な白縁を付けない */
+.avatar img{
+  width:100%;
+  height:100%;
+  display:block;
+  object-fit: cover;
+  border-radius:50%;
 }
 
 /* 求職者（ユーザー）アイコン：濃いグラデ固定 */
