@@ -222,3 +222,26 @@ html, body, #__next { height: 100%; }
   overflow-y: auto;      /* スクロール可能にする */
   scroll-behavior: smooth;
 }
+/* ---- sticky top (ヘッダ/ステータス/プログレスを上部固定) ---- */
+.header {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  background: linear-gradient(180deg, var(--bg-from) 0%, var(--bg-via) 70%, transparent 100%);
+  padding-top: 6px;
+  padding-bottom: 6px;
+}
+
+.status-row {
+  position: sticky;
+  top: 56px;  /* ヘッダの高さに合わせて調整 */
+  z-index: 19;
+  background: linear-gradient(180deg, var(--bg-via) 0%, transparent 100%);
+  padding: 6px 0;
+}
+
+.status-progress {
+  position: sticky;
+  top: 96px;  /* ステータスバッジの下に配置 */
+  z-index: 18;
+}
