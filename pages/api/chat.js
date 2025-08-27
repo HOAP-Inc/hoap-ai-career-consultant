@@ -182,6 +182,7 @@ function initSession() {
       want_ids: [],
       can: "",
       will: "",
+      licenses: [], // ← 所有資格（正規化ラベル）の配列
       memo: { reason_raw: "", must_raw: [], want_raw: [] },
     },
   };
@@ -237,14 +238,14 @@ export default async function handler(req, res) {
 
   // ---- Step2：職種（所有資格） ----
 if (s.step === 2) {
-  // 回答そのまま保存（ステータスバー用に使う）
-  s.status.role = matchLicenseInText(text) || (text || "");
+  // 入力原文はそのまま保持（UIにも出す）
+  s.status.role = text || "";
 
-  // 所有資格と tags.json の整合（名称一致でIDをひも付け）
-  // 例）「正看護師」「介護福祉士」などが tags.json にあれば must_ids へ入れる
-  const id = tagIdByName.get(s.status.role);
-  if (id && !s.status.must_ids.includes(id)) {
-    s.status.must_ids.push(id);
+  // 入力文から資格（複数）を抽出して格納
+  const found = matchLicensesInTextMulti(text);
+  if (found.length) {
+    const set = new Set([...(s.status.licenses || []), ...found]);
+    s.status.licenses = Array.from(set);
   }
 
   // 次ステップへ
@@ -254,7 +255,6 @@ if (s.step === 2) {
     step: 3, status: s.status, isNumberConfirmed: true, candidateNumber: s.status.number, debug: debugState(s)
   }, 3));
 }
-
   // ---- Step3：現職 ----
   if (s.step === 3) {
     s.status.place = text || "";
@@ -456,7 +456,16 @@ function withMeta(payload, step) {
 function buildStatusBar(st) {
   return {
     求職者ID: st.number || "",
-    職種: st.role || "",
+    職種: (st.licenses && st.licenses.length)
+　　 ? st.licenses.join("・")
+    : (st.role || ""),
+    現職: st.place || "",
+    転職目的: st.reason_tag ? st.reason_tag : (st.reason ? "済" : ""),
+    Must: st.must.length ? `${st.must.length}件` : (st.memo?.must_raw?.length ? "済" : ""),
+    Want: st.want.length ? `${st.want.length}件` : (st.memo?.want_raw?.length ? "済" : ""),
+    Can: st.can ? "済" : "",
+    Will: st.will ? "済" : "",
+  };
     現職: st.place || "",
     転職目的: st.reason_tag ? st.reason_tag : (st.reason ? "済" : ""),
     Must: st.must.length ? `${st.must.length}件` : (st.memo?.must_raw?.length ? "済" : ""),
@@ -530,4 +539,16 @@ function normalizePick(text) {
 function isNone(text) {
   const t = (text || "").trim();
   return /^(ない|特にない|無し|なし|no)$/i.test(t);
+}
+
+// 複数の資格ラベルを拾う
+function matchLicensesInText(text = "") {
+  const norm = String(text).trim();
+  const results = [];
+  for (const [alias, label] of licenseMap.entries()) {
+    if (alias && norm.includes(alias)) {
+      if (!results.includes(label)) results.push(label);
+    }
+  }
+  return results;
 }
