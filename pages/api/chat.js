@@ -230,18 +230,14 @@ export default async function handler(req, res) {
 
   // ========== 初回（GET）や想定外メソッドは、必ず初期メッセージを返す ==========
   if (method !== "POST") {
-    return res.status(200).json(withMeta({
-      response:
-        "こんにちは！私はAIキャリアエージェント『ほーぷちゃん』です🤖✨\n" +
-        "担当との面談の前に、あなたの希望条件や想いを整理していくね！\n\n" +
-        "最初に【求職者ID】を教えてね。※メールに届いているIDだよ。",
-      step: s.step,
-      status: s.status,
-      isNumberConfirmed: s.isNumberConfirmed,
-      candidateNumber: s.status.number,
-      debug: debugState(s),
-    }, s.step));
-  }
+  return res.status(200).json({
+    response: "こんにちは！私はAIキャリアエージェント『ほーぷちゃん』です🤖✨\n担当との面談の前に、あなたの希望条件や想いを整理していくね！\n\n最初に【求職者ID】を教えてね。※メールに届いているIDだよ。",
+    step: 1,
+    status: {},
+    isNumberConfirmed: false,
+    candidateNumber: ""
+  });
+}
 
   // ========== ここから通常の会話処理（POST） ==========
   const { message = "" } = req.body || {};
