@@ -30,28 +30,24 @@ export default function Home() {
 
   // ★最初の挨拶をサーバーから1回だけ取得
   useEffect(() => {
-    let aborted = false;
-    (async () => {
-      try {
-        const res = await fetch("/api/chat", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ message: "", sessionId }),
-        });
-        const data = await res.json();
-        if (aborted) return;
+  let aborted = false;
+  (async () => {
+    try {
+      const res = await fetch(`/api/chat?sessionId=${sessionId}`, { method: "GET" });
+      const data = await res.json();
+      if (aborted) return;
 
-        setMessages([{ type: "ai", content: data.response }]); // ← 1回だけ入れる
-        if (data.meta) {
-          setStep(data.meta.step ?? 0);
-          setStatus(data.meta.statusBar ?? statusInit);
-        }
-      } catch (e) {
-        setMessages([{ type: "ai", content: "初期メッセージの取得に失敗したよ🙏" }]);
+      setMessages([{ type: "ai", content: data.response }]);
+      if (data.meta) {
+        setStep(data.meta.step ?? 0);
+        setStatus(data.meta.statusBar ?? statusInit);
       }
-    })();
-    return () => { aborted = true; };
-  }, [sessionId]);
+    } catch (e) {
+      setMessages([{ type: "ai", content: "初期メッセージの取得に失敗したよ🙏" }]);
+    }
+  })();
+  return () => { aborted = true; };
+}, [sessionId]);
   // スクロール最下部へ
   useEffect(() => {
     if (listRef.current) {
