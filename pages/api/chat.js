@@ -43,18 +43,6 @@ try {
   console.error("licenseMap 構築に失敗:", e);
 }
 
-// 複数の資格ラベルを拾う（エイリアスも含めて重複排除）
-function matchLicensesInText(text = "") {
-  const norm = String(text).trim();
-  const results = [];
-  for (const [alias, label] of licenseMap.entries()) {
-    if (alias && norm.includes(alias)) {
-      if (!results.includes(label)) results.push(label);
-    }
-  }
-  return results;
-}
-
 // ←この1行を“この関数の直後”に追加（単数名を呼ばれても動くように）
 const matchLicenseInText = matchLicensesInText;
 
