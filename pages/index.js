@@ -145,8 +145,10 @@ export default function Home() {
         <div key={i} className={`msg ${m.type}`}>
           {m.type === "ai" ? (
             <>
-              <div className="avatar ai">🤖</div>
-              <div className="bubble">{m.content}</div>
+             <div className="avatar ai">
+  <img src="/hoap-icon.jpg" alt="ほーぷちゃん" />
+</div>
+<div className="bubble">{m.content}</div>
             </>
           ) : (
             <>
