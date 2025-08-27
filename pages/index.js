@@ -1,4 +1,3 @@
-// pages/index.js
 import React, { useEffect, useLayoutEffect, useRef, useState, Fragment } from "react";
 
 const statusInit = {
@@ -14,15 +13,17 @@ const statusInit = {
 
 export default function Home() {
   // ← 最初は空配列でOK（ここは触らない）
-  const [messages, setMessages] = useState([]);
-  const [status, setStatus] = useState(statusInit);
-  const [input, setInput] = useState("");
-  const [sending, setSending] = useState(false);
-  const [sessionId] = useState(() => Math.random().toString(36).slice(2));
-  const [step, setStep] = useState(0);
-  const [isComposing, setIsComposing] = useState(false);
-  const listRef = useRef(null);
-  const taRef = useRef(null);
+const [messages, setMessages] = useState([]);
+const [status, setStatus] = useState(statusInit);
+const [input, setInput] = useState("");
+const [sending, setSending] = useState(false);
+const [sessionId] = useState(() => Math.random().toString(36).slice(2));
+const [step, setStep] = useState(0);
+const [isComposing, setIsComposing] = useState(false);
+
+const listRef = useRef(null);
+const taRef = useRef(null);
+const bottomRef = useRef(null);
 
   // 進捗バー
   const MAX_STEP = 9;
