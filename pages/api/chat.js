@@ -391,7 +391,8 @@ export default async function handler(req, res) {
     debug: debugState(s)
   }, s.step));
 }
-    // ここには来ない想定（フォールバック廃止）
+
+// 想定外フォールバック
   return res.json(withMeta({
     response: "（内部エラー）",
     step: s.step,
@@ -423,7 +424,7 @@ function buildStatusBar(st) {
     現職: st.place || "",
     転職目的: st.reason_tag ? st.reason_tag : (st.reason ? "済" : ""),
     Must: st.must.length ? `${st.must.length}件` : (st.memo?.must_raw?.length ? "済" : ""),
-    Want: st.want.length ? `${st.want.length}件` : (st.memo?.want_raw?.length ? "済` : ""),
+    Want: st.want.length ? `${st.want.length}件` : (st.memo?.want_raw?.length ? "済" : ""),
     Can: st.can ? "済" : "",
     Will: st.will ? "済" : "",
   };
@@ -442,11 +443,11 @@ function debugState(s) {
 
 function nextAfterId(s) {
   switch (s.step) {
-    case 0.5:
-      return "IDは確認済だよ！まず【今の職種（所有資格）】を教えてね。\n（例）正看護師／介護福祉士／初任者研修 など";
-    case 1:
-      return "IDは確認済だよ！次に【今どこで働いてる？】を教えてね。\n（例）○○病院 外来／△△クリニック";
     case 2:
+      return "IDは確認済だよ！次に【今の職種（所有資格）】を教えてね。\n（例）正看護師／介護福祉士／初任者研修 など";
+    case 3:
+      return "IDは確認済だよ！次に【今どこで働いてる？】を教えてね。\n（例）○○病院 外来／△△クリニック";
+    case 4:
       return "IDは確認済だよ！\nはじめに、今回の転職理由を教えてほしいな。きっかけってどんなことだった？\nしんどいと思ったこと、これはもう無理って思ったこと、逆にこういうことに挑戦したい！って思ったこと、何でもOKだよ◎";
     default:
       return "IDは確認済だよ！";
