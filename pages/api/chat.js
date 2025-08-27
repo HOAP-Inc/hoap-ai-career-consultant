@@ -393,9 +393,14 @@ export default async function handler(req, res) {
 }
   // ここには来ない想定（フォールバック廃止）
   return res.json(withMeta({
-    response: "（内部エラー）", step: s.step, status: s.status, isNumberConfirmed: s.isNumberConfirmed, candidateNumber: s.status.number, debug: debugState(s)
+    response: "（内部エラー）",
+    step: s.step,
+    status: s.status,
+    isNumberConfirmed: s.isNumberConfirmed,
+    candidateNumber: s.status.number,
+    debug: debugState(s),
   }, s.step));
-}
+} // ← ここで handler を閉じる（この位置が重要！）
 
 // ---- ヘルパ ----
 function withMeta(payload, step) {
@@ -410,6 +415,7 @@ function withMeta(payload, step) {
     },
   };
 }
+
 function buildStatusBar(st) {
   return {
     求職者ID: st.number || "",
@@ -422,6 +428,7 @@ function buildStatusBar(st) {
     Will: st.will ? "済" : "",
   };
 }
+
 function debugState(s) {
   return {
     drill: { ...s.drill },
@@ -432,18 +439,20 @@ function debugState(s) {
     wantCount: s.status.want.length,
   };
 }
+
 function nextAfterId(s) {
   switch (s.step) {
-    case 2:
+    case 0.5:
       return "IDは確認済だよ！まず【今の職種（所有資格）】を教えてね。\n（例）正看護師／介護福祉士／初任者研修 など";
-    case 3:
+    case 1:
       return "IDは確認済だよ！次に【今どこで働いてる？】を教えてね。\n（例）○○病院 外来／△△クリニック";
-    case 4:
-      return "IDは確認済だよ！\nはじめに、今回の転職理由を教えてほしいな。きっかけってどんなことだった？";
+    case 2:
+      return "IDは確認済だよ！\nはじめに、今回の転職理由を教えてほしいな。きっかけってどんなことだった？\nしんどいと思ったこと、これはもう無理って思ったこと、逆にこういうことに挑戦したい！って思ったこと、何でもOKだよ◎";
     default:
       return "IDは確認済だよ！";
   }
 }
+
 function mustIntroText() {
   return "ありがとう！それじゃあ【絶対に外せない条件】を教えてね。\n\n" +
          "仕事内容でも、制度でも、条件でもOK◎\n\n" +
@@ -452,9 +461,11 @@ function mustIntroText() {
          "「絶対オンコールはできない！」\n\n" +
          "後から『あるといいな』『ないといいな』についても聞くから、今は『絶対！』というものだけ教えてね。";
 }
+
 function noOptionCategory(cat) {
   return cat === "職場環境・設備" || cat === "職場の安定性" || cat === "給与・待遇";
 }
+
 function pickReasonCategory(text) {
   const t = (text || "").toLowerCase();
   let best = null, score = 0;
@@ -464,6 +475,7 @@ function pickReasonCategory(text) {
   }
   return best;
 }
+
 function matchTags(text, dict) {
   const t = (text || "").toLowerCase();
   const hits = [];
@@ -472,10 +484,12 @@ function matchTags(text, dict) {
   }
   return hits;
 }
+
 function normalizePick(text) {
-  return String(text || "").replace(/[［\[\]］]/g, "").trim();
+  return String(text || "").replace(/[［$begin:math:display$$end:math:display$］]/g, "").trim();
 }
+
 function isNone(text) {
   const t = (text || "").trim();
   return /^(ない|特にない|無し|なし|no)$/i.test(t);
-}
+} 
