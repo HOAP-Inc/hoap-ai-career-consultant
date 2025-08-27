@@ -456,16 +456,7 @@ function withMeta(payload, step) {
 function buildStatusBar(st) {
   return {
     求職者ID: st.number || "",
-    職種: (st.licenses && st.licenses.length)
-　　 ? st.licenses.join("・")
-    : (st.role || ""),
-    現職: st.place || "",
-    転職目的: st.reason_tag ? st.reason_tag : (st.reason ? "済" : ""),
-    Must: st.must.length ? `${st.must.length}件` : (st.memo?.must_raw?.length ? "済" : ""),
-    Want: st.want.length ? `${st.want.length}件` : (st.memo?.want_raw?.length ? "済" : ""),
-    Can: st.can ? "済" : "",
-    Will: st.will ? "済" : "",
-  };
+    職種: st.role || "",
     現職: st.place || "",
     転職目的: st.reason_tag ? st.reason_tag : (st.reason ? "済" : ""),
     Must: st.must.length ? `${st.must.length}件` : (st.memo?.must_raw?.length ? "済" : ""),
@@ -474,7 +465,6 @@ function buildStatusBar(st) {
     Will: st.will ? "済" : "",
   };
 }
-
 function debugState(s) {
   return {
     drill: { ...s.drill },
