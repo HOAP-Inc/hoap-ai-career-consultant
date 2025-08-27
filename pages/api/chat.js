@@ -203,23 +203,27 @@ function initSession() {
 
 // ---- 入口 ----
 export default async function handler(req, res) {
-  const method = req.method || "GET";
+  // どんなメソッドでも落とさない（preflight/誤送信対策）
+  if (req.method === "OPTIONS") {
+    return res.status(200).end();
+  }
 
-  // セッションIDの取得（GET は query、POST は body）
+  // セッションIDを GET/POST どちらでも拾う
+  const method = (req.method || "GET").toUpperCase();
   const sessionId =
     method === "GET"
-      ? (req.query && req.query.sessionId ? String(req.query.sessionId) : "default")
-      : (req.body && req.body.sessionId ? String(req.body.sessionId) : "default");
+      ? String(req.query?.sessionId || "default")
+      : String((req.body && req.body.sessionId) || "default");
 
-  // セッションを用意
+  // セッション確保
   const s = sessions[sessionId] ?? (sessions[sessionId] = initSession());
 
-  // 初期化（保険）
+  // 念のため配列初期化
   if (!s.status.must_ids) s.status.must_ids = [];
   if (!s.status.want_ids) s.status.want_ids = [];
 
-  // --- 初回読み込み（GET）: 初期メッセージを返す ---
-  if (method === "GET") {
+  // ========== 初回（GET）や想定外メソッドは、必ず初期メッセージを返す ==========
+  if (method !== "POST") {
     return res.status(200).json(withMeta({
       response:
         "こんにちは！私はAIキャリアエージェント『ほーぷちゃん』です🤖✨\n" +
@@ -233,11 +237,7 @@ export default async function handler(req, res) {
     }, s.step));
   }
 
-  // ここからは従来どおり POST
-  if (method !== "POST") {
-    return res.status(405).json({ error: "Method Not Allowed" });
-  }
-
+  // ========== ここから通常の会話処理（POST） ==========
   const { message = "" } = req.body || {};
   const text = String(message || "").trim();
 
@@ -278,14 +278,9 @@ export default async function handler(req, res) {
 
   // ---- Step2：職種（所有資格） ----
   if (s.step === 2) {
-    // 複数資格を抽出して正規化（aliases対応）
-    const found = matchLicensesInText(text);
-
-    // 状態に保存
+    const found = matchLicensesInText(text);     // 複数拾い
     s.status.licenses = found;
     s.status.role = found.length ? found.join("／") : (text || "");
-
-    // 次ステップへ
     s.step = 3;
     return res.json(withMeta({
       response: "受け取ったよ！次に【今どこで働いてる？】を教えてね。\n（例）○○病院 外来／△△クリニック",
@@ -390,7 +385,6 @@ export default async function handler(req, res) {
       for (const t of tags.slice(0, 3)) {
         if (!s.status.must.includes(t)) { s.status.must.push(t); added.push(t); }
       }
-      // ID ひも付け（Must）
       for (const label of added) {
         const id = tagIdByName.get(label);
         if (id && !s.status.must_ids.includes(id)) s.status.must_ids.push(id);
@@ -426,7 +420,6 @@ export default async function handler(req, res) {
       for (const t of tags.slice(0, 3)) {
         if (!s.status.want.includes(t)) { s.status.want.push(t); added.push(t); }
       }
-      // ID ひも付け（Want）
       for (const label of added) {
         const id = tagIdByName.get(label);
         if (id && !s.status.want_ids.includes(id)) s.status.want_ids.push(id);
@@ -476,6 +469,7 @@ export default async function handler(req, res) {
     debug: debugState(s)
   }, s.step));
 }
+// ---- 入口 ここまで ----
 
 // ---- ヘルパ ----
 function withMeta(payload, step) {
