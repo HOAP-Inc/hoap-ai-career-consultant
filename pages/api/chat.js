@@ -238,15 +238,15 @@ export default async function handler(req, res) {
 
   // ---- Step2：職種（所有資格） ----
 if (s.step === 2) {
-  // 入力原文はそのまま保持（UIにも出す）
-  s.status.role = text || "";
+  // ① 複数資格を抽出して正規化（aliases対応）
+  const found = matchLicensesInTextAll(text);  // ← ③で追加するヘルパー
 
-  // 入力文から資格（複数）を抽出して格納
-  const found = matchLicensesInTextMulti(text);
-  if (found.length) {
-    const set = new Set([...(s.status.licenses || []), ...found]);
-    s.status.licenses = Array.from(set);
-  }
+  // ② 状態に保存
+  s.status.licenses = found;                              // 例: ["正看護師","介護福祉士"]
+  s.status.role = found.length ? found.join("／") : (text || ""); // バッジ表示に使う文字列
+
+  // ③ tags.json の ID（must_ids 等）には一切触らない（←ここが重要）
+  //    ※ 所有資格は「条件」ではないため、must_ids へは入れない。
 
   // 次ステップへ
   s.step = 3;
@@ -541,7 +541,9 @@ function isNone(text) {
   return /^(ない|特にない|無し|なし|no)$/i.test(t);
 }
 
-// 複数の資格ラベルを拾う
+// ---- ここから追記（ヘルパー末尾） ----
+
+// 複数の資格ラベルを拾う（エイリアスも含めて重複排除）
 function matchLicensesInText(text = "") {
   const norm = String(text).trim();
   const results = [];
@@ -552,3 +554,5 @@ function matchLicensesInText(text = "") {
   }
   return results;
 }
+
+// ---- 追記ここまで ----
