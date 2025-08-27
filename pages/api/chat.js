@@ -1,6 +1,14 @@
 // pages/api/chat.js
 // ほーぷちゃん：会話ロジック（Step厳密・深掘り2回・候補提示・ステータス算出）
-const { tags: tagList } = require("../../tags.json");
+let tagList = [];
+try {
+  const raw = require("../../tags.json");
+  // raw が { tags: [...] } でも、[...] 直でも両方受ける
+  tagList = Array.isArray(raw?.tags) ? raw.tags : (Array.isArray(raw) ? raw : []);
+} catch (e) {
+  console.error("tags.json 読み込み失敗:", e);
+  tagList = [];
+}
 let licenses = {};
 try {
   licenses = require("../../licenses.json"); // ルート直下に置く（tags.json と同じ階層）
@@ -48,13 +56,18 @@ const matchLicenseInText = matchLicensesInText;
 
 // 「名称 → ID」のマップを両表記で作る
 const tagIdByName = new Map();
-for (const t of tagList) {
-  const name = String(t.name);
-  const fullWidth = name.replace(/\(/g, "（").replace(/\)/g, "）").replace(/~/g, "～");
-  const halfWidth = name.replace(/（/g, "(").replace(/）/g, ")").replace(/～/g, "~");
-  tagIdByName.set(name, t.id);
-  tagIdByName.set(fullWidth, t.id);
-  tagIdByName.set(halfWidth, t.id);
+try {
+  for (const t of (Array.isArray(tagList) ? tagList : [])) {
+    const name = String(t?.name ?? "");
+    if (!name) continue;
+    const fullWidth = name.replace(/\(/g, "（").replace(/\)/g, "）").replace(/~/g, "～");
+    const halfWidth = name.replace(/（/g, "(").replace(/）/g, ")").replace(/～/g, "~");
+    tagIdByName.set(name, t.id);
+    tagIdByName.set(fullWidth, t.id);
+    tagIdByName.set(halfWidth, t.id);
+  }
+} catch (e) {
+  console.error("tagIdByName 構築失敗:", e);
 }
 
 // ---- Step ラベル（UI用） ----
