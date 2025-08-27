@@ -43,14 +43,20 @@ try {
   console.error("licenseMap 構築に失敗:", e);
 }
 
-// 入力テキストに含まれる資格の正式ラベルを返す（なければ null）
-function matchLicenseInText(text = "") {
+// 複数の資格ラベルを拾う（エイリアスも含めて重複排除）
+function matchLicensesInText(text = "") {
   const norm = String(text).trim();
+  const results = [];
   for (const [alias, label] of licenseMap.entries()) {
-    if (alias && norm.includes(alias)) return label;
+    if (alias && norm.includes(alias)) {
+      if (!results.includes(label)) results.push(label);
+    }
   }
-  return null;
+  return results;
 }
+
+// ←この1行を“この関数の直後”に追加（単数名を呼ばれても動くように）
+const matchLicenseInText = matchLicensesInText;
 
 // 「名称 → ID」のマップを両表記で作る
 const tagIdByName = new Map();
