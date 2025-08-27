@@ -391,7 +391,7 @@ export default async function handler(req, res) {
     debug: debugState(s)
   }, s.step));
 }
-  // ここには来ない想定（フォールバック廃止）
+    // ここには来ない想定（フォールバック廃止）
   return res.json(withMeta({
     response: "（内部エラー）",
     step: s.step,
@@ -400,7 +400,7 @@ export default async function handler(req, res) {
     candidateNumber: s.status.number,
     debug: debugState(s),
   }, s.step));
-} // ← ここで handler を閉じる（この位置が重要！）
+} // ← ここで handler を閉じる
 
 // ---- ヘルパ ----
 function withMeta(payload, step) {
@@ -423,7 +423,7 @@ function buildStatusBar(st) {
     現職: st.place || "",
     転職目的: st.reason_tag ? st.reason_tag : (st.reason ? "済" : ""),
     Must: st.must.length ? `${st.must.length}件` : (st.memo?.must_raw?.length ? "済" : ""),
-    Want: st.want.length ? `${st.want.length}件` : (st.memo?.want_raw?.length ? "済" : ""),
+    Want: st.want.length ? `${st.want.length}件` : (st.memo?.want_raw?.length ? "済` : ""),
     Can: st.can ? "済" : "",
     Will: st.will ? "済" : "",
   };
@@ -486,10 +486,10 @@ function matchTags(text, dict) {
 }
 
 function normalizePick(text) {
-  return String(text || "").replace(/[［$begin:math:display$$end:math:display$］]/g, "").trim();
+  return String(text || "").replace(/[［\[\]］]/g, "").trim();
 }
 
 function isNone(text) {
   const t = (text || "").trim();
   return /^(ない|特にない|無し|なし|no)$/i.test(t);
-} 
+}
