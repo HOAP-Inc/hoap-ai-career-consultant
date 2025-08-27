@@ -392,7 +392,7 @@ export default async function handler(req, res) {
   }, s.step));
 }
 
-// 想定外フォールバック
+  // 想定外フォールバック
   return res.json(withMeta({
     response: "（内部エラー）",
     step: s.step,
@@ -401,7 +401,7 @@ export default async function handler(req, res) {
     candidateNumber: s.status.number,
     debug: debugState(s),
   }, s.step));
-} // ← ここで handler を閉じる
+} // ← ここで handler を閉じる（この1個だけ）
 
 // ---- ヘルパ ----
 function withMeta(payload, step) {
@@ -441,6 +441,7 @@ function debugState(s) {
   };
 }
 
+// 0.5 を使わない進行に合わせた文言
 function nextAfterId(s) {
   switch (s.step) {
     case 2:
