@@ -80,9 +80,9 @@ export default function Home() {
       // AI応答
       setMessages((m) => [...m, { type: "ai", content: data.response }]);
 
-      // ステータス・ステップ更新
-      if (data.status) setStatus(data.status);
-      if (data.meta?.step != null) setStep(data.meta.step);
+      // ステータス・ステップ更新（statusBar を必ず使う）
+setStatus(data.meta?.statusBar ?? statusInit);
+if (data.meta?.step != null) setStep(data.meta.step);
     } catch (err) {
       console.error(err);
       setMessages((m) => [
@@ -185,10 +185,10 @@ export default function Home() {
           ref={taRef}
           className="textarea"
           placeholder={
-            step === 0
-              ? "求職者IDを入力してください（メールに届いているID）…"
-              : "メッセージを入力…"
-          }
+  step === 1
+    ? "求職者IDを入力してください（メールに届いているID）…"
+    : "メッセージを入力…"
+}
           value={input}
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={onKeyDown}
