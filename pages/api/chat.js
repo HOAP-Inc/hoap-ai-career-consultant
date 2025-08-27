@@ -130,23 +130,23 @@ const mustWantItems = [
 const sessions = Object.create(null);
 function initSession() {
   return {
-    step: 0,
+    step: 1, // ← ここを 1 から開始（0.5 等は使わない）
     isNumberConfirmed: false,
     drill: { phase: null, count: 0, category: null, awaitingChoice: false, options: [] },
     status: {
-  number: "",
-  role: "",
-  place: "",
-  reason: "",
-  reason_tag: "",
-  must: [],
-  want: [],
-  must_ids: [],   // ←これ追加
-  want_ids: [],   // ←これ追加
-  can: "",
-  will: "",
-  memo: { reason_raw: "", must_raw: [], want_raw: [] },
-},
+      number: "",
+      role: "",
+      place: "",
+      reason: "",
+      reason_tag: "",
+      must: [],
+      want: [],
+      must_ids: [],
+      want_ids: [],
+      can: "",
+      will: "",
+      memo: { reason_raw: "", must_raw: [], want_raw: [] },
+    },
   };
 }
 
@@ -159,12 +159,14 @@ export default async function handler(req, res) {
 
   const s = sessions[sessionId] ?? (sessions[sessionId] = initSession());
 
+  // 念のため配列を初期化
   if (!s.status.must_ids) s.status.must_ids = [];
   if (!s.status.want_ids) s.status.want_ids = [];
 
-  // ID再質問ガード
+  // IDフォーマット判定（4〜8桁の数字）
   const looksId = /^\s*\d{4,8}\s*$/.test(text);
-  if (s.isNumberConfirmed && (s.step === 0 || s.step == null)) s.step = 0.5;
+
+  // 既にID確認済みで、さらにIDっぽい入力が来たら「次へ進む」案内を返す
   if (s.isNumberConfirmed && looksId) {
     return res.json(withMeta({
       response: nextAfterId(s),
@@ -176,63 +178,49 @@ export default async function handler(req, res) {
     }, s.step));
   }
 
-  // ---- Step0：求職者ID ----
-  if (s.step === 0) {
+  // ---- Step1：求職者ID ----
+  if (s.step === 1) {
     if (!looksId) {
       return res.json(withMeta({
-        response: "こんにちは！私はAIキャリアエージェント『ほーぷちゃん』です🤖✨\n" +
-        "担当との面談の前に、あなたの希望条件や想いを整理していくね！\n\n" +
-        "最初に【求職者ID】を教えてね。※メールに届いているIDだよ。",
-        step: 0, status: s.status, isNumberConfirmed: false, candidateNumber: "", debug: debugState(s)
-      }, 0));
+        response:
+          "こんにちは！私はAIキャリアエージェント『ほーぷちゃん』です🤖✨\n" +
+          "担当との面談の前に、あなたの希望条件や想いを整理していくね！\n\n" +
+          "最初に【求職者ID】を教えてね。※メールに届いているIDだよ。",
+        step: 1, status: s.status, isNumberConfirmed: false, candidateNumber: "", debug: debugState(s)
+      }, 1));
     }
     s.status.number = text.replace(/\s+/g, "");
     s.isNumberConfirmed = true;
-    s.step = 0.5;
-    return res.json(withMeta({
-      response: "OK、求職者ID確認したよ！\nまず【今の職種（所有資格）】を教えてね。\n（例）正看護師／介護福祉士／初任者研修 など",
-      step: 0.5, status: s.status, isNumberConfirmed: true, candidateNumber: s.status.number, debug: debugState(s)
-    }, 0.5));
-  }
-
-  // ---- Step0.5：職種（所有資格） ----
-  if (s.step === 0.5) {
-    s.status.role = text || "";
-    if (/(介護|ヘルパー)/.test(text) && !/(初任者|実務者|介護福祉士)/.test(text)) {
-      s.step = 0.55;
-      return res.json(withMeta({
-        response: "介護系なんだね！\n初任者研修や実務者研修、介護福祉士などの資格は持ってる？なければ「ない」でOK！",
-        step: 0.55, status: s.status, isNumberConfirmed: true, candidateNumber: s.status.number, debug: debugState(s)
-      }, 0.5));
-    }
-    s.step = 1;
-    return res.json(withMeta({
-      response: "受け取ったよ！次に【今どこで働いてる？】を教えてね。\n（例）○○病院 外来／△△クリニック",
-      step: 1, status: s.status, isNumberConfirmed: true, candidateNumber: s.status.number, debug: debugState(s)
-    }, 1));
-  }
-  if (s.step === 0.55) {
-    s.status.role = `${s.status.role}（資格確認:${text || "未回答"}）`;
-    s.step = 1;
-    return res.json(withMeta({
-      response: "OK！じゃあ次に【今どこで働いてる？】を教えてね。\n（例）○○病院 外来／△△クリニック",
-      step: 1, status: s.status, isNumberConfirmed: true, candidateNumber: s.status.number, debug: debugState(s)
-    }, 1));
-  }
-
-  // ---- Step1：現職 ----
-  if (s.step === 1) {
-    s.status.place = text || "";
     s.step = 2;
-    s.drill = { phase: "reason", count: 0, category: null, awaitingChoice: false, options: [] };
     return res.json(withMeta({
-      response: "はじめに、今回の転職理由を教えてほしいな。きっかけってどんなことだった？\nしんどいと思ったこと、これはもう無理って思ったこと、逆にこういうことに挑戦したい！って思ったこと、何でもOKだよ◎",
+      response: "OK、求職者ID確認したよ！\n次に【今の職種（所有資格）】を教えてね。\n（例）正看護師／介護福祉士／初任者研修 など",
       step: 2, status: s.status, isNumberConfirmed: true, candidateNumber: s.status.number, debug: debugState(s)
     }, 2));
   }
 
-  // ---- Step2：転職理由（深掘り2回→候補提示） ----
+  // ---- Step2：職種（所有資格） ----
   if (s.step === 2) {
+    s.status.role = text || "";
+    s.step = 3;
+    return res.json(withMeta({
+      response: "受け取ったよ！次に【今どこで働いてる？】を教えてね。\n（例）○○病院 外来／△△クリニック",
+      step: 3, status: s.status, isNumberConfirmed: true, candidateNumber: s.status.number, debug: debugState(s)
+    }, 3));
+  }
+
+  // ---- Step3：現職 ----
+  if (s.step === 3) {
+    s.status.place = text || "";
+    s.step = 4;
+    s.drill = { phase: "reason", count: 0, category: null, awaitingChoice: false, options: [] };
+    return res.json(withMeta({
+      response: "はじめに、今回の転職理由を教えてほしいな。きっかけってどんなことだった？\nしんどいと思ったこと、これはもう無理って思ったこと、逆にこういうことに挑戦したい！って思ったこと、何でもOKだよ◎",
+      step: 4, status: s.status, isNumberConfirmed: true, candidateNumber: s.status.number, debug: debugState(s)
+    }, 4));
+  }
+
+  // ---- Step4：転職理由（深掘り2回→候補提示） ----
+  if (s.step === 4) {
     if (s.drill.phase === "reason" && s.drill.awaitingChoice && s.drill.options?.length) {
       const pick = normalizePick(text);
       const chosen = s.drill.options.find(o => o === pick);
@@ -240,16 +228,16 @@ export default async function handler(req, res) {
         const empathy = "なるほど、その気持ちよくわかる！大事な転職のきっかけだね◎";
         const repeat = `つまり『${chosen}』ってことだね！`;
         s.status.reason_tag = chosen;
-        s.step = 3;
+        s.step = 5;
         return res.json(withMeta({
           response: `${empathy}\n${repeat}\n\n${mustIntroText()}`,
-          step: 3, status: s.status, isNumberConfirmed: true, candidateNumber: s.status.number, debug: debugState(s)
-        }, 3));
+          step: 5, status: s.status, isNumberConfirmed: true, candidateNumber: s.status.number, debug: debugState(s)
+        }, 5));
       }
       return res.json(withMeta({
         response: `ごめん、もう一度教えて！この中だとどれが一番近い？『${s.drill.options.map(x=>`［${x}］`).join("／")}』`,
-        step: 2, status: s.status, isNumberConfirmed: true, candidateNumber: s.status.number, debug: debugState(s)
-      }, 2));
+        step: 4, status: s.status, isNumberConfirmed: true, candidateNumber: s.status.number, debug: debugState(s)
+      }, 4));
     }
 
     if (s.drill.count === 0) {
@@ -258,18 +246,18 @@ export default async function handler(req, res) {
       const cat = pickReasonCategory(text);
       if (!cat || noOptionCategory(cat)) {
         const empathy = "なるほど、その気持ちよくわかる！大事な転職のきっかけだね◎";
-        s.step = 3;
+        s.step = 5;
         return res.json(withMeta({
           response: `${empathy}\n\n${mustIntroText()}`,
-          step: 3, status: s.status, isNumberConfirmed: true, candidateNumber: s.status.number, debug: debugState(s)
-        }, 3));
+          step: 5, status: s.status, isNumberConfirmed: true, candidateNumber: s.status.number, debug: debugState(s)
+        }, 5));
       }
       s.drill.category = cat;
       s.drill.count = 1;
       const q = transferReasonFlow[cat].deep1[0] || "それについて、もう少し詳しく教えて！";
       return res.json(withMeta({
-        response: q, step: 2, status: s.status, isNumberConfirmed: true, candidateNumber: s.status.number, debug: debugState(s)
-      }, 2));
+        response: q, step: 4, status: s.status, isNumberConfirmed: true, candidateNumber: s.status.number, debug: debugState(s)
+      }, 4));
     }
 
     if (s.drill.count === 1) {
@@ -277,8 +265,8 @@ export default async function handler(req, res) {
       const cat = s.drill.category;
       const q = transferReasonFlow[cat].deep2[0] || "なるほど。他に具体例があれば教えて！";
       return res.json(withMeta({
-        response: q, step: 2, status: s.status, isNumberConfirmed: true, candidateNumber: s.status.number, debug: debugState(s)
-      }, 2));
+        response: q, step: 4, status: s.status, isNumberConfirmed: true, candidateNumber: s.status.number, debug: debugState(s)
+      }, 4));
     }
 
     if (s.drill.count === 2) {
@@ -286,116 +274,123 @@ export default async function handler(req, res) {
       const options = (transferReasonFlow[cat].internal_options || []).slice(0, 3);
       if (!options.length) {
         const empathy = "なるほど、その気持ちよくわかる！大事な転職のきっかけだね◎";
-        s.step = 3;
+        s.step = 5;
         return res.json(withMeta({
           response: `${empathy}\n\n${mustIntroText()}`,
-          step: 3, status: s.status, isNumberConfirmed: true, candidateNumber: s.status.number, debug: debugState(s)
-        }, 3));
+          step: 5, status: s.status, isNumberConfirmed: true, candidateNumber: s.status.number, debug: debugState(s)
+        }, 5));
       }
       s.drill.awaitingChoice = true;
       s.drill.options = options;
       return res.json(withMeta({
         response: `この中だとどれが一番近い？『${options.map(x=>`［${x}］`).join("／")}』`,
-        step: 2, status: s.status, isNumberConfirmed: true, candidateNumber: s.status.number, debug: debugState(s)
-      }, 2));
+        step: 4, status: s.status, isNumberConfirmed: true, candidateNumber: s.status.number, debug: debugState(s)
+      }, 4));
     }
   }
 
-  // ---- Step3：絶対に外せない条件（Must） ----
-if (s.step === 3) {
-  if (isNone(text)) {
-    s.step = 4;
-    return res.json(withMeta({
-      response: "ありがとう！それじゃあ次は【あったらいいな（希望条件）】を教えてね。",
-      step: 4, status: s.status, isNumberConfirmed: true, candidateNumber: s.status.number, debug: debugState(s)
-    }, 4));
-  }
-
-  const tags = matchTags(text, mustWantItems);
-  if (tags.length) {
-    const added = [];
-    for (const t of tags.slice(0, 3)) {
-      if (!s.status.must.includes(t)) { s.status.must.push(t); added.push(t); }
+  // ---- Step5：絶対に外せない条件（Must） ----
+  if (s.step === 5) {
+    if (isNone(text)) {
+      s.step = 6;
+      return res.json(withMeta({
+        response: "ありがとう！それじゃあ次は【あったらいいな（希望条件）】を教えてね。",
+        step: 6, status: s.status, isNumberConfirmed: true, candidateNumber: s.status.number, debug: debugState(s)
+      }, 6));
     }
 
-    // ID ひも付け（Must）
-    for (const label of added) {
-  const id = tagIdByName.get(label);
-  if (id && !s.status.must_ids.includes(id)) s.status.must_ids.push(id);
-}
+    const tags = matchTags(text, mustWantItems);
+    if (tags.length) {
+      const added = [];
+      for (const t of tags.slice(0, 3)) {
+        if (!s.status.must.includes(t)) { s.status.must.push(t); added.push(t); }
+      }
+      // ID ひも付け（Must）
+      for (const label of added) {
+        const id = tagIdByName.get(label);
+        if (id && !s.status.must_ids.includes(id)) s.status.must_ids.push(id);
+      }
+      const line = added.map(t => `そっか、『${t}』が絶対ってことだね！`).join("\n");
+      return res.json(withMeta({
+        response: `${line}\n他にも絶対条件はある？（なければ「ない」って返してね）`,
+        step: 5, status: s.status, isNumberConfirmed: true, candidateNumber: s.status.number, debug: debugState(s)
+      }, 5));
+    }
 
-    const line = added.map(t => `そっか、『${t}』が絶対ってことだね！`).join("\n");
+    s.status.memo.must_raw ??= [];
+    s.status.memo.must_raw.push(text);
     return res.json(withMeta({
-      response: `${line}\n他にも絶対条件はある？（なければ「ない」って返してね）`,
-      step: 3, status: s.status, isNumberConfirmed: true, candidateNumber: s.status.number, debug: debugState(s)
-    }, 3));
-  }
-
-  s.status.memo.must_raw ??= [];
-  s.status.memo.must_raw.push(text);
-  return res.json(withMeta({
-    response: "そっか、わかった！大事な希望だね◎\n他にも絶対条件はある？（なければ「ない」って返してね）",
-    step: 3, status: s.status, isNumberConfirmed: true, candidateNumber: s.status.number, debug: debugState(s)
-  }, 3));
-}
-
-// ---- Step4：あったらいいな（Want） ----
-if (s.step === 4) {
-  if (isNone(text)) {
-    s.step = 5;
-    return res.json(withMeta({
-      response: "質問は残り2つ！\nまずは【いま出来ること・得意なこと（Can）】を教えてね。自由に書いてOKだよ。",
+      response: "そっか、わかった！大事な希望だね◎\n他にも絶対条件はある？（なければ「ない」って返してね）",
       step: 5, status: s.status, isNumberConfirmed: true, candidateNumber: s.status.number, debug: debugState(s)
     }, 5));
   }
 
-  const tags = matchTags(text, mustWantItems);
-  if (tags.length) {
-    const added = [];
-    for (const t of tags.slice(0, 3)) {
-      if (!s.status.want.includes(t)) { s.status.want.push(t); added.push(t); }
+  // ---- Step6：あったらいいな（Want） ----
+  if (s.step === 6) {
+    if (isNone(text)) {
+      s.step = 7;
+      return res.json(withMeta({
+        response: "質問は残り2つ！\nまずは【いま出来ること・得意なこと（Can）】を教えてね。自由に書いてOKだよ。",
+        step: 7, status: s.status, isNumberConfirmed: true, candidateNumber: s.status.number, debug: debugState(s)
+      }, 7));
     }
 
-    // ID ひも付け（Want）
-    for (const label of added) {
-  const id = tagIdByName.get(label);
-  if (id && !s.status.want_ids.includes(id)) s.status.want_ids.push(id);
-}
+    const tags = matchTags(text, mustWantItems);
+    if (tags.length) {
+      const added = [];
+      for (const t of tags.slice(0, 3)) {
+        if (!s.status.want.includes(t)) { s.status.want.push(t); added.push(t); }
+      }
+      // ID ひも付け（Want）
+      for (const label of added) {
+        const id = tagIdByName.get(label);
+        if (id && !s.status.want_ids.includes(id)) s.status.want_ids.push(id);
+      }
+      const line = added.map(t => `了解！『${t}』だと嬉しいってことだね！`).join("\n");
+      return res.json(withMeta({
+        response: `${line}\n他にもあったらいいなっていうのはある？（なければ「ない」って返してね）`,
+        step: 6, status: s.status, isNumberConfirmed: true, candidateNumber: s.status.number, debug: debugState(s)
+      }, 6));
+    }
 
-    const line = added.map(t => `了解！『${t}』だと嬉しいってことだね！`).join("\n");
+    s.status.memo.want_raw ??= [];
+    s.status.memo.want_raw.push(text);
     return res.json(withMeta({
-      response: `${line}\n他にもあったらいいなっていうのはある？（なければ「ない」って返してね）`,
-      step: 4, status: s.status, isNumberConfirmed: true, candidateNumber: s.status.number, debug: debugState(s)
-    }, 4));
-  }
-
-  s.status.memo.want_raw ??= [];
-  s.status.memo.want_raw.push(text);
-  return res.json(withMeta({
-    response: "了解！気持ちは受け取ったよ◎\n他にもあったらいいなっていうのはある？（なければ「ない」って返してね）",
-    step: 4, status: s.status, isNumberConfirmed: true, candidateNumber: s.status.number, debug: debugState(s)
-  }, 4));
-}
-  // ---- Step5：Can ----
-  if (s.step === 5) {
-    s.status.can = text || "";
-    s.step = 6;
-    return res.json(withMeta({
-      response: "これが最後の質問👏\n【これから挑戦したいこと（Will）】を教えてね。自由に書いてOKだよ。",
+      response: "了解！気持ちは受け取ったよ◎\n他にもあったらいいなっていうのはある？（なければ「ない」って返してね）",
       step: 6, status: s.status, isNumberConfirmed: true, candidateNumber: s.status.number, debug: debugState(s)
     }, 6));
   }
 
-  // ---- Step6：Will ----
-  if (s.step === 6) {
-    s.status.will = text || "";
-    s.step = 7;
+  // ---- Step7：Can ----
+  if (s.step === 7) {
+    s.status.can = text || "";
+    s.step = 8;
     return res.json(withMeta({
-      response: "今日はたくさん話してくれてありがとう！\n整理した内容は担当エージェントにしっかり共有するね。面談でさらに具体化していこう！",
-      step: 7, status: s.status, isNumberConfirmed: true, candidateNumber: s.status.number, debug: debugState(s)
-    }, 7));
+      response: "これが最後の質問👏\n【これから挑戦したいこと（Will）】を教えてね。自由に書いてOKだよ。",
+      step: 8, status: s.status, isNumberConfirmed: true, candidateNumber: s.status.number, debug: debugState(s)
+    }, 8));
   }
 
+  // ---- Step8：Will ----
+  if (s.step === 8) {
+    s.status.will = text || "";
+    s.step = 9;
+    return res.json(withMeta({
+      response: "今日はたくさん話してくれてありがとう！\n整理した内容は担当エージェントにしっかり共有するね。面談でさらに具体化していこう！",
+      step: 9, status: s.status, isNumberConfirmed: true, candidateNumber: s.status.number, debug: debugState(s)
+    }, 9));
+  }
+
+  // 想定外フォールバック
+  return res.json(withMeta({
+    response: "（内部エラー）",
+    step: s.step,
+    status: s.status,
+    isNumberConfirmed: s.isNumberConfirmed,
+    candidateNumber: s.status.number,
+    debug: debugState(s)
+  }, s.step));
+}
   // ここには来ない想定（フォールバック廃止）
   return res.json(withMeta({
     response: "（内部エラー）", step: s.step, status: s.status, isNumberConfirmed: s.isNumberConfirmed, candidateNumber: s.status.number, debug: debugState(s)
@@ -439,12 +434,12 @@ function debugState(s) {
 }
 function nextAfterId(s) {
   switch (s.step) {
-    case 0.5:
-      return "IDは確認済だよ！まず【今の職種（所有資格）】を教えてね。\n（例）正看護師／介護福祉士／初任者研修 など";
-    case 1:
-      return "IDは確認済だよ！次に【今どこで働いてる？】を教えてね。\n（例）○○病院 外来／△△クリニック";
     case 2:
-      return "IDは確認済だよ！\nはじめに、今回の転職理由を教えてほしいな。きっかけってどんなことだった？\nしんどいと思ったこと、これはもう無理って思ったこと、逆にこういうことに挑戦したい！って思ったこと、何でもOKだよ◎";
+      return "IDは確認済だよ！まず【今の職種（所有資格）】を教えてね。\n（例）正看護師／介護福祉士／初任者研修 など";
+    case 3:
+      return "IDは確認済だよ！次に【今どこで働いてる？】を教えてね。\n（例）○○病院 外来／△△クリニック";
+    case 4:
+      return "IDは確認済だよ！\nはじめに、今回の転職理由を教えてほしいな。きっかけってどんなことだった？";
     default:
       return "IDは確認済だよ！";
   }
