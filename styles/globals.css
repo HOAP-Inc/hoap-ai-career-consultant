@@ -207,20 +207,20 @@ body{
   border-radius:6px 0 0 6px; /* ← 左端だけ丸く、右端は四角 */
 }
 
-/* ---- chat auto scroll fix ---- */
+/* ---- single scroll container = .container ---- */
 html, body, #__next { height: 100%; }
 
 .container {
   display: flex;
   flex-direction: column;
-  height: 100vh;         /* 画面全体を使う */
+  height: 100vh;
+  overflow-y: auto;      /* ← スクロールはここだけ */
 }
 
 .chat.list {
-  flex: 1;               /* 残りを全部ここに割り当てる */
-  min-height: 0;         /* これが超重要。flex子が縮められるようにする */
-  overflow-y: auto;      /* スクロール可能にする */
-  scroll-behavior: smooth;
+  flex: 0 0 auto;        /* コンテンツ分だけ高さを持つ */
+  min-height: unset;
+  overflow: visible;     /* ← ここはスクロールさせない */
 }
 /* ---- sticky top (ヘッダ/ステータス/プログレスを上部固定) ---- */
 .header {
