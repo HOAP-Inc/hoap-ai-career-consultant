@@ -1,7 +1,7 @@
 // pages/api/chat.js
 // ほーぷちゃん：会話ロジック（Step厳密・深掘り2回・候補提示・ステータス算出）
 const { tags: tagList } = require("../../tags.json");
-const licenses = require("../../所有資格.json");
+const licenses = require("../../licenses.json");
 
 // 所有資格の「別名→正式ラベル」マップを構築
 const licenseMap = new Map();
