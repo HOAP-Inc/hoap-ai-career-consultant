@@ -1,33 +1,46 @@
 // pages/api/chat.js
 // ほーぷちゃん：会話ロジック（Step厳密・深掘り2回・候補提示・ステータス算出）
 const { tags: tagList } = require("../../tags.json");
-const licenses = require("../../licenses.json");
+let licenses = {};
+try {
+  licenses = require("../../licenses.json"); // ルート直下に置く（tags.json と同じ階層）
+} catch (e) {
+  console.error("licenses.json 読み込み失敗:", e);
+  licenses = {};
+}
 
-// 所有資格の「別名→正式ラベル」マップを構築
+// 所有資格の「別名→正式ラベル」マップを構築（安全化）
 const licenseMap = new Map();
-for (const [, arr] of Object.entries(licenses)) {
-  for (const item of arr) {
-    const label = item.label;
-    if (!label) continue;
+try {
+  for (const [, arr] of Object.entries(licenses || {})) {
+    if (!Array.isArray(arr)) continue; // 想定外構造を無視
+    for (const item of arr) {
+      const label = typeof item === "string" ? item : item?.label;
+      if (!label) continue;
 
-    // ラベル自体
-    licenseMap.set(label, label);
+      // ラベル自体
+      licenseMap.set(label, label);
 
-    // 全角/半角ゆらぎも登録
-    const fwLabel = label.replace(/\(/g,"（").replace(/\)/g,"）").replace(/~/g,"～");
-    const hwLabel = label.replace(/（/g,"(").replace(/）/g,")").replace(/～/g,"~");
-    licenseMap.set(fwLabel, label);
-    licenseMap.set(hwLabel, label);
+      // 全角/半角ゆらぎ
+      const fwLabel = label.replace(/\(/g, "（").replace(/\)/g, "）").replace(/~/g, "～");
+      const hwLabel = label.replace(/（/g, "(").replace(/）/g, ")").replace(/～/g, "~");
+      licenseMap.set(fwLabel, label);
+      licenseMap.set(hwLabel, label);
 
-    // 別名
-    for (const a of item.aliases || []) {
-      licenseMap.set(a, label);
-      const fw = a.replace(/\(/g,"（").replace(/\)/g,"）").replace(/~/g,"～");
-      const hw = a.replace(/（/g,"(").replace(/）/g,")").replace(/～/g,"~");
-      licenseMap.set(fw, label);
-      licenseMap.set(hw, label);
+      // 別名
+      const aliases = (typeof item === "object" && Array.isArray(item.aliases)) ? item.aliases : [];
+      for (const a of aliases) {
+        if (!a) continue;
+        licenseMap.set(a, label);
+        const fw = a.replace(/\(/g, "（").replace(/\)/g, "）").replace(/~/g, "～");
+        const hw = a.replace(/（/g, "(").replace(/）/g, ")").replace(/～/g, "~");
+        licenseMap.set(fw, label);
+        licenseMap.set(hw, label);
+      }
     }
   }
+} catch (e) {
+  console.error("licenseMap 構築に失敗:", e);
 }
 
 // 入力テキストに含まれる資格の正式ラベルを返す（なければ null）
