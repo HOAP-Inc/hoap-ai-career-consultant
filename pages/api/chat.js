@@ -239,7 +239,7 @@ export default async function handler(req, res) {
   // ---- Step2：職種（所有資格） ----
 if (s.step === 2) {
   // ① 複数資格を抽出して正規化（aliases対応）
-  const found = matchLicensesInTextAll(text);  // ← ③で追加するヘルパー
+  const found = matchLicensesInText(text);     // ← 末尾で定義した複数拾い関数
 
   // ② 状態に保存
   s.status.licenses = found;                              // 例: ["正看護師","介護福祉士"]
