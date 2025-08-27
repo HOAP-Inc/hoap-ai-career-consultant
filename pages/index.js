@@ -25,7 +25,7 @@ export default function Home() {
   const taRef = useRef(null);
 
   // 進捗バー
-  const MAX_STEP = 8;
+  const MAX_STEP = 9;
   const progress = Math.min(100, Math.max(0, Math.round((step / MAX_STEP) * 100)));
 
   // ★最初の挨拶をサーバーから1回だけ取得
@@ -104,14 +104,15 @@ export default function Home() {
   function statusStepLabel(step) {
     const map = {
       0: "基本情報",
-      1: "基本情報",
-      2: "基本情報",
-      3: "転職理由",
-      4: "絶対条件",
-      5: "希望条件",
-      6: "これまで（Can）",
-      7: "これから（Will）",
-      8: "完了",
+      1: "求職者ID",
+      2: "職種",
+      3: "現在の職場",
+      4: "転職理由",
+      5: "絶対条件",
+      6: "希望条件",
+      7: "これまで（Can）",
+      8: "これから（Will）",
+      9: "完了",
     };
     return map[step] ?? "";
   }
