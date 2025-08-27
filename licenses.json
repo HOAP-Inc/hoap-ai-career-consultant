@@ -5,7 +5,7 @@
     { "label": "保健師", "aliases": [] },
     { "label": "助産師", "aliases": [] },
     { "label": "薬剤師", "aliases": [] },
-    { "label": "医師", "aliases": ["ドクター"] },
+    { "label": "医師", "aliases": ["ドクター", "医者"] },
     { "label": "臨床検査技師", "aliases": ["検査技師"] },
     { "label": "言語聴覚士", "aliases": ["ST"] },
     { "label": "臨床工学技士", "aliases": ["CE"] },
