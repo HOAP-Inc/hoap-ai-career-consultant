@@ -23,7 +23,7 @@ export default function Home() {
   const [isComposing, setIsComposing] = useState(false);
   const listRef = useRef(null);
   const taRef = useRef(null);
-　const bottomRef = useRef(null);
+  const bottomRef = useRef(null);
 
   // 進捗バー
   const MAX_STEP = 9;
