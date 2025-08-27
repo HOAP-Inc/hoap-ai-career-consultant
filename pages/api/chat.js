@@ -392,17 +392,6 @@ export default async function handler(req, res) {
   }, s.step));
 }
 
-  // 想定外フォールバック
-  return res.json(withMeta({
-    response: "（内部エラー）",
-    step: s.step,
-    status: s.status,
-    isNumberConfirmed: s.isNumberConfirmed,
-    candidateNumber: s.status.number,
-    debug: debugState(s),
-  }, s.step));
-} // ← ここで handler を閉じる（この1個だけ）
-
 // ---- ヘルパ ----
 function withMeta(payload, step) {
   const statusBar = buildStatusBar(payload.status);
