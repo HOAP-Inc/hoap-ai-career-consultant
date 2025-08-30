@@ -232,7 +232,7 @@ html, body, #__next { height: 100%; }
 .duo-stage__hoap{
   width: min(420px, 40vw);   /* ほんの少し縮小 */
   position: absolute;
-  right: 6%; bottom: -10%;    /* さらに下げる（数値だけ好みに合わせて調整OK） */
+  right: 6%; bottom: -8%;    /* さらに下げる（数値だけ好みに合わせて調整OK） */
   display:block;
   filter: drop-shadow(0 6px 18px rgba(0,0,0,.28));
   transform-origin: 50% 85%;
