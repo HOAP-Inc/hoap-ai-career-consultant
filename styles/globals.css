@@ -280,7 +280,7 @@ html, body, #__next { height: 100%; }
 .duo-stage__hoap{
   width: min(520px, 48vw);     /* PCでは少し大きめ＆中央寄り体感 */
   position: absolute;
-  left: 8%; bottom: 6%;        /* ステージ内で視覚中央へ寄せる */
+  right: 6%; bottom: 6%;
   display:block;
   filter: drop-shadow(0 6px 18px rgba(0,0,0,.28));
   transform-origin: 50% 85%;
@@ -294,7 +294,7 @@ html, body, #__next { height: 100%; }
 /* ほーぷちゃんの吹き出し（書き換え式） */
 .duo-stage__bubble{
   position: absolute;          /* 画像の“上”に重ねる */
-  right: 6%; top: 10%;
+  left: 6%; top: 10%;
   max-width: 56%;
   background: #fff;
   border: 1px solid #f3e8ff;
@@ -308,11 +308,11 @@ html, body, #__next { height: 100%; }
 .duo-stage__bubble::before{
   content:"";
   position:absolute;
-  right: calc(100% - 12px); top: 24px;  /* 右寄せの泡に“左向き”の尻尾 */
+  left: calc(100% - 12px); top: 24px;
   width: 0; height: 0;
   border: 10px solid transparent;
-  border-right-color: #fff;
-  filter: drop-shadow(-1px 1px 0 rgba(243,232,255,1));
+  border-left-color: #fff;
+  filter: drop-shadow(1px 1px 0 rgba(243,232,255,1));
 }
 
 @media (max-width: 640px){
