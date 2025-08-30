@@ -269,27 +269,31 @@ html, body, #__next { height: 100%; }
 
 @media (max-width: 640px){
   .duo-stage{
-    height: 520px;                      /* 帯をさらに縦長に */
-  }
-  /* 背景：デスクを少し下へ＆縮小して上詰まりを解消 */
-  .duo-stage__bg{
-   background-size: 90%;
-   background-position: center 40px;   /* +Yで下げる */
+    height: 520px;
   }
 
+  /* 背景：さらに下げて少し大きく */
+  .duo-stage__bg{
+    background-size: 100%;
+    background-position: center 80px;   /* 40px → 80px にして下げる */
+  }
+
+  /* ほーぷちゃん：中央に収まるサイズ＆位置に */
   .duo-stage__hoap{
-    width: min(92vw, 520px);            /* 体感 “約3倍” まで拡大 */
+    width: min(80vw, 480px);            /* 92vw → 80vw で横はみ出し防止 */
     left: 50%;
-    transform: translateX(-50%);        /* ど真ん中寄せ（回転なし） */
-    bottom: 12%;                         /* 上に持ち上げて中央寄せ */
+    transform: translateX(-50%);        /* 中央寄せのまま */
+    bottom: 6%;                          /* 12% → 6% で少し下げて全身表示 */
     z-index: 1;
   }
+
+  /* 吹き出し：横広は維持しつつ、被りは軽めに */
   .duo-stage__bubble{
     left: 50%;
-    top: 16%;                            /* 体に“少しかぶる”高さ */
+    top: 12%;                            /* 16% → 12% で少し上へ */
     transform: translateX(-50%);
-    max-width: 90vw;
-    z-index: 2;                          /* ほーぷちゃんの前面に */
+    max-width: 88vw;                     /* 90vw → 88vw（端の余白を確保） */
+    z-index: 2;
     font-size: 15px;
     line-height: 1.8;
   }
