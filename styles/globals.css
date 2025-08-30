@@ -276,7 +276,7 @@ html, body, #__next { height: 100%; }
   /* 背景（机）を“下げて＆少し大きく”：上がスカスカにならない位置 */
   .duo-stage__bg{
     background-size: 115%;
-    background-position: center 50px;  /* +Yで下げる。100〜140pxで微調整OK */
+    background-position: center 30px;  /* +Yで下げる。100〜140pxで微調整OK */
   }
 
   /* ほーぷちゃん：やや小さめ／机ライン付近まで下げる／体感 右寄せ */
