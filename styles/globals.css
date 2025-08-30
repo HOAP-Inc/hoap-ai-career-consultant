@@ -278,24 +278,35 @@ html, body, #__next { height: 100%; }
     background-position: center 80px;   /* 40px → 80px にして下げる */
   }
 
-  /* ほーぷちゃん：中央に収まるサイズ＆位置に */
+  /* ほーぷちゃん：少し小さく／右寄せ／机ラインに合わせて下げる */
   .duo-stage__hoap{
-    width: min(80vw, 480px);            /* 92vw → 80vw で横はみ出し防止 */
-    left: 50%;
-    transform: translateX(-50%);        /* 中央寄せのまま */
-    bottom: 6%;                          /* 12% → 6% で少し下げて全身表示 */
+    width: min(72vw, 420px);   /* 80vw → 72vw で気持ち小さめ */
+    left: auto;
+    right: 4%;                 /* さらに右へ */
+    transform: none;
+    bottom: 0%;                /* 机のラインまで下げる */
     z-index: 1;
   }
 
-  /* 吹き出し：横広は維持しつつ、被りは軽めに */
+  /* セリフ：横長＆上側に。ほーぷちゃんの体に軽く被せる */
   .duo-stage__bubble{
-    left: 50%;
-    top: 12%;                            /* 16% → 12% で少し上へ */
-    transform: translateX(-50%);
-    max-width: 88vw;                     /* 90vw → 88vw（端の余白を確保） */
-    z-index: 2;
+    left: 6%;
+    right: auto;
+    top: 6%;                   /* 画面上部寄り */
+    transform: none;
+    max-width: 60vw;           /* 横長＝左6%〜右側の手前まで */
     font-size: 15px;
     line-height: 1.8;
+    z-index: 2;
+  }
+  /* 尻尾を“右向き”（ほーぷちゃん側）に変更 */
+  .duo-stage__bubble::before{
+    left: auto;
+    right: -10px;
+    top: 24px;
+    border: 10px solid transparent;
+    border-right-color: #fff;  /* ← 右向き */
+    filter: drop-shadow(1px 1px 0 rgba(243,232,255,1));
   }
 }
 
