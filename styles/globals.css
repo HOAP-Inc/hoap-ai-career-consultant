@@ -276,11 +276,11 @@ html, body, #__next { height: 100%; }
  padding: 12px 20px;
 }
 
-/* キャラをやや大きく、中央寄りに */
+/* PC用：ほーぷちゃんの位置とサイズ */
 .duo-stage__hoap{
-  width: min(520px, 48vw);     /* PCでは少し大きめ＆中央寄り体感 */
+  width: min(460px, 42vw);   /* ちょい小さく */
   position: absolute;
-  right: 6%; bottom: 6%;
+  right: 6%; bottom: 2%;     /* もっと下へ */
   display:block;
   filter: drop-shadow(0 6px 18px rgba(0,0,0,.28));
   transform-origin: 50% 85%;
