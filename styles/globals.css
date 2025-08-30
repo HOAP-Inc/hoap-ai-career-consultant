@@ -264,7 +264,8 @@ html, body, #__next { height: 100%; }
 .duo-stage__bg{
   position:absolute; inset:0;
   background: url("/beam-bg.png") center no-repeat;
-  background-size: 80%;   /* ← 縮小。70%〜90%で微調整可 */
+  background-size: 80%;
+  background-position: center -40px;   /* ← Y軸を上に移動。数値は調整 */
   filter: saturate(110%);
   opacity: .95;
 }
