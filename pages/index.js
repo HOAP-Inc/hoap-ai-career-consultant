@@ -62,9 +62,9 @@ useLayoutEffect(() => {
     if (!input.trim() || sending) return;
     setSending(true);
 
-    // ユーザー入力を即時反映
-    setAiText(data.response);
+    // ユーザー入力を即時反映（入力欄上のユーザー吹き出しに“上書き”）
     const userText = input;
+    setUserEcho(userText);
     setInput("");
 
     try {
@@ -75,18 +75,15 @@ useLayoutEffect(() => {
       });
       const data = await res.json();
 
-      // AI応答
-      setMessages((m) => [...m, { type: "ai", content: data.response }]);
+      // AI応答は“上書き”で表示（単一吹き出し）
+      setAiText(data.response);
 
       // ステータス・ステップ更新（meta.statusBar を使う）
 if (data.meta?.statusBar) setStatus(data.meta.statusBar);
 if (data.meta?.step != null) setStep(data.meta.step);
     } catch (err) {
       console.error(err);
-      setMessages((m) => [
-        ...m,
-        { type: "ai", content: "通信エラーが発生したよ🙏" },
-      ]);
+     setAiText("通信エラーが発生したよ🙏");
     } finally {
       setSending(false);
     }
