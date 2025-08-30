@@ -290,39 +290,30 @@ html, body, #__next { height: 100%; }
 
 @media (max-width: 640px){
 
-  /* ====== 1) ステージを深くして背景を“ステータスまで”見せる ====== */
+  /* 入力欄と被らないよう、下余白をさらに増やす */
+  .container{
+    padding-bottom: 240px;  /* 200px → 240px（必要なら260〜280で微調整） */
+  }
+
+  /* 背景はステータス行まで見せる（高さのみ。位置・サイズは触らない） */
   .duo-stage{
-    height: 580px;           /* ステータス行の直前まで背景が届く */
+    height: 580px;
     margin-bottom: 0;
   }
   .duo-stage::after{
     content:"";
     position:absolute; left:0; right:0;
-    bottom:-28px; height:28px;          /* 20〜36pxで微調整OK */
-    background: #fff0;                  /* 要素上のBGを邪魔しない */
+    bottom:-28px; height:28px;
+    background: transparent;
   }
 
-  /* 机（背景）をもっと上へ */
-  .duo-stage__bg{
-    background-size: 120%;
-    background-position: center 40px;   /* 30〜60pxで微調整OK */
-  }
-
-  /* ====== 2) ほーぷちゃん／セリフの当たりを弱める ====== */
-  .duo-stage__hoap{
-    width: min(60vw, 330px); 
-    right: 6%;
-    bottom: -2%;             /* 足元を見せつつ被りを防ぐ */
-    transform: none;
-    z-index: 1;
-  }
-
+  /* ★セリフだけ下げて、上部の見切れを解消（サイズも少しだけ絞る） */
   .duo-stage__bubble{
     left: 6%;
-    top: -4%;                
-    width: 76vw;             
-    max-width: 76vw;
-    font-size: 14px;         
+    top: 8%;                 /* ← ここを下げる：6〜10%で好み調整OK */
+    width: 74vw;             /* 横幅少し絞って縦長化を防止 */
+    max-width: 74vw;
+    font-size: 14px;
     line-height: 1.65;
     padding: 12px 14px;
     transform: none;
@@ -330,17 +321,11 @@ html, body, #__next { height: 100%; }
   }
   .duo-stage__bubble::before{ display:none; }
 
-  /* ====== 3) 入力欄を少しコンパクトに ====== */
-  .textarea{
-    min-height: 44px;
-    padding: 10px 12px;
-    font-size: 14px;
-  }
-  .send{
-    width:44px; height:44px;
-  }
+  /* 入力UIはややコンパクト */
+  .textarea{ min-height:44px; padding:10px 12px; font-size:14px; }
+  .send{ width:44px; height:44px; }
 
-  /* 進捗バー直下のユーザー吹き出し */
+  /* ユーザー吹き出しは進捗バー直下（位置はそのまま） */
   .user-echo{
     position: relative;
     bottom: auto;
@@ -348,7 +333,5 @@ html, body, #__next { height: 100%; }
     justify-content: flex-start;
     z-index: 1;
   }
-  .user-echo__bubble{
-    max-width: 92vw;
-  }
+  .user-echo__bubble{ max-width: 92vw; }
 }
