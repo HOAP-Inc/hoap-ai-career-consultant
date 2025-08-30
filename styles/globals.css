@@ -268,46 +268,38 @@ html, body, #__next { height: 100%; }
 }
 
 @media (max-width: 640px){
+  /* ステージ帯を少し深めに */
   .duo-stage{
-    height: 520px;
+    height: 540px;
   }
 
-  /* 背景：さらに下げて少し大きく */
+  /* 背景（机）を“下げて＆少し大きく”：上がスカスカにならない位置 */
   .duo-stage__bg{
-    background-size: 100%;
-    background-position: center 80px;   /* 40px → 80px にして下げる */
+    background-size: 115%;
+    background-position: center 120px;  /* +Yで下げる。100〜140pxで微調整OK */
   }
 
-  /* ほーぷちゃん：少し小さく／右寄せ／机ラインに合わせて下げる */
+  /* ほーぷちゃん：やや小さめ／机ライン付近まで下げる／体感 右寄せ */
   .duo-stage__hoap{
-    width: min(72vw, 420px);   /* 80vw → 72vw で気持ち小さめ */
-    left: auto;
-    right: 4%;                 /* さらに右へ */
-    transform: none;
-    bottom: 0%;                /* 机のラインまで下げる */
+    width: min(70vw, 420px);   /* ほんの少し小さく */
+    left: 58%;                 /* 右へ寄せる（55〜62%で好み調整） */
+    transform: translateX(-50%);
+    bottom: 2%;                /* 机に“足が触れる”くらいの高さ */
     z-index: 1;
   }
 
-  /* セリフ：横長＆上側に。ほーぷちゃんの体に軽く被せる */
+  /* 吹き出し：横長にして、ほーぷちゃんの上に少しかぶせる */
   .duo-stage__bubble{
-    left: 6%;
-    right: auto;
-    top: 6%;                   /* 画面上部寄り */
-    transform: none;
-    max-width: 60vw;           /* 横長＝左6%〜右側の手前まで */
-    font-size: 15px;
+    left: 34%;                 /* 左寄りに配置（被りやすく） */
+    top: 10%;
+    transform: translateX(-50%);
+    width: 78vw;               /* 縦長化を防ぐため横幅を固定で広めに */
+    max-width: 78vw;
     line-height: 1.8;
     z-index: 2;
   }
-  /* 尻尾を“右向き”（ほーぷちゃん側）に変更 */
-  .duo-stage__bubble::before{
-    left: auto;
-    right: -10px;
-    top: 24px;
-    border: 10px solid transparent;
-    border-right-color: #fff;  /* ← 右向き */
-    filter: drop-shadow(1px 1px 0 rgba(243,232,255,1));
-  }
+  /* モバイルは尻尾なしの方が収まり良い */
+  .duo-stage__bubble::before{ display:none; }
 }
 
 /* 2) 入力欄直上のユーザー吹き出し（書き換え式） */
