@@ -215,7 +215,7 @@ html, body, #__next { height: 100%; }
   position:absolute; inset:0;
   background: url("/beam-bg.png") center no-repeat;
   background-size: 80%;
-  background-position: center -150px;  /* ← もっと上げる。数値だけ微調整してOK */
+  background-position: center -200px;  /* ← もっと上げる。数値だけ微調整してOK */
   filter: saturate(110%);
   opacity: .95;
 }
