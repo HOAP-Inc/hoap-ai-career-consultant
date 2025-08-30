@@ -96,56 +96,6 @@ body{
   justify-content: flex-end;    /* ユーザーは右 */
 }
 
-/* --- Avatars --- */
-.avatar{
-  width:60px;               /* ← 大きくする */
-  height:60px;
-  border-radius:999px;
-  display:flex; align-items:center; justify-content:center;
-  flex:0 0 auto;
-  box-shadow: var(--card-shadow);
-  background: transparent;  /* 画像を活かすため背景は透明に */
-  border: none;
-  padding: 0;
-}
-
-/* ほーぷちゃん（AI）アイコン */
-.avatar img{
-  width:100%;
-  height:100%;
-  display:block;
-  object-fit: cover;
-  border-radius:50%;
-}
-
-/* 求職者（ユーザー）アイコン：濃いグラデ固定 */
-.avatar.user{
-  background: linear-gradient(135deg,#ec4899,#3b82f6); /* ピンク→ブルー */
-  opacity: 1;      /* 透過なし */
-  border:none;     /* 白縁で薄く見えるのを回避 */
-}
-
-.bubble{
-  max-width: 760px;
-  border-radius:16px;
-  padding:14px 16px;
-  line-height:1.8;
-  box-shadow: var(--card-shadow);
-  word-break: break-word;
-  white-space: pre-wrap;
-  font-size: 15px;
-}
-.ai .bubble {
-  background: #ffffff;  /* 白で固定 */
-  border:1px solid #f3e8ff;
-  opacity: 1;
-}
-.user .bubble {
-  background: linear-gradient(135deg, var(--user-grad-from), var(--user-grad-via) 50%, var(--user-grad-to));
-  border:1px solid #e9d5ff;
-  opacity: 1;   /* ← 追加して濃く */
-}
-
 /* 入力バー */
 .input-bar{
   position: fixed;
@@ -265,7 +215,7 @@ html, body, #__next { height: 100%; }
   position:absolute; inset:0;
   background: url("/beam-bg.png") center no-repeat;
   background-size: 80%;
-  background-position: center -120px;  /* ← もっと上げる。数値だけ微調整してOK */
+  background-position: center -150px;  /* ← もっと上げる。数値だけ微調整してOK */
   filter: saturate(110%);
   opacity: .95;
 }
@@ -282,7 +232,7 @@ html, body, #__next { height: 100%; }
 .duo-stage__hoap{
   width: min(440px, 40vw);   /* ほんの少し縮小 */
   position: absolute;
-  right: 6%; bottom: -2%;    /* さらに下げる（数値だけ好みに合わせて調整OK） */
+  right: 6%; bottom: -5%;    /* さらに下げる（数値だけ好みに合わせて調整OK） */
   display:block;
   filter: drop-shadow(0 6px 18px rgba(0,0,0,.28));
   transform-origin: 50% 85%;
