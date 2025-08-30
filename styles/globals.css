@@ -256,7 +256,7 @@ html, body, #__next { height: 100%; }
 .duo-stage{
   margin: 8px 0 12px;
   position: relative;
-  height: 320px;                 /* 帯の高さ。必要なら調整 */
+  height: 420px;                 /* PC基準を縦長に */
   border-radius: 16px;
   overflow: hidden;
   box-shadow: var(--card-shadow);
@@ -267,22 +267,20 @@ html, body, #__next { height: 100%; }
   filter: saturate(110%);
   opacity: .95;
 }
+/* 中身は自由配置（重ねる前提） */
 .duo-stage__wrap{
-  position: relative;
-  z-index: 1;
-  width: 100%;
-  height: 100%;
-  display: grid;
-  grid-template-columns: 1fr 1fr; /* 左：キャラ / 右：吹き出し */
-  align-items: center;
-  gap: 16px;
-  padding: 12px 20px;
+ position: relative;
+ z-index: 1;
+ width: 100%;
+ height: 100%;
+ padding: 12px 20px;
 }
 
 /* キャラをやや大きく、中央寄りに */
 .duo-stage__hoap{
-  width: min(420px, 90%);
-  margin-left: auto;   /* 右寄せして中央側へ寄せる */
+  width: min(520px, 48vw);     /* PCでは少し大きめ＆中央寄り体感 */
+  position: absolute;
+  left: 8%; bottom: 6%;        /* ステージ内で視覚中央へ寄せる */
   display:block;
   filter: drop-shadow(0 6px 18px rgba(0,0,0,.28));
   transform-origin: 50% 85%;
@@ -295,9 +293,9 @@ html, body, #__next { height: 100%; }
 
 /* ほーぷちゃんの吹き出し（書き換え式） */
 .duo-stage__bubble{
-  align-self: center;
-  justify-self: start;
-  max-width: 520px;
+  position: absolute;          /* 画像の“上”に重ねる */
+  right: 6%; top: 10%;
+  max-width: 56%;
   background: #fff;
   border: 1px solid #f3e8ff;
   border-radius: 16px;
@@ -305,17 +303,35 @@ html, body, #__next { height: 100%; }
   color: var(--text);
   line-height: 1.8;
   white-space: pre-wrap;
-  position: relative;
   box-shadow: var(--card-shadow);
 }
 .duo-stage__bubble::before{
   content:"";
   position:absolute;
-  left: -10px; top: 24px;        /* 吹き出しの尻尾（左向き） */
+  right: calc(100% - 12px); top: 24px;  /* 右寄せの泡に“左向き”の尻尾 */
   width: 0; height: 0;
   border: 10px solid transparent;
   border-right-color: #fff;
   filter: drop-shadow(-1px 1px 0 rgba(243,232,255,1));
+}
+
+@media (max-width: 640px){
+  .duo-stage{
+    height: 520px;                      /* 帯をさらに縦長に */
+  }
+  .duo-stage__hoap{
+    width: min(92vw, 520px);            /* 体感 “約3倍” まで拡大 */
+    left: 50%;
+    transform: translateX(-50%) rotate(0deg); /* ど真ん中寄せ */
+    bottom: 4%;
+  }
+  .duo-stage__bubble{
+    right: 5%;
+    top: 6%;
+    max-width: 84vw;                    /* モバイルは広めに */
+    font-size: 15px;
+    line-height: 1.8;
+  }
 }
 
 /* 2) 入力欄直上のユーザー吹き出し（書き換え式） */
