@@ -288,52 +288,55 @@ html, body, #__next { height: 100%; }
   white-space: pre-wrap;
 }
 
+/* === mobile only (<=640px) : ここだけを残す／既存の二つをこれに置換 === */
 @media (max-width: 640px){
+
+  /* 入力欄と被らないよう下余白を多めに（スマホだけ） */
+  .container{
+    padding-bottom: 200px; /* 120px → 200px（必要に応じて微調整） */
+  }
+
   /* ステージ帯を少し深めに */
   .duo-stage{
     height: 540px;
   }
 
-  /* 背景（机）を“下げて＆少し大きく”：上がスカスカにならない位置 */
+  /* 背景（机）：下端基準で固定してステップ遷移でもズレないように */
   .duo-stage__bg{
     background-size: 115%;
-    background-position: center 25px;  /* +Yで下げる。100〜140pxで微調整OK */
+    background-position: center calc(100% - 120px); /* ← 高い/低い時は±20pxで微調整 */
   }
 
-  /* ほーぷちゃん：やや小さめ／机ライン付近まで下げる／体感 右寄せ */
+  /* ほーぷちゃん：やや小さめ＆右寄せ、机ライン付近まで下げる */
   .duo-stage__hoap{
-    width: min(70vw, 400px);   /* ほんの少し小さく */
-    left: 40%;                 /* 右へ寄せる（55〜62%で好み調整） */
+    width: min(70vw, 400px);
+    left: 40%;
     transform: translateX(-50%);
-    bottom: -5%;                /* 机に“足が触れる”くらいの高さ */
+    bottom: -5%;
     z-index: 1;
   }
 
-  /* 吹き出し：横長にして、ほーぷちゃんの上に少しかぶせる */
+  /* 吹き出し：横長化＆ほーぷちゃんに軽く被せる */
   .duo-stage__bubble{
-    left: 50%;                 /* 左寄りに配置（被りやすく） */
+    left: 50%;
     top: 5%;
     transform: translateX(-50%);
-    width: 78vw;               /* 縦長化を防ぐため横幅を固定で広めに */
-    max-width: 78vw;
+    width: 76vw;        /* 78vw → 76vw に微調整（左切れ防止） */
+    max-width: 76vw;
     line-height: 1.6;
     z-index: 2;
   }
-  /* モバイルは尻尾なしの方が収まり良い */
-  .duo-stage__bubble::before{ display:none; }
-}
-@media (max-width: 640px){
-  /* ユーザー吹き出し：スマホはステータス進捗の直下に自然配置 */
+  .duo-stage__bubble::before{ display:none; } /* モバイルは尻尾なし */
+
+  /* ユーザー吹き出し：進捗バーの直下に自然配置（PCのstickyを打ち消し） */
   .user-echo{
-    position: relative;   /* PCの sticky をスマホでは無効化 */
+    position: relative;
     bottom: auto;
-    margin: 10px 0 4px;   /* ステータスバーのすぐ下に余白で配置 */
-    justify-content: flex-start; /* 左寄せ（右にしたいならここを flex-end に変更可） */
+    margin: 10px 0 4px;
+    justify-content: flex-start;
     z-index: 1;
   }
   .user-echo__bubble{
-    max-width: 92vw;      /* 横幅を広めに確保 */
+    max-width: 92vw;
   }
 }
-
-
