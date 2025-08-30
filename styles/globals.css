@@ -304,14 +304,14 @@ html, body, #__next { height: 100%; }
   /* 背景（机）：下端基準で固定してステップ遷移でもズレないように */
   .duo-stage__bg{
     background-size: 115%;
-    background-position: center 70px;   /* 60〜90pxで微調整OK */;
+    background-position: center 90px;   /* 60〜90pxで微調整OK */;
   }
 
   /* ほーぷちゃん */
   .duo-stage__hoap{
     width: min(62vw, 340px);
     right: 5%;
-    bottom: 0%;             /* -6% → 0% で足元を見せる */
+    bottom: -10%;             /* -6% → 0% で足元を見せる */
     transform: none;
     z-index: 1;
   }
@@ -319,9 +319,9 @@ html, body, #__next { height: 100%; }
   /* 吹き出し */
   .duo-stage__bubble{
     left: 6%;
-    top: 0%;               /* 4% → 0% で上に */
-    width: 74vw;           /* 横を少し広げる */
-    max-width: 74vw;
+    top: -2%;               /* 4% → 0% で上に */
+    width: 78vw;           /* 横を少し広げる */
+    max-width: 78vw;
     transform: none;
     z-index: 2;
   }
