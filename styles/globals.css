@@ -263,7 +263,8 @@ html, body, #__next { height: 100%; }
 }
 .duo-stage__bg{
   position:absolute; inset:0;
-  background: url("/beam-bg.png") center/cover no-repeat; /* 背景は固定 */
+  background: url("/beam-bg.png") center no-repeat;
+  background-size: 80%;   /* ← 縮小。70%〜90%で微調整可 */
   filter: saturate(110%);
   opacity: .95;
 }
