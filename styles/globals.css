@@ -265,7 +265,7 @@ html, body, #__next { height: 100%; }
   position:absolute; inset:0;
   background: url("/beam-bg.png") center no-repeat;
   background-size: 80%;
-  background-position: center -40px;   /* ← Y軸を上に移動。数値は調整 */
+  background-position: center -120px;  /* ← もっと上げる。数値だけ微調整してOK */
   filter: saturate(110%);
   opacity: .95;
 }
@@ -280,9 +280,9 @@ html, body, #__next { height: 100%; }
 
 /* PC用：ほーぷちゃんの位置とサイズ */
 .duo-stage__hoap{
-  width: min(460px, 42vw);   /* ちょい小さく */
+  width: min(440px, 40vw);   /* ほんの少し縮小 */
   position: absolute;
-  right: 6%; bottom: 2%;     /* もっと下へ */
+  right: 6%; bottom: -2%;    /* さらに下げる（数値だけ好みに合わせて調整OK） */
   display:block;
   filter: drop-shadow(0 6px 18px rgba(0,0,0,.28));
   transform-origin: 50% 85%;
