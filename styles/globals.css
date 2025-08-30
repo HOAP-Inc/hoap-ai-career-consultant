@@ -304,26 +304,25 @@ html, body, #__next { height: 100%; }
   /* 背景（机）：下端基準で固定してステップ遷移でもズレないように */
   .duo-stage__bg{
     background-size: 115%;
-    background-position: center calc(100% - 120px); /* ← 高い/低い時は±20pxで微調整 */
+    background-position: center 120px;
   }
 
-  /* ほーぷちゃん：やや小さめ＆右寄せ、机ライン付近まで下げる */
+  /* ほーぷちゃん */
   .duo-stage__hoap{
-    width: min(70vw, 400px);
-    left: 40%;
-    transform: translateX(-50%);
-    bottom: -5%;
+    width: min(66vw, 360px);
+    right: 6%;
+    bottom: -6%;
+    transform: none;
     z-index: 1;
   }
 
-  /* 吹き出し：横長化＆ほーぷちゃんに軽く被せる */
+  /* 吹き出し */
   .duo-stage__bubble{
-    left: 50%;
-    top: 5%;
-    transform: translateX(-50%);
-    width: 76vw;        /* 78vw → 76vw に微調整（左切れ防止） */
-    max-width: 76vw;
-    line-height: 1.6;
+    left: 6%;
+    top: 4%;
+    width: 70vw;
+    max-width: 70vw;
+    transform: none;
     z-index: 2;
   }
   .duo-stage__bubble::before{ display:none; } /* モバイルは尻尾なし */
