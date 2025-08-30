@@ -206,7 +206,7 @@ html, body, #__next { height: 100%; }
 .duo-stage{
   margin: 8px 0 12px;
   position: relative;
-  height: 420px;                 /* PC基準を縦長に */
+  height: 460px;                 /* PC基準を縦長に */
   border-radius: 16px;
   overflow: hidden;
   box-shadow: var(--card-shadow);
@@ -271,16 +271,25 @@ html, body, #__next { height: 100%; }
   .duo-stage{
     height: 520px;                      /* 帯をさらに縦長に */
   }
+  /* 背景：デスクを少し下へ＆縮小して上詰まりを解消 */
+  .duo-stage__bg{
+   background-size: 90%;
+   background-position: center 40px;   /* +Yで下げる */
+  }
+
   .duo-stage__hoap{
     width: min(92vw, 520px);            /* 体感 “約3倍” まで拡大 */
     left: 50%;
-    transform: translateX(-50%) rotate(0deg); /* ど真ん中寄せ */
-    bottom: 4%;
+    transform: translateX(-50%);        /* ど真ん中寄せ（回転なし） */
+    bottom: 12%;                         /* 上に持ち上げて中央寄せ */
+    z-index: 1;
   }
   .duo-stage__bubble{
-    right: 5%;
-    top: 6%;
-    max-width: 84vw;                    /* モバイルは広めに */
+    left: 50%;
+    top: 16%;                            /* 体に“少しかぶる”高さ */
+    transform: translateX(-50%);
+    max-width: 90vw;
+    z-index: 2;                          /* ほーぷちゃんの前面に */
     font-size: 15px;
     line-height: 1.8;
   }
