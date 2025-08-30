@@ -288,46 +288,59 @@ html, body, #__next { height: 100%; }
   white-space: pre-wrap;
 }
 
-/* === mobile only (<=640px) : ここだけを残す／既存の二つをこれに置換 === */
 @media (max-width: 640px){
 
-  /* 入力欄と被らないよう下余白を多めに（スマホだけ） */
-  .container{
-    padding-bottom: 200px; /* 120px → 200px（必要に応じて微調整） */
-  }
-
-  /* ステージ帯を少し深めに */
+  /* ====== 1) ステージを深くして背景を“ステータスまで”見せる ====== */
   .duo-stage{
-    height: 540px;
+    height: 580px;           /* ステータス行の直前まで背景が届く */
+    margin-bottom: 0;
+  }
+  .duo-stage::after{
+    content:"";
+    position:absolute; left:0; right:0;
+    bottom:-28px; height:28px;          /* 20〜36pxで微調整OK */
+    background: #fff0;                  /* 要素上のBGを邪魔しない */
   }
 
-  /* 背景（机）：下端基準で固定してステップ遷移でもズレないように */
+  /* 机（背景）をもっと上へ */
   .duo-stage__bg{
-    background-size: 115%;
-    background-position: center 90px;   /* 60〜90pxで微調整OK */;
+    background-size: 120%;
+    background-position: center 40px;   /* 30〜60pxで微調整OK */
   }
 
-  /* ほーぷちゃん */
+  /* ====== 2) ほーぷちゃん／セリフの当たりを弱める ====== */
   .duo-stage__hoap{
-    width: min(62vw, 340px);
-    right: 5%;
-    bottom: -10%;             /* -6% → 0% で足元を見せる */
+    width: min(60vw, 330px); 
+    right: 6%;
+    bottom: -2%;             /* 足元を見せつつ被りを防ぐ */
     transform: none;
     z-index: 1;
   }
 
-  /* 吹き出し */
   .duo-stage__bubble{
     left: 6%;
-    top: -2%;               /* 4% → 0% で上に */
-    width: 78vw;           /* 横を少し広げる */
-    max-width: 78vw;
+    top: -4%;                
+    width: 76vw;             
+    max-width: 76vw;
+    font-size: 14px;         
+    line-height: 1.65;
+    padding: 12px 14px;
     transform: none;
     z-index: 2;
   }
-  .duo-stage__bubble::before{ display:none; } /* モバイルは尻尾なし */
+  .duo-stage__bubble::before{ display:none; }
 
-  /* ユーザー吹き出し：進捗バーの直下に自然配置（PCのstickyを打ち消し） */
+  /* ====== 3) 入力欄を少しコンパクトに ====== */
+  .textarea{
+    min-height: 44px;
+    padding: 10px 12px;
+    font-size: 14px;
+  }
+  .send{
+    width:44px; height:44px;
+  }
+
+  /* 進捗バー直下のユーザー吹き出し */
   .user-echo{
     position: relative;
     bottom: auto;
