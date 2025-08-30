@@ -267,6 +267,27 @@ html, body, #__next { height: 100%; }
   filter: drop-shadow(1px 1px 0 rgba(243,232,255,1));
 }
 
+/* 2) 入力欄直上のユーザー吹き出し（書き換え式） */
+.user-echo{
+  position: sticky;    /* 入力欄の直上に追従 */
+  bottom: 80px;        /* 入力欄の高さぶん調整 */
+  z-index: 5;
+  display:flex;
+  justify-content: flex-end;
+  margin: 8px 0;
+  pointer-events: none;     /* クリックを透過（入力の邪魔をしない） */
+}
+.user-echo__bubble{
+  pointer-events: auto;
+  max-width: 70%;
+  background: linear-gradient(135deg, var(--user-grad-from), var(--user-grad-via) 50%, var(--user-grad-to));
+  border:1px solid #e9d5ff;
+  border-radius: 16px;
+  padding: 10px 12px;
+  box-shadow: var(--card-shadow);
+  white-space: pre-wrap;
+}
+
 @media (max-width: 640px){
   /* ステージ帯を少し深めに */
   .duo-stage{
@@ -315,23 +336,4 @@ html, body, #__next { height: 100%; }
   }
 }
 
-/* 2) 入力欄直上のユーザー吹き出し（書き換え式） */
-.user-echo{
-  position: sticky;    /* 入力欄の直上に追従 */
-  bottom: 80px;        /* 入力欄の高さぶん調整 */
-  z-index: 5;
-  display:flex;
-  justify-content: flex-end;
-  margin: 8px 0;
-  pointer-events: none;     /* クリックを透過（入力の邪魔をしない） */
-}
-.user-echo__bubble{
-  pointer-events: auto;
-  max-width: 70%;
-  background: linear-gradient(135deg, var(--user-grad-from), var(--user-grad-via) 50%, var(--user-grad-to));
-  border:1px solid #e9d5ff;
-  border-radius: 16px;
-  padding: 10px 12px;
-  box-shadow: var(--card-shadow);
-  white-space: pre-wrap;
-}
+
