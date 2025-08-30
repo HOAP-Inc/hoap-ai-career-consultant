@@ -162,15 +162,14 @@ if (data.meta?.step != null) setStep(data.meta.step);
       />
     </div>
 
-    {/* チャット画面 */}
-   <main className="chat" ref={listRef} />
-
-{/* 入力欄の直前に追記 */}
 {userEcho && (
   <div className="user-echo">
     <div className="user-echo__bubble">{userEcho}</div>
   </div>
 )}
+
+    {/* チャット画面 */}
+   <main className="chat" ref={listRef} />
 
     {/* 入力欄 */}
     <footer className="input-bar">
