@@ -281,21 +281,21 @@ html, body, #__next { height: 100%; }
 
   /* ほーぷちゃん：やや小さめ／机ライン付近まで下げる／体感 右寄せ */
   .duo-stage__hoap{
-    width: min(70vw, 420px);   /* ほんの少し小さく */
-    left: 45%;                 /* 右へ寄せる（55〜62%で好み調整） */
+    width: min(70vw, 400px);   /* ほんの少し小さく */
+    left: 40%;                 /* 右へ寄せる（55〜62%で好み調整） */
     transform: translateX(-50%);
-    bottom: 2%;                /* 机に“足が触れる”くらいの高さ */
+    bottom: -5%;                /* 机に“足が触れる”くらいの高さ */
     z-index: 1;
   }
 
   /* 吹き出し：横長にして、ほーぷちゃんの上に少しかぶせる */
   .duo-stage__bubble{
-    left: 34%;                 /* 左寄りに配置（被りやすく） */
-    top: 10%;
+    left: 50%;                 /* 左寄りに配置（被りやすく） */
+    top: 5%;
     transform: translateX(-50%);
     width: 78vw;               /* 縦長化を防ぐため横幅を固定で広めに */
     max-width: 78vw;
-    line-height: 1.8;
+    line-height: 1.6;
     z-index: 2;
   }
   /* モバイルは尻尾なしの方が収まり良い */
