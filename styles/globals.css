@@ -301,6 +301,19 @@ html, body, #__next { height: 100%; }
   /* モバイルは尻尾なしの方が収まり良い */
   .duo-stage__bubble::before{ display:none; }
 }
+@media (max-width: 640px){
+  /* ユーザー吹き出し：スマホはステータス進捗の直下に自然配置 */
+  .user-echo{
+    position: relative;   /* PCの sticky をスマホでは無効化 */
+    bottom: auto;
+    margin: 10px 0 4px;   /* ステータスバーのすぐ下に余白で配置 */
+    justify-content: flex-start; /* 左寄せ（必要なら right でもOK） */
+    z-index: 1;
+  }
+  .user-echo__bubble{
+    max-width: 92vw;      /* 横幅を広めに確保 */
+  }
+}
 
 /* 2) 入力欄直上のユーザー吹き出し（書き換え式） */
 .user-echo{
