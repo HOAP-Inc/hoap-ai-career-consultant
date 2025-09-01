@@ -630,17 +630,6 @@ if (s.step === 4) {
     }, 9));
   }
 
-  // 想定外フォールバック
-  return res.json(withMeta({
-    response: "（内部エラー）",
-    step: s.step,
-    status: s.status,
-    isNumberConfirmed: s.isNumberConfirmed,
-    candidateNumber: s.status.number,
-    debug: debugState(s)
-  }, s.step));
-}
-
   // ---- Step9：完了後の追加発話 ----
   if (s.step === 9) {
     return res.json(withMeta({
@@ -652,6 +641,19 @@ if (s.step === 4) {
       debug: debugState(s),
     }, 9));
   }
+
+  // 想定外フォールバック
+  return res.json(withMeta({
+    response: "（内部エラー）",
+    step: s.step,
+    status: s.status,
+    isNumberConfirmed: s.isNumberConfirmed,
+    candidateNumber: s.status.number,
+    debug: debugState(s)
+  }, s.step));
+}
+
+  
 // ---- 入口 ここまで ----
 
 // ---- ヘルパ ----
