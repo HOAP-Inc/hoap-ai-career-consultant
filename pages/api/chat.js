@@ -355,6 +355,7 @@ if (s.step === 2) {
     // 候補ゼロ：入力そのまま
     s.status.role = text || "";
     s.status.licenses = [];
+    s.status.role_ids = [];
     s.step = 3;
     return res.json(withMeta({
       response: "受け取ったよ！次に【今どこで働いてる？】を教えてね。\n（例）○○病院 外来／△△クリニック",
