@@ -92,6 +92,32 @@ const STEP_LABELS = {
     9: "完了",
 };
 
+// ---- 深掘りの汎用質問（カテゴリ推定が弱い場合の保険） ----
+const GENERIC_REASON_Q = {
+  deep1: [
+    "一番ストレスだったのは、仕事内容・人間関係・労働時間のどれに近い？できれば具体例があれば教えて！",
+  ],
+  deep2: [
+    "それはいつ頃から続いてる？改善の見込みはなさそう？もう少し詳しく教えて！",
+  ],
+};
+
+// テキスト全体からカテゴリごとのヒット数を採点
+function scoreCategories(text) {
+  const t = (text || "").toLowerCase();
+  const ranking = [];
+  let best = null, hits = 0;
+  for (const [cat, def] of Object.entries(transferReasonFlow)) {
+    const h = (def.keywords || []).reduce(
+      (acc, kw) => acc + (t.includes(String(kw).toLowerCase()) ? 1 : 0), 0
+    );
+    ranking.push({ cat, hits: h });
+    if (h > hits) { hits = h; best = cat; }
+  }
+  ranking.sort((a,b)=> b.hits - a.hits);
+  return { best, hits, ranking };
+}
+
 // ---- 転職理由カテゴリ（深掘りQ & 候補） ----
 const transferReasonFlow = {
   "経営・組織に関すること": {
@@ -198,7 +224,7 @@ function initSession() {
   return {
     step: 1, // ← ここを 1 から開始（0.5 等は使わない）
     isNumberConfirmed: false,
-    drill: { phase: null, count: 0, category: null, awaitingChoice: false, options: [] },
+    drill: { phase: null, count: 0, category: null, awaitingChoice: false, options: [], reasonBuf: [] },
     status: {
       number: "",
       role: "",
@@ -356,74 +382,148 @@ if (s.step === 2) {
   }
 
   // ---- Step4：転職理由（深掘り2回→候補提示） ----
-  if (s.step === 4) {
-    if (s.drill.phase === "reason" && s.drill.awaitingChoice && s.drill.options?.length) {
-      const pick = normalizePick(text);
-      const chosen = s.drill.options.find(o => o === pick);
-      if (chosen) {
-        const empathy = "なるほど、その気持ちよくわかる！大事な転職のきっかけだね◎";
-        const repeat = `つまり『${chosen}』ってことだね！`;
-        s.status.reason_tag = chosen;
-        s.step = 5;
+if (s.step === 4) {
+  // 1) カテゴリ選択待ち（最終手段）
+  if (s.drill.phase === "reason-cat" && s.drill.awaitingChoice && s.drill.options?.length) {
+    const pick = normalizePick(text);
+    const chosenCat = s.drill.options.find(o => o === pick);
+    if (chosenCat) {
+      s.drill.category = chosenCat;
+      const options2 = (transferReasonFlow[chosenCat]?.internal_options || []).slice(0, 3);
+      if (options2.length) {
+        s.drill.phase = "reason";
+        s.drill.awaitingChoice = true;
+        s.drill.options = options2;
         return res.json(withMeta({
-          response: `${empathy}\n${repeat}\n\n${mustIntroText()}`,
-          step: 5, status: s.status, isNumberConfirmed: true, candidateNumber: s.status.number, debug: debugState(s)
-        }, 5));
+          response: `この中だとどれが一番近い？『${options2.map(x=>`［${x}］`).join("／")}』`,
+          step: 4, status: s.status, isNumberConfirmed: true, candidateNumber: s.status.number, debug: debugState(s)
+        }, 4));
       }
+      const empathy = "なるほど、その気持ちよくわかる！大事な転職のきっかけだね◎";
+      s.step = 5;
       return res.json(withMeta({
-        response: `ごめん、もう一度教えて！この中だとどれが一番近い？『${s.drill.options.map(x=>`［${x}］`).join("／")}』`,
-        step: 4, status: s.status, isNumberConfirmed: true, candidateNumber: s.status.number, debug: debugState(s)
-      }, 4));
+        response: `${empathy}\n\n${mustIntroText()}`,
+        step: 5, status: s.status, isNumberConfirmed: true, candidateNumber: s.status.number, debug: debugState(s)
+      }, 5));
     }
-
-    if (s.drill.count === 0) {
-      s.status.reason = text || "";
-      s.status.memo.reason_raw = text || "";
-      const cat = pickReasonCategory(text);
-      if (!cat || noOptionCategory(cat)) {
-        const empathy = "なるほど、その気持ちよくわかる！大事な転職のきっかけだね◎";
-        s.step = 5;
-        return res.json(withMeta({
-          response: `${empathy}\n\n${mustIntroText()}`,
-          step: 5, status: s.status, isNumberConfirmed: true, candidateNumber: s.status.number, debug: debugState(s)
-        }, 5));
-      }
-      s.drill.category = cat;
-      s.drill.count = 1;
-      const q = transferReasonFlow[cat].deep1[0] || "それについて、もう少し詳しく教えて！";
-      return res.json(withMeta({
-        response: q, step: 4, status: s.status, isNumberConfirmed: true, candidateNumber: s.status.number, debug: debugState(s)
-      }, 4));
-    }
-
-    if (s.drill.count === 1) {
-      s.drill.count = 2;
-      const cat = s.drill.category;
-      const q = transferReasonFlow[cat].deep2[0] || "なるほど。他に具体例があれば教えて！";
-      return res.json(withMeta({
-        response: q, step: 4, status: s.status, isNumberConfirmed: true, candidateNumber: s.status.number, debug: debugState(s)
-      }, 4));
-    }
-
-    if (s.drill.count === 2) {
-      const cat = s.drill.category;
-      const options = (transferReasonFlow[cat].internal_options || []).slice(0, 3);
-      if (!options.length) {
-        const empathy = "なるほど、その気持ちよくわかる！大事な転職のきっかけだね◎";
-        s.step = 5;
-        return res.json(withMeta({
-          response: `${empathy}\n\n${mustIntroText()}`,
-          step: 5, status: s.status, isNumberConfirmed: true, candidateNumber: s.status.number, debug: debugState(s)
-        }, 5));
-      }
-      s.drill.awaitingChoice = true;
-      s.drill.options = options;
-      return res.json(withMeta({
-        response: `この中だとどれが一番近い？『${options.map(x=>`［${x}］`).join("／")}』`,
-        step: 4, status: s.status, isNumberConfirmed: true, candidateNumber: s.status.number, debug: debugState(s)
-      }, 4));
-    }
+    // 再提示
+    return res.json(withMeta({
+      response: `ごめん、もう一度カテゴリを教えて！『${s.drill.options.map(x=>`［${x}］`).join("／")}』`,
+      step: 4, status: s.status, isNumberConfirmed: true, candidateNumber: s.status.number, debug: debugState(s)
+    }, 4));
   }
+
+  // 2) 具体候補の選択（確定）
+  if (s.drill.phase === "reason" && s.drill.awaitingChoice && s.drill.options?.length) {
+    const pick = normalizePick(text);
+    const chosen = s.drill.options.find(o => o === pick);
+    if (chosen) {
+      const empathy = "なるほど、その気持ちよくわかる！大事な転職のきっかけだね◎";
+      const repeat = `つまり『${chosen}』ってことだね！`;
+      s.status.reason_tag = chosen;
+      s.step = 5;
+      return res.json(withMeta({
+        response: `${empathy}\n${repeat}\n\n${mustIntroText()}`,
+        step: 5, status: s.status, isNumberConfirmed: true, candidateNumber: s.status.number, debug: debugState(s)
+      }, 5));
+    }
+    return res.json(withMeta({
+      response: `ごめん、もう一度教えて！この中だとどれが一番近い？『${s.drill.options.map(x=>`［${x}］`).join("／")}』`,
+      step: 4, status: s.status, isNumberConfirmed: true, candidateNumber: s.status.number, debug: debugState(s)
+    }, 4));
+  }
+
+  // 3) 1回目の入力を受信 → 推定 or 汎用深掘りへ
+  if (s.drill.count === 0) {
+    s.status.reason = text || "";
+    s.status.memo.reason_raw = text || "";
+    s.drill.reasonBuf = [text || ""];
+
+    const { best, hits } = scoreCategories(s.drill.reasonBuf.join(" "));
+    if (!best || hits === 0 || noOptionCategory(best)) {
+      // 未マッチでもスキップせず、必ず深掘りへ
+      s.drill.category = null;
+      s.drill.count = 1;
+      const q = GENERIC_REASON_Q.deep1[0];
+      return res.json(withMeta({
+        response: q, step: 4, status: s.status, isNumberConfirmed: true, candidateNumber: s.status.number, debug: debugState(s)
+      }, 4));
+    }
+    // 推定できたらカテゴリ深掘りへ
+    s.drill.category = best;
+    s.drill.count = 1;
+    const q = transferReasonFlow[best].deep1[0] || "それについて、もう少し詳しく教えて！";
+    return res.json(withMeta({
+      response: q, step: 4, status: s.status, isNumberConfirmed: true, candidateNumber: s.status.number, debug: debugState(s)
+    }, 4));
+  }
+
+  // 4) 2回目の深掘り
+  if (s.drill.count === 1) {
+    s.drill.reasonBuf.push(text || "");
+    const joined = s.drill.reasonBuf.join(" ");
+
+    // 未確定なら再推定
+    if (!s.drill.category) {
+      const { best, hits } = scoreCategories(joined);
+      if (best && hits > 0 && !noOptionCategory(best)) {
+        s.drill.category = best;
+      }
+    }
+
+    s.drill.count = 2;
+    const cat = s.drill.category;
+    const q = cat
+      ? (transferReasonFlow[cat].deep2[0] || "なるほど。他に具体例があれば教えて！")
+      : (GENERIC_REASON_Q.deep2[0]);
+    return res.json(withMeta({
+      response: q, step: 4, status: s.status, isNumberConfirmed: true, candidateNumber: s.status.number, debug: debugState(s)
+    }, 4));
+  }
+
+  // 5) 深掘り後の確定（カテゴリ不明ならカテゴリ選択へ）
+  if (s.drill.count === 2) {
+    s.drill.reasonBuf.push(text || "");
+
+    if (!s.drill.category) {
+      const { best, hits, ranking } = scoreCategories(s.drill.reasonBuf.join(" "));
+      if (best && hits > 0 && !noOptionCategory(best)) {
+        s.drill.category = best;
+      } else {
+        // それでも未確定：代表カテゴリを選んでもらう
+        const pool = ranking.length
+          ? ranking.slice(0,5).map(r=>r.cat)
+          : ["仕事内容・キャリアに関すること","労働条件に関すること","働く仲間に関すること","経営・組織に関すること","プライベートに関すること"];
+        s.drill.phase = "reason-cat";
+        s.drill.awaitingChoice = true;
+        s.drill.options = pool;
+        return res.json(withMeta({
+          response: `どのカテゴリが一番近い？『${pool.map(x=>`［${x}］`).join("／")}』`,
+          step: 4, status: s.status, isNumberConfirmed: true, candidateNumber: s.status.number, debug: debugState(s)
+        }, 4));
+      }
+    }
+
+    // カテゴリが決まっていれば具体候補を提示
+    const cat = s.drill.category;
+    const options = (transferReasonFlow[cat].internal_options || []).slice(0, 3);
+    if (!options.length) {
+      const empathy = "なるほど、その気持ちよくわかる！大事な転職のきっかけだね◎";
+      s.step = 5;
+      return res.json(withMeta({
+        response: `${empathy}\n\n${mustIntroText()}`,
+        step: 5, status: s.status, isNumberConfirmed: true, candidateNumber: s.status.number, debug: debugState(s)
+      }, 5));
+    }
+    s.drill.phase = "reason";
+    s.drill.awaitingChoice = true;
+    s.drill.options = options;
+    return res.json(withMeta({
+      response: `この中だとどれが一番近い？『${options.map(x=>`［${x}］`).join("／")}』`,
+      step: 4, status: s.status, isNumberConfirmed: true, candidateNumber: s.status.number, debug: debugState(s)
+    }, 4));
+  }
+}
 
   // ---- Step5：絶対に外せない条件（Must） ----
   if (s.step === 5) {
