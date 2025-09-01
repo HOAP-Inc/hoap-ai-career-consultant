@@ -450,7 +450,7 @@ if (s.step === 4) {
   }
 
   // 候補が出せない場合：共感を返して Must へ
-  const empathy = await generateEmpathy(joinedUser || s.status.reason || "");
+  const empathy = await generateEmpathy(joinedUser || s.status.reason || "", s);
   s.step = 5;
   return res.json(withMeta({
     response: `${empathy}\n\n${mustIntroText()}`,
@@ -470,7 +470,7 @@ if (s.step === 4) {
     const chosen = s.drill.options.find(o => o === pick);
     if (chosen) {
   const joinedUser = s.drill.reasonBuf.join(" ");
-  const empathy = await generateEmpathy(joinedUser || s.status.reason || "");
+  const empathy = await generateEmpathy(joinedUser || s.status.reason || "", s);
   const repeat = `つまり『${chosen}』ってことだね！`;
 
   s.status.reason_tag = chosen;
@@ -564,7 +564,7 @@ const joinedUser = s.drill.reasonBuf.join(" "); // ここまでのユーザー�
 const options = pickTopKOptions(allOptions, joinedUser, 3);
 
 if (!options.length) {
-  const empathy = await generateEmpathy(joinedUser || s.status.reason || "");
+  const empathy = await generateEmpathy(joinedUser || s.status.reason || "", s);
   s.step = 5;
   return res.json(withMeta({
     response: `${empathy}\n\n${mustIntroText()}`,
@@ -697,41 +697,152 @@ return res.json(withMeta({
  
 // ---- 入口 ここまで ----
 
-// ==== 共感生成（OpenAI） ====
-// OPENAI_API_KEY が無い場合や失敗時はフォールバック文を返す
-async function generateEmpathy(userText){
+// ==== 共感生成（OpenAI＋ローカル多様化） ====
+// userText: ここまでの発話まとめ
+// s: セッション（文脈注入と重複ガード用）
+async function generateEmpathy(userText, s){
+  const fallbackPool = [
+    "話してくれて助かる。大事な視点だね。",
+    "その感覚、無理ないよ。受け止めた。",
+    "うん、それはしんどい。ここで整理しよう。",
+    "わかった。その気持ちが出るのは自然だよ。",
+    "なるほど。その違和感は置き去りにしない。"
+  ];
+  const pickFallback = () => {
+    const last = s?.drill?.lastEmpathy || "";
+    // 直近と被らないもの
+    const pool = fallbackPool.filter(x => x !== last);
+    return pool[Math.floor(Math.random() * pool.length)] || fallbackPool[0];
+  };
+
   const key = process.env.OPENAI_API_KEY;
-  const fallback = "話してくれてありがとう。大切な気持ちだね。";
-  if (!key) return fallback;
+  // 文脈素材
+  const recentUtter = Array.isArray(s?.drill?.reasonBuf) ? s.drill.reasonBuf.slice(-3) : [];
+  const cat = s?.drill?.category || "";
+  const role = s?.status?.role || "";
+  const place = s?.status?.place || "";
+  const lastEmp = s?.drill?.lastEmpathy || "";
+  const ngStarts = ["話してくれてありがとう", "大切な気持ちだね", "わかるよ", "そうだよね"];
+
+  // OpenAI未設定ならローカル生成
+  if (!key) {
+    const local = localEmpathy(userText, cat);
+    const chosen = local !== lastEmp ? local : pickFallback();
+    if (s?.drill) s.drill.lastEmpathy = chosen;
+    return chosen;
+  }
+
   try {
     const { default: OpenAI } = await import("openai");
     const client = new OpenAI({ apiKey: key });
 
-    const prompt = [
-      "あなたは日本語で共感的に返す面談AIです。",
-      "ユーザーの発話内容を踏まえ、タメ口すぎず丁寧すぎない口調で、",
-      "1文（最大30文字程度）で短く自然な共感を返してください。",
-      "NG: 定型の決め打ち、断定しすぎ、説教、質問。",
+    // 生成条件を厳密に指定
+    const system = [
+      "あなたは日本語で短く自然に共感を返す面談AI。",
+      "条件: 1文のみ、最大30文字。質問禁止。説教禁止。",
+      "語頭の定型は避ける。例: 話してくれてありがとう、わかるよ、そうだよね。",
+      "断定強すぎは避ける。絵文字は0〜1個まで。",
+      "同じ言い回しを続けて使わない。"
+    ].join("\n");
+
+    const context = [
+      `直近発話: ${recentUtter.join(" / ") || "なし"}`,
+      `カテゴリ: ${cat || "未確定"}`,
+      `職種: ${role || "未入力"}`,
+      `現職: ${place || "未入力"}`,
+      `避けたい語頭: ${ngStarts.join("、")}`,
+      `直近の共感文: ${lastEmp || "なし"}`,
       "",
-      "ユーザーの発話:",
-      userText || "（内容なし）",
+      `素材本文: ${userText || "（内容なし）"}`
     ].join("\n");
 
     const rsp = await client.chat.completions.create({
       model: "gpt-4o-mini",
-      messages: [{ role: "user", content: prompt }],
-      temperature: 0.7,
+      temperature: 0.9,
+      top_p: 0.9,
+      presence_penalty: 1.1,
+      frequency_penalty: 0.6,
+      messages: [
+        { role: "system", content: system },
+        { role: "user", content: context }
+      ],
       max_tokens: 60,
     });
 
-    const txt = rsp?.choices?.[0]?.message?.content?.trim();
-    return txt || fallback;
+    let txt = rsp?.choices?.[0]?.message?.content?.trim() || "";
+
+    // 後処理: 30文字制限、疑問文禁止、重複回避、ダブルクオーテーション除去
+    txt = txt.replace(/\"/g, "");
+    if (txt.length > 30) txt = txt.slice(0, 30);
+    if (/[?？]$/.test(txt)) txt = txt.replace(/[?？]+$/g, "");
+    // 語頭NG回避
+    for (const ng of ngStarts) {
+      if (txt.startsWith(ng)) {
+        txt = txt.replace(ng, "その気持ち、ちゃんと届いた");
+        break;
+      }
+    }
+    // 直近とほぼ同一ならローカル補正
+    if (lastEmp && jaccard2gram(txt, lastEmp) > 0.85) {
+      const local = localEmpathy(userText, cat);
+      txt = local !== lastEmp ? local : pickFallback();
+    }
+
+    if (s?.drill) s.drill.lastEmpathy = txt;
+    return txt || pickFallback();
   } catch (e) {
     console.error("generateEmpathy error:", e);
-    return fallback;
+    const fb = pickFallback();
+    if (s?.drill) s.drill.lastEmpathy = fb;
+    return fb;
   }
 }
 
+// ローカル簡易生成（カテゴリとキーワードで揺らぎ）
+function localEmpathy(text = "", cat = ""){
+  const t = String(text);
+  const has = (w) => t.includes(w);
+  const table = {
+    "経営・組織に関すること": [
+      "その方針ズレ、放置できないね。", "価値観の距離、無視できないね。"
+    ],
+    "働く仲間に関すること": [
+      "関係の消耗、積み重なるときつい。", "安心して話せない職場は疲れるよね。"
+    ],
+    "仕事内容・キャリアに関すること": [
+      "物足りなさ、次の一歩に変えよう。", "挑戦欲が出てる、この流れ大事。"
+    ],
+    "労働条件に関すること": [
+      "その負荷、長期では持たないよね。", "時間の縛り、生活に食い込むよね。"
+    ],
+    "プライベートに関すること": [
+      "両立の壁、見過ごせないポイントだ。", "生活リズム守れる働き方に寄せよう。"
+    ]
+  };
+  const generic = [
+    "その違和感、次の判断材料にしよう。", "しんどさの正体、ここで言語化しよう。"
+  ];
+  let pool = table[cat] || [];
+  if (has("残業") || has("夜勤")) pool = pool.concat(["休めない感覚、疲労に直結だよね。"]);
+  if (has("評価") || has("教育")) pool = pool.concat(["評価と成長のズレ、響くよね。"]);
+  if (!pool.length) pool = generic;
+  return pool[Math.floor(Math.random() * pool.length)];
+}
+
+// 2-gram Jaccard
+function jaccard2gram(a = "", b = ""){
+  const grams = (s) => {
+    const z = s.replace(/\s/g, "");
+    const out = new Set();
+    for (let i=0; i<z.length-1; i++) out.add(z.slice(i, i+2));
+    return out;
+  };
+  const A = grams(a), B = grams(b);
+  if (!A.size || !B.size) return 0;
+  let inter = 0;
+  for (const x of A) if (B.has(x)) inter++;
+  return inter / (A.size + B.size - inter);
+}
 // ==== 類似度＆共感用ヘルパ ====
 
 // 全角↔半角のゆらぎ吸収＆区切り削除
