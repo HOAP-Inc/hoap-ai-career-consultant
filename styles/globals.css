@@ -291,89 +291,69 @@ html, body, #__next { height: 100%; }
 /* === Mobile (<=640px) — 既存の @media をこの1つに置換 === */
 @media (max-width: 640px){
 
-  /* 画面固定 + 入力欄ぶんの余白は控えめ */
+  /* レイアウト全体：入力欄ぶん余白は控えめ */
   .container{
     height: 100dvh;
     overflow-y: auto;
     padding-bottom: 140px;
   }
 
-  /* ヘッダ/ステータスをさらにコンパクト&下げる */
+  /* ヘッダ/ステータスをコンパクトに */
   .header{ padding-top:4px; padding-bottom:4px; }
-  .status-row{
-    margin: 8px 0 6px;   /* 12px→8px */
-    gap:6px;
-  }
+  .status-row{ margin: 8px 0 6px; gap:6px; }
   .badge{ padding:4px 8px; font-size:11px; }
-  .status-progress{
-    height:4px;
-    margin: 4px 0 8px;   /* 6px→4px / 10px→8px */
-  }
+  .status-progress{ height:4px; margin:4px 0 8px; }
 
-  /* ほーぷちゃんステージ：下方向に拡張（表示域確保） */
+  /* ほーぷちゃんステージ */
   .duo-stage{
     margin: 4px 0 6px;
-    height: 680px;        /* 660→680 に拡張 */
+    height: 680px;      /* ステージは深めのまま */
     position: relative;
   }
-  .duo-stage::after{
-    content:""; position:absolute; left:0; right:0;
-    bottom:-20px; height:20px; background: transparent;
-  }
-
-  /* 机（背景）：“下端基準”で固定。サイズも少し縮小して常に見えるように */
   .duo-stage__bg{
-    background-size: 102%;                 /* 104%→102% */
-    background-position: center bottom -16px;  /* ← bottom基準で固定（STEP差でズレない） */
+    background-size: 102%;
+    background-position: center bottom -16px; /* ← 常に下端基準 */
   }
-
-  /* ほーぷちゃん本体：少しだけ小さく固定 */
   .duo-stage__hoap{
     width: min(50vw, 280px);
     right: 6%;
     bottom: -6%;
-    transform: none;
     z-index: 1;
   }
-
-  /* 吹き出し：上寄せ＆横広 */
   .duo-stage__bubble{
-    left: 6%;
-    top: 2%;
-    width: 84vw;
-    max-width: 84vw;
-    font-size: 14px;
-    line-height: 1.6;
-    padding: 12px 14px;
-    transform: none;
+    left: 6%; top: 2%;
+    width: 84vw; max-width: 84vw;
+    font-size:14px; line-height:1.6;
+    padding:12px 14px;
     z-index: 2;
   }
   .duo-stage__bubble::before{ display:none; }
 
-  /* 入力欄：1行固定 */
+  /* 入力欄：2段に戻す（min〜maxで可変） */
   .textarea{
     font-size:16px;
-    min-height:44px; max-height:44px;
-    padding:10px 12px;
+    min-height:48px;    /* 1行ぶんの最小値 */
+    max-height:96px;    /* 2行まで自動拡張 */
+    padding:12px;
+    line-height:1.5;
   }
   .send{ width:44px; height:44px; }
 
-  /* 送信メッセージ表示（ユーザー吹き出し）：
-     余白をさらに詰めて“入力欄の直上”に寄せる（表示面積をほーぷちゃんへ） */
+  /* ユーザー吹き出し：余白をさらに圧縮（直上に寄せる） */
   .user-echo{
     position: relative;
     bottom: auto;
-    margin: 4px 0 2px;     /* 16px→4px に圧縮 */
+    margin: 2px 0;      /* ← 余白を最小に */
     justify-content: flex-start;
     z-index: 25;
-    transform: translateY(calc(var(--kb, 0px) * -1)); /* キーボード追従 */
+    transform: translateY(calc(var(--kb, 0px) * -1));
   }
   .user-echo__bubble{
     max-width: 48vw;
     padding: 8px 10px;
   }
 
-  /* 入力バーもキーボード高で追従 */
+  /* 入力バー：キーボード追従 */
   .input-bar{
     transform: translateY(calc(var(--kb, 0px) * -1));
     z-index: 30;
