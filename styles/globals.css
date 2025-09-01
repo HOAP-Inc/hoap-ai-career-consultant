@@ -298,46 +298,49 @@ html, body, #__next { height: 100%; }
     padding-bottom: 140px;
   }
 
-  /* ヘッダ/ステータスを下げてコンパクト化 */
+  /* ヘッダ/ステータスをさらにコンパクト&下げる */
   .header{ padding-top:4px; padding-bottom:4px; }
   .status-row{
-    margin: 12px 0 6px;   /* ↑下げる */
+    margin: 8px 0 6px;   /* 12px→8px */
     gap:6px;
   }
   .badge{ padding:4px 8px; font-size:11px; }
   .status-progress{
     height:4px;
-    margin: 6px 0 10px;   /* ↑下げる */
+    margin: 4px 0 8px;   /* 6px→4px / 10px→8px */
   }
 
-  /* ほーぷちゃんステージ：縦を拡張（下に伸ばす） */
+  /* ほーぷちゃんステージ：下方向に拡張（表示域確保） */
   .duo-stage{
     margin: 4px 0 6px;
-    height: 660px;        /* 600 → 660 に拡張 */
+    height: 680px;        /* 660→680 に拡張 */
     position: relative;
   }
-  .duo-stage::after{ content:""; position:absolute; left:0; right:0; bottom:-24px; height:24px; background: transparent; }
-
-  /* 机（背景）：小さく＆上へ（見せる） */
-  .duo-stage__bg{
-    background-size: 104%;     /* 118% → 104% で縮小 */
-    background-position: center -20px; /* 20px → -20px で上へ */
+  .duo-stage::after{
+    content:""; position:absolute; left:0; right:0;
+    bottom:-20px; height:20px; background: transparent;
   }
 
-  /* ほーぷちゃん本体：やや小さく固定 */
+  /* 机（背景）：“下端基準”で固定。サイズも少し縮小して常に見えるように */
+  .duo-stage__bg{
+    background-size: 102%;                 /* 104%→102% */
+    background-position: center bottom -16px;  /* ← bottom基準で固定（STEP差でズレない） */
+  }
+
+  /* ほーぷちゃん本体：少しだけ小さく固定 */
   .duo-stage__hoap{
-    width: min(50vw, 280px);   /* 56vw,300px → 50vw,280px */
+    width: min(50vw, 280px);
     right: 6%;
     bottom: -6%;
     transform: none;
     z-index: 1;
   }
 
-  /* 吹き出し：上寄せ・横広のまま（微調整のみ） */
+  /* 吹き出し：上寄せ＆横広 */
   .duo-stage__bubble{
     left: 6%;
-    top: 2%;                  /* 3% → 2% でもう少し上へ */
-    width: 84vw;              /* 82vw → 84vw で横を広げる */
+    top: 2%;
+    width: 84vw;
     max-width: 84vw;
     font-size: 14px;
     line-height: 1.6;
@@ -350,17 +353,17 @@ html, body, #__next { height: 100%; }
   /* 入力欄：1行固定 */
   .textarea{
     font-size:16px;
-    min-height:44px;
-    max-height:44px;
+    min-height:44px; max-height:44px;
     padding:10px 12px;
   }
   .send{ width:44px; height:44px; }
 
-  /* 送信メッセージ表示（ユーザー吹き出し）：さらに下へ＆半幅 */
+  /* 送信メッセージ表示（ユーザー吹き出し）：
+     余白をさらに詰めて“入力欄の直上”に寄せる（表示面積をほーぷちゃんへ） */
   .user-echo{
     position: relative;
     bottom: auto;
-    margin: 16px 0 4px;       /* 8px → 16px で“もっと下” */
+    margin: 4px 0 2px;     /* 16px→4px に圧縮 */
     justify-content: flex-start;
     z-index: 25;
     transform: translateY(calc(var(--kb, 0px) * -1)); /* キーボード追従 */
