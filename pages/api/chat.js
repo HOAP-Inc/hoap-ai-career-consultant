@@ -349,38 +349,63 @@ if (s.step === 2) {
     }, 2));
   }
 
-  const found = matchLicensesInText(text);     // 候補を全部拾う
+    const found = matchLicensesInText(text); // 候補を全部拾う
+
+  // 完全一致（全角/半角ゆらぎ・空白除去込み）を最優先で自動確定
+  const raw = String(text || "").trim();
+  const toFW = (s) => s.replace(/\(/g, "（").replace(/\)/g, "）").replace(/~/g, "～");
+  const toHW = (s) => s.replace(/（/g, "(").replace(/）/g, ")").replace(/～/g, "~");
+  const normalize = (s) => toHW(toFW(String(s || ""))).replace(/[ \t\r\n\u3000]/g, "");
+  const exact = found.find(l => normalize(l) === normalize(raw));
+
+  if (exact) {
+    s.status.role = exact;
+    s.status.licenses = [exact];
+    s.status.role_ids = getIdsForLicenseLabel(exact);
+    s.step = 3;
+    return res.json(withMeta({
+      response: "受け取ったよ！次に【今どこで働いてる？】を教えてね。\n（例）○○病院 外来／△△クリニック",
+      step: 3, status: s.status, isNumberConfirmed: true,
+      candidateNumber: s.status.number, debug: debugState(s)
+    }, 3));
+  }
+
+  // 候補が1件だけなら自動確定
+  if (found.length === 1) {
+    s.status.role = found[0];
+    s.status.licenses = [found[0]];
+    s.status.role_ids = getIdsForLicenseLabel(found[0]);
+    s.step = 3;
+    return res.json(withMeta({
+      response: "受け取ったよ！次に【今どこで働いてる？】を教えてね。\n（例）○○病院 外来／△△クリニック",
+      step: 3, status: s.status, isNumberConfirmed: true,
+      candidateNumber: s.status.number, debug: debugState(s)
+    }, 3));
+  }
+
+  // 候補ゼロ：入力そのまま（IDは空でクリア）
   if (found.length === 0) {
-    // 候補ゼロ：入力そのまま
     s.status.role = text || "";
     s.status.licenses = [];
     s.status.role_ids = [];
     s.step = 3;
     return res.json(withMeta({
       response: "受け取ったよ！次に【今どこで働いてる？】を教えてね。\n（例）○○病院 外来／△△クリニック",
-      step: 3, status: s.status, isNumberConfirmed: true, candidateNumber: s.status.number, debug: debugState(s)
+      step: 3, status: s.status, isNumberConfirmed: true,
+      candidateNumber: s.status.number, debug: debugState(s)
     }, 3));
   }
-  if (found.length === 1) {
-  s.status.role = found[0];
-  s.status.licenses = [found[0]];
-  s.status.role_ids = getIdsForLicenseLabel(found[0]); // ← 逆引きでID化（ラベル/別名どちらでも拾える）
-  s.step = 3;
-  return res.json(withMeta({
-    response: "受け取ったよ！次に【今どこで働いてる？】を教えてね。\n（例）○○病院 外来／△△クリニック",
-    step: 3, status: s.status, isNumberConfirmed: true, candidateNumber: s.status.number, debug: debugState(s)
-  }, 3));
-}
-  // 候補が複数：選択肢を提示
+
+  // 複数候補：選択肢を提示
   const options = found.slice(0, 6);
   s.drill.phase = "license";
   s.drill.awaitingChoice = true;
   s.drill.options = options;
   return res.json(withMeta({
     response: `どれが一番近い？『${options.map(x=>`［${x}］`).join("／")}』`,
-    step: 2, status: s.status, isNumberConfirmed: true, candidateNumber: s.status.number, debug: debugState(s)
+    step: 2, status: s.status, isNumberConfirmed: true,
+    candidateNumber: s.status.number, debug: debugState(s)
   }, 2));
-}
 
   // ---- Step3：現職 ----
 if (s.step === 3) {
