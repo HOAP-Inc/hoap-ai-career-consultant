@@ -27,6 +27,16 @@ const listRef = useRef(null);
 const taRef = useRef(null);
 const bottomRef = useRef(null);
 
+// ほーぷちゃん画像の切替用（初期は基本）
+const [hoapSrc, setHoapSrc] = useState("/hoap-basic.png");
+
+// 「ID取得後／完了後」のバンザイを一度だけにするためのフラグ
+const cheeredIdRef = useRef(false);
+const cheeredDoneRef = useRef(false);
+
+// ポーズを元に戻すタイマー保持
+const revertTimerRef = useRef(null);
+
   // 進捗バー
   const MAX_STEP = 9;
   const progress = Math.min(100, Math.max(0, Math.round((step / MAX_STEP) * 100)));
@@ -51,6 +61,58 @@ const bottomRef = useRef(null);
   })();
   return () => { aborted = true; };
 }, [sessionId]);
+
+  // step変化でトリガー：ID取得後(2以上に到達)／完了(9)で一度だけバンザイ
+useEffect(() => {
+  // タイマー整理
+  if (revertTimerRef.current) {
+    clearTimeout(revertTimerRef.current);
+    revertTimerRef.current = null;
+  }
+
+  // 初回ID番号取得後（stepが2以上に上がった最初のタイミング）
+  if (step >= 2 && !cheeredIdRef.current) {
+    cheeredIdRef.current = true;
+    setHoapSrc("/hoap-up.png");
+    revertTimerRef.current = setTimeout(() => {
+      setHoapSrc("/hoap-basic.png");
+      revertTimerRef.current = null;
+    }, 2400);
+    return;
+  }
+
+  // 最後の回答が終わったあと（完了：step=9 の最初のタイミング）
+  if (step >= 9 && !cheeredDoneRef.current) {
+    cheeredDoneRef.current = true;
+    setHoapSrc("/hoap-up.png");
+    revertTimerRef.current = setTimeout(() => {
+      setHoapSrc("/hoap-basic.png");
+      revertTimerRef.current = null;
+    }, 2400);
+  }
+}, [step]);
+
+  // AI応答が更新されるたびに、ランダムで「手を広げる」を短時間表示
+useEffect(() => {
+  if (!aiText) return;
+
+  // すでに「バンザイ」表示中なら邪魔しない（競合回避）
+  if (hoapSrc === "/hoap-up.png") return;
+
+  // 33% くらいの確率で手を広げる
+  if (Math.random() < 0.33) {
+    if (revertTimerRef.current) {
+      clearTimeout(revertTimerRef.current);
+      revertTimerRef.current = null;
+    }
+    setHoapSrc("/hoap-wide.png");
+    revertTimerRef.current = setTimeout(() => {
+      // バンザイに上書きされていない場合のみ basic に戻す
+      setHoapSrc((cur) => (cur === "/hoap-up.png" ? cur : "/hoap-basic.png"));
+      revertTimerRef.current = null;
+    }, 1600);
+  }
+}, [aiText, hoapSrc]);
 
     // スマホのキーボード高さを CSS 変数 --kb に同期
   useEffect(() => {
@@ -140,6 +202,16 @@ if (data.meta?.step != null) setStep(data.meta.step);
     return map[step] ?? "";
   }
 
+    // アンマウント時にポーズ復帰タイマーを必ず止める
+  useEffect(() => {
+    return () => {
+      if (revertTimerRef.current) {
+        clearTimeout(revertTimerRef.current);
+        revertTimerRef.current = null;
+      }
+    };
+  }, []);
+
   return (
   <div className="container">
 
@@ -157,7 +229,7 @@ if (data.meta?.step != null) setStep(data.meta.step);
   <section className="duo-stage">
   <div className="duo-stage__bg" />
   <div className="duo-stage__wrap">
-    <img className="duo-stage__hoap" src="/hoap-basic.png" alt="ほーぷちゃん" />
+    <img className="duo-stage__hoap" src={hoapSrc} alt="ほーぷちゃん" />
     <div className="duo-stage__bubble">
       {aiText || "…"}
     </div>
@@ -198,6 +270,7 @@ if (data.meta?.step != null) setStep(data.meta.step);
 
     {/* チャット画面 */}
    <main className="chat" ref={listRef} />
+   <div ref={bottomRef} />   {/* ← これを追加 */}
 
     {/* 入力欄 */}
     <footer className="input-bar">
