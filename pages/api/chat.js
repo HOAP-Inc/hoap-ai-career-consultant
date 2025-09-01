@@ -222,13 +222,15 @@ const mustWantItems = [
 const sessions = Object.create(null);
 function initSession() {
   return {
-    step: 1, // ← ここを 1 から開始（0.5 等は使わない）
+    step: 1,
     isNumberConfirmed: false,
     drill: { phase: null, count: 0, category: null, awaitingChoice: false, options: [], reasonBuf: [] },
     status: {
       number: "",
       role: "",
+      role_ids: [],     // ← 追加：職種（資格）の tags.json ID
       place: "",
+      place_ids: [],    // ← 追加：現職（施設/形態など）の tags.json ID
       reason: "",
       reason_tag: "",
       must: [],
@@ -237,7 +239,7 @@ function initSession() {
       want_ids: [],
       can: "",
       will: "",
-      licenses: [], // ← 所有資格（正規化ラベル）の配列
+      licenses: [],
       memo: { reason_raw: "", must_raw: [], want_raw: [] },
     },
   };
@@ -324,6 +326,8 @@ if (s.step === 2) {
     if (chosen) {
       s.status.role = chosen;           // 表示用は選ばれた正式ラベル
       s.status.licenses = [chosen];     // 所有資格も確定（単一）
+      const id = tagIdByName.get(chosen);
+      s.status.role_ids = id ? [id] : [];
       s.drill = { phase: null, count: 0, category: null, awaitingChoice: false, options: [] };
       s.step = 3;
       return res.json(withMeta({
@@ -353,6 +357,9 @@ if (s.step === 2) {
     // 候補1つ：自動確定
     s.status.role = found[0];
     s.status.licenses = [found[0]];
+    const id = tagIdByName.get(found[0]);
+    s.status.role_ids = id ? [id] : [];
+　　 s.status.role_ids = [];   // ID は未確定なので空
     s.step = 3;
     return res.json(withMeta({
       response: "受け取ったよ！次に【今どこで働いてる？】を教えてね。\n（例）○○病院 外来／△△クリニック",
@@ -371,16 +378,18 @@ if (s.step === 2) {
 }
 
   // ---- Step3：現職 ----
-  if (s.step === 3) {
-    s.status.place = text || "";
-    s.step = 4;
-    s.drill = { phase: "reason", count: 0, category: null, awaitingChoice: false, options: [] };
-    return res.json(withMeta({
-      response: "はじめに、今回の転職理由を教えてほしいな。きっかけってどんなことだった？\nしんどいと思ったこと、これはもう無理って思ったこと、逆にこういうことに挑戦したい！って思ったこと、何でもOKだよ◎",
-      step: 4, status: s.status, isNumberConfirmed: true, candidateNumber: s.status.number, debug: debugState(s)
-    }, 4));
-  }
+if (s.step === 3) {
+  s.status.place = text || "";
+  // 入力に含まれるタグ名を拾って tags.json のIDに変換
+  s.status.place_ids = matchTagIdsInText(text);  // ← 追加
 
+  s.step = 4;
+  s.drill = { phase: "reason", count: 0, category: null, awaitingChoice: false, options: [], reasonBuf: [] };
+  return res.json(withMeta({
+    response: "はじめに、今回の転職理由を教えてほしいな。きっかけってどんなことだった？\nしんどいと思ったこと、これはもう無理って思ったこと、逆にこういうことに挑戦したい！って思ったこと、何でもOKだよ◎",
+    step: 4, status: s.status, isNumberConfirmed: true, candidateNumber: s.status.number, debug: debugState(s)
+  }, 4));
+}
   // ---- Step4：転職理由（深掘り2回→候補提示） ----
 if (s.step === 4) {
   // 1) カテゴリ選択待ち（最終手段）
