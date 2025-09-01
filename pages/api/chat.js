@@ -406,7 +406,8 @@ if (s.step === 2) {
     step: 2, status: s.status, isNumberConfirmed: true,
     candidateNumber: s.status.number, debug: debugState(s)
   }, 2));
-
+}
+  
   // ---- Step3：現職 ----
 if (s.step === 3) {
   s.status.place = text || "";
