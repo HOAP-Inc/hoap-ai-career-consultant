@@ -440,7 +440,9 @@ if (s.step === 4) {
           step: 4, status: s.status, isNumberConfirmed: true, candidateNumber: s.status.number, debug: debugState(s)
         }, 4));
       }
-      const empathy = "なるほど、その気持ちよくわかる！大事な転職のきっかけだね◎";
+      const joinedUser = s.drill.reasonBuf.join(" ");
+const allOptions2 = (transferReasonFlow[chosenCat]?.internal_options || []);
+const options2 = pickTopKOptions(allOptions2, joinedUser, 3);
       s.step = 5;
       return res.json(withMeta({
         response: `${empathy}\n\n${mustIntroText()}`,
@@ -459,7 +461,7 @@ if (s.step === 4) {
     const pick = normalizePick(text);
     const chosen = s.drill.options.find(o => o === pick);
     if (chosen) {
-      const empathy = "なるほど、その気持ちよくわかる！大事な転職のきっかけだね◎";
+      const empathy = await generateEmpathy(joinedUser || s.status.reason || "", s.drill.category);
       const repeat = `つまり『${chosen}』ってことだね！`;
       s.status.reason_tag = chosen;
       s.step = 5;
@@ -545,24 +547,27 @@ if (s.step === 4) {
       }
     }
 
-    // カテゴリが決まっていれば具体候補を提示
     const cat = s.drill.category;
-    const options = (transferReasonFlow[cat].internal_options || []).slice(0, 3);
-    if (!options.length) {
-      const empathy = "なるほど、その気持ちよくわかる！大事な転職のきっかけだね◎";
-      s.step = 5;
-      return res.json(withMeta({
-        response: `${empathy}\n\n${mustIntroText()}`,
-        step: 5, status: s.status, isNumberConfirmed: true, candidateNumber: s.status.number, debug: debugState(s)
-      }, 5));
-    }
-    s.drill.phase = "reason";
-    s.drill.awaitingChoice = true;
-    s.drill.options = options;
-    return res.json(withMeta({
-      response: `この中だとどれが一番近い？『${options.map(x=>`［${x}］`).join("／")}』`,
-      step: 4, status: s.status, isNumberConfirmed: true, candidateNumber: s.status.number, debug: debugState(s)
-    }, 4));
+const allOptions = (transferReasonFlow[cat].internal_options || []);
+const joinedUser = s.drill.reasonBuf.join(" "); // ここまでのユーザー発話
+const options = pickTopKOptions(allOptions, joinedUser, 3);
+
+if (!options.length) {
+  const empathy = await generateEmpathy(joinedUser || s.status.reason || "");
+  s.step = 5;
+  return res.json(withMeta({
+    response: `${empathy}\n\n${mustIntroText()}`,
+    step: 5, status: s.status, isNumberConfirmed: true, candidateNumber: s.status.number, debug: debugState(s)
+  }, 5));
+}
+
+s.drill.phase = "reason";
+s.drill.awaitingChoice = true;
+s.drill.options = options;
+return res.json(withMeta({
+  response: `この中だとどれが一番近い？『${options.map(x=>`［${x}］`).join("／")}』`,
+  step: 4, status: s.status, isNumberConfirmed: true, candidateNumber: s.status.number, debug: debugState(s)
+}, 4));
   }
 }
 
@@ -678,10 +683,84 @@ if (s.step === 4) {
     debug: debugState(s)
   }, s.step));
 }
-
-  
+ 
 // ---- 入口 ここまで ----
 
+// ==== 共感生成（OpenAI） ====
+// OPENAI_API_KEY が無い場合や失敗時はフォールバック文を返す
+async function generateEmpathy(userText){
+  const key = process.env.OPENAI_API_KEY;
+  const fallback = "話してくれてありがとう。大切な気持ちだね。";
+  if (!key) return fallback;
+  try {
+    const { default: OpenAI } = await import("openai");
+    const client = new OpenAI({ apiKey: key });
+
+    const prompt = [
+      "あなたは日本語で共感的に返す面談AIです。",
+      "ユーザーの発話内容を踏まえ、タメ口すぎず丁寧すぎない口調で、",
+      "1文（最大30文字程度）で短く自然な共感を返してください。",
+      "NG: 定型の決め打ち、断定しすぎ、説教、質問。",
+      "",
+      "ユーザーの発話:",
+      userText || "（内容なし）",
+    ].join("\n");
+
+    const rsp = await client.chat.completions.create({
+      model: "gpt-4o-mini",
+      messages: [{ role: "user", content: prompt }],
+      temperature: 0.7,
+      max_tokens: 60,
+    });
+
+    const txt = rsp?.choices?.[0]?.message?.content?.trim();
+    return txt || fallback;
+  } catch (e) {
+    console.error("generateEmpathy error:", e);
+    return fallback;
+  }
+}
+
+// ==== 類似度＆共感用ヘルパ ====
+
+// 全角↔半角のゆらぎ吸収＆区切り削除
+function _toFW(s){ return String(s||"").replace(/\(/g,"（").replace(/\)/g,"）").replace(/~/g,"～"); }
+function _toHW(s){ return String(s||"").replace(/（/g,"(").replace(/）/g,")").replace(/～/g,"~"); }
+function _scrub(s){ return String(s||"").replace(/[ \t\r\n\u3000、。・／\/＿\u2013\u2014\-~～!?！？。、，．・]/g,""); }
+function _norm(s){ return _scrub(_toHW(_toFW(String(s||"")))); }
+
+// 2-gram（連続2文字）集合
+function _bigrams(s){
+  const n = _norm(s);
+  const arr = [];
+  for (let i=0; i<n.length-1; i++) arr.push(n.slice(i, i+2));
+  return new Set(arr);
+}
+
+// 類似度：Jaccard（2-gram）
+function scoreSimilarity(a, b){
+  const A = _bigrams(a||"");
+  const B = _bigrams(b||"");
+  if (!A.size || !B.size) return 0;
+  let inter = 0;
+  for (const x of A) if (B.has(x)) inter++;
+  const union = A.size + B.size - inter;
+  return union ? inter / union : 0;
+}
+
+// internal_options をユーザ発話との類似度で降順ソートして上位k件を返す
+function pickTopKOptions(options = [], userText = "", k = 3){
+  const scored = options.map(opt => ({
+    opt,
+    score: scoreSimilarity(opt, userText)
+  }));
+  scored.sort((a,b)=> b.score - a.score);
+  // スコアが全て0なら、従来どおり先頭k件（念のためのフォールバック）
+  const anyHit = scored.some(s => s.score > 0);
+  return (anyHit ? scored : options.map(o=>({opt:o,score:0})))
+    .slice(0, k)
+    .map(s => s.opt);
+}
 // ---- ヘルパ ----
 function withMeta(payload, step) {
   const statusBar = buildStatusBar(payload.status);
