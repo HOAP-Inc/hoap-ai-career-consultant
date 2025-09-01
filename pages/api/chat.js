@@ -664,11 +664,19 @@ function buildStatusBar(st) {
       ? (st.role_ids?.length ? `${st.role}（ID:${st.role_ids[0]}）` : st.role)
       : "",
     現職: st.place
-      ? (st.place_ids?.length ? `${st.place}（ID:${st.place_ids.join(",")}}）` : st.place)
+      ? (st.place_ids?.length ? `${st.place}（ID:${st.place_ids.join(",")}）` : st.place)
       : "",
     転職目的: st.reason_tag ? st.reason_tag : (st.reason ? "済" : ""),
-    Must: st.must.length ? `${st.must.length}件` : (st.memo?.must_raw?.length ? "済" : ""),
-    Want: st.want.length ? `${st.want.length}件` : (st.memo?.want_raw?.length ? "済" : ""),
+    Must: st.must.length
+      ? (st.must_ids?.length
+          ? `${st.must.join("／")}（ID:${st.must_ids.join(",")}）`
+          : `${st.must.join("／")}`)
+      : (st.memo?.must_raw?.length ? "済" : ""),
+    Want: st.want.length
+      ? (st.want_ids?.length
+          ? `${st.want.join("／")}（ID:${st.want_ids.join(",")}）`
+          : `${st.want.join("／")}`)
+      : (st.memo?.want_raw?.length ? "済" : ""),
     Can: st.can ? "済" : "",
     Will: st.will ? "済" : "",
   };
