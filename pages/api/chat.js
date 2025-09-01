@@ -322,7 +322,15 @@ if (s.step === 2) {
   // すでに選択肢を出している場合の応答
   if (s.drill.phase === "license" && s.drill.awaitingChoice && s.drill.options?.length) {
     const pick = normalizePick(text);
-    const chosen = s.drill.options.find(o => o === pick);
+    // まずはラベル名そのまま一致
+   let chosen = s.drill.options.find(o => o === pick);
+    // だめなら別名→正規ラベル解決（例：実務者 → 実務者研修）
+   if (!chosen) {
+   const resolved = matchLicensesInText(pick); // 別名でもOK
+   if (resolved.length) {
+   chosen = resolved.find(label => s.drill.options.includes(label)) || null;
+  }
+}
     if (chosen) {
       s.status.role = chosen;           // 表示用は選ばれた正式ラベル
       s.status.licenses = [chosen];     // 所有資格も確定（単一）
@@ -359,7 +367,6 @@ if (s.step === 2) {
     s.status.licenses = [found[0]];
     const id = tagIdByName.get(found[0]);
     s.status.role_ids = id ? [id] : [];
-　　 s.status.role_ids = [];   // ID は未確定なので空
     s.step = 3;
     return res.json(withMeta({
       response: "受け取ったよ！次に【今どこで働いてる？】を教えてね。\n（例）○○病院 外来／△△クリニック",
@@ -653,8 +660,12 @@ function withMeta(payload, step) {
 function buildStatusBar(st) {
   return {
     求職者ID: st.number || "",
-    職種: st.role || "",
-    現職: st.place || "",
+    職種: st.role
+      ? (st.role_ids?.length ? `${st.role}（ID:${st.role_ids[0]}）` : st.role)
+      : "",
+    現職: st.place
+      ? (st.place_ids?.length ? `${st.place}（ID:${st.place_ids.join(",")}}）` : st.place)
+      : "",
     転職目的: st.reason_tag ? st.reason_tag : (st.reason ? "済" : ""),
     Must: st.must.length ? `${st.must.length}件` : (st.memo?.must_raw?.length ? "済" : ""),
     Want: st.want.length ? `${st.want.length}件` : (st.memo?.want_raw?.length ? "済" : ""),
@@ -739,3 +750,18 @@ function matchLicensesInText(text = "") {
   return Array.from(set);
 }
 
+// 入力文に含まれる tags.json 名称を検出して ID 配列で返す（重複排除）
+ function matchTagIdsInText(text = "") {
+ const norm = String(text || "");
+ const set = new Set();
+ for (const t of (Array.isArray(tagList) ? tagList : [])) {
+ const name = String(t?.name ?? "");
+ if (!name) continue;
+ const fw = name.replace(/\(/g, "（").replace(/\)/g, "）").replace(/~/g, "～");
+ const hw = name.replace(/（/g, "(").replace(/）/g, ")").replace(/～/g, "~");
+ if (norm.includes(name) || norm.includes(fw) || norm.includes(hw)) {
+ if (t.id != null) set.add(t.id);
+ }
+ }
+ return Array.from(set);
+}
