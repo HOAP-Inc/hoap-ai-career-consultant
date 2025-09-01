@@ -51,6 +51,23 @@ const bottomRef = useRef(null);
   })();
   return () => { aborted = true; };
 }, [sessionId]);
+
+    // スマホのキーボード高さを CSS 変数 --kb に同期
+  useEffect(() => {
+    const vv = window.visualViewport;
+    if (!vv) return;
+    const syncKB = () => {
+      const kb = Math.max(0, window.innerHeight - vv.height - vv.offsetTop);
+      document.documentElement.style.setProperty("--kb", `${kb}px`);
+    };
+    syncKB();
+    vv.addEventListener("resize", syncKB);
+    vv.addEventListener("scroll", syncKB);
+    return () => {
+      vv.removeEventListener("resize", syncKB);
+      vv.removeEventListener("scroll", syncKB);
+    };
+  }, []);
   
   // 最下部へスクロール（レイアウト確定後に実行）
 useLayoutEffect(() => {
@@ -61,24 +78,6 @@ useLayoutEffect(() => {
   async function onSend() {
     if (!input.trim() || sending) return;
     setSending(true);
-
-    //キーボード高さを CSS 変数に流す
-useEffect(() => {
-  const vv = window.visualViewport;
-  if (!vv) return;
-  const syncKB = () => {
-    const kb = Math.max(0, window.innerHeight - vv.height - vv.offsetTop);
-    document.documentElement.style.setProperty("--kb", `${kb}px`);
-  };
-  syncKB();
-  vv.addEventListener("resize", syncKB);
-  vv.addEventListener("scroll", syncKB);
-  return () => {
-    vv.removeEventListener("resize", syncKB);
-    vv.removeEventListener("scroll", syncKB);
-  };
-}, []);
-
 
     // ユーザー入力を即時反映（入力欄上のユーザー吹き出しに“上書き”）
     const userText = input;
@@ -212,7 +211,7 @@ if (data.meta?.step != null) setStep(data.meta.step);
       : "メッセージを入力…"
   }
   value={input}
-  onChange={(e) => setInput(e.target.value)}
+  onChange={(e) => { setInput(e.target.value); setUserEcho(e.target.value); }}
   onKeyDown={onKeyDown}
   onCompositionStart={() => setIsComposing(true)}
   onCompositionEnd={() => setIsComposing(false)}
