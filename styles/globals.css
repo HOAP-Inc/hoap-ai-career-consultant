@@ -288,50 +288,57 @@ html, body, #__next { height: 100%; }
   white-space: pre-wrap;
 }
 
+/* === Mobile (<=640px) — 既存の @media をこの1つに置換 === */
 @media (max-width: 640px){
 
-  /* レイアウト全体：高さを実画面に合わせ、入力欄分の余白は控えめに */
+  /* 画面固定 + 入力欄ぶんの余白は控えめ */
   .container{
     height: 100dvh;
     overflow-y: auto;
-    padding-bottom: 140px; /* 入力欄ぶん。130〜160で微調整可 */
+    padding-bottom: 140px;
   }
 
-  /* ヘッダ/ステータスをコンパクト化して、ステージに高さを回す */
-  .header{ padding-top: 4px; padding-bottom: 4px; }
-  .status-row{ margin: 4px 0 8px; gap: 6px; }
-  .badge{ padding: 4px 8px; font-size: 11px; }
-  .status-progress{ height: 4px; margin: 6px 0 12px; }
+  /* ヘッダ/ステータスを下げてコンパクト化 */
+  .header{ padding-top:4px; padding-bottom:4px; }
+  .status-row{
+    margin: 12px 0 6px;   /* ↑下げる */
+    gap:6px;
+  }
+  .badge{ padding:4px 8px; font-size:11px; }
+  .status-progress{
+    height:4px;
+    margin: 6px 0 10px;   /* ↑下げる */
+  }
 
-  /* ステージ：上詰め・深め。背景は常に同位置で固定表示 */
+  /* ほーぷちゃんステージ：縦を拡張（下に伸ばす） */
   .duo-stage{
-    margin: 6px 0 8px;
-    height: 600px;  /* 既存より+20で可視領域を確保 */
+    margin: 4px 0 6px;
+    height: 660px;        /* 600 → 660 に拡張 */
     position: relative;
   }
   .duo-stage::after{ content:""; position:absolute; left:0; right:0; bottom:-24px; height:24px; background: transparent; }
 
-  /* 背景（机）— 大きめにしつつ“上寄せ”。ステップ遷移でも位置が変わらない */
+  /* 机（背景）：小さく＆上へ（見せる） */
   .duo-stage__bg{
-    background-size: 118%;
-    background-position: center 20px; /* 10〜40で調整可。上に詰める */
+    background-size: 104%;     /* 118% → 104% で縮小 */
+    background-position: center -20px; /* 20px → -20px で上へ */
   }
 
-  /* ほーぷちゃん — 既存より一回り小さく。位置は固定で被りにくく */
+  /* ほーぷちゃん本体：やや小さく固定 */
   .duo-stage__hoap{
-    width: min(56vw, 300px);
+    width: min(50vw, 280px);   /* 56vw,300px → 50vw,280px */
     right: 6%;
-    bottom: -4%;
+    bottom: -6%;
     transform: none;
     z-index: 1;
   }
 
-  /* 吹き出し — 上に寄せ、横幅を広げて横長化。文字は少し詰める */
+  /* 吹き出し：上寄せ・横広のまま（微調整のみ） */
   .duo-stage__bubble{
     left: 6%;
-    top: 3%;            /* 上へ。2〜6%で好み調整 */
-    width: 82vw;        /* 横広げる */
-    max-width: 82vw;
+    top: 2%;                  /* 3% → 2% でもう少し上へ */
+    width: 84vw;              /* 82vw → 84vw で横を広げる */
+    max-width: 84vw;
     font-size: 14px;
     line-height: 1.6;
     padding: 12px 14px;
@@ -340,30 +347,30 @@ html, body, #__next { height: 100%; }
   }
   .duo-stage__bubble::before{ display:none; }
 
-  /* 入力欄：1行相当に。iOSの自動ズーム回避で16px以上を維持 */
+  /* 入力欄：1行固定 */
   .textarea{
-    font-size: 16px;     /* iOSズーム防止 */
-    min-height: 44px;
-    max-height: 44px;
-    padding: 10px 12px;
+    font-size:16px;
+    min-height:44px;
+    max-height:44px;
+    padding:10px 12px;
   }
   .send{ width:44px; height:44px; }
 
-  /* 送信メッセージ表示（ユーザー吹き出し）：幅を約半分へ */
+  /* 送信メッセージ表示（ユーザー吹き出し）：さらに下へ＆半幅 */
   .user-echo{
     position: relative;
     bottom: auto;
-    margin: 8px 0 4px;
+    margin: 16px 0 4px;       /* 8px → 16px で“もっと下” */
     justify-content: flex-start;
     z-index: 25;
     transform: translateY(calc(var(--kb, 0px) * -1)); /* キーボード追従 */
   }
   .user-echo__bubble{
-    max-width: 48vw;   /* ← “半分”目安。46〜52で微調整可 */
+    max-width: 48vw;
     padding: 8px 10px;
   }
 
-  /* 入力バーもキーボード高で追従（VisualViewportで同期された --kb を使用） */
+  /* 入力バーもキーボード高で追従 */
   .input-bar{
     transform: translateY(calc(var(--kb, 0px) * -1));
     z-index: 30;
