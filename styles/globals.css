@@ -352,3 +352,33 @@ html, body, #__next { height: 100%; }
     max-width: 92vw;
   }
 }
+
+/* === 入力中でも画面を動かさないための最終調整（スマホ専用） === */
+html, body { overscroll-behavior-y: none; }
+
+@media (max-width: 640px){
+  /* 画面の実高さを固定し、キーボード出現でも揺れにくくする */
+  .container{
+    height: 100dvh;          /* 既存に追加でOK（上書き目的） */
+    overflow-y: auto;
+    padding-bottom: 160px;   /* 入力欄ぶんの余白。140〜180で微調整 */
+  }
+
+  /* iOSの自動ズーム防止（最小16px）＆少しだけコンパクト */
+  .textarea{
+    font-size: 16px;
+    min-height: 44px;
+    padding: 10px 12px;
+  }
+  .send{ width:44px; height:44px; }
+
+  /* VisualViewport で得た --kb（キーボード高）だけUIを持ち上げる */
+  .input-bar{
+    transform: translateY(calc(var(--kb, 0px) * -1));
+    z-index: 30;
+  }
+  .user-echo{
+    transform: translateY(calc(var(--kb, 0px) * -1));
+    z-index: 25;
+  }
+}
