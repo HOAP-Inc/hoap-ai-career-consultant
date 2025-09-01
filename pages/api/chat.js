@@ -640,6 +640,18 @@ if (s.step === 4) {
     debug: debugState(s)
   }, s.step));
 }
+
+  // ---- Step9：完了後の追加発話 ----
+  if (s.step === 9) {
+    return res.json(withMeta({
+      response: "長い時間付き合ってくれてありがとう！続きは担当エージェントと話そうね！",
+      step: 9,
+      status: s.status,
+      isNumberConfirmed: true,
+      candidateNumber: s.status.number,
+      debug: debugState(s),
+    }, 9));
+  }
 // ---- 入口 ここまで ----
 
 // ---- ヘルパ ----
