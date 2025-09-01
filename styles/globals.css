@@ -304,7 +304,7 @@ html, body, #__next { height: 100%; }
 
   /* 机（背景）をもっと上へ */
   .duo-stage__bg{
-    background-size: 120%;
+    background-size: 115%;
     background-position: center 40px;   /* 30〜60pxで微調整OK */
   }
 
