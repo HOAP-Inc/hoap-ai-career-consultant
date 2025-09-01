@@ -62,6 +62,24 @@ useLayoutEffect(() => {
     if (!input.trim() || sending) return;
     setSending(true);
 
+    //キーボード高さを CSS 変数に流す
+useEffect(() => {
+  const vv = window.visualViewport;
+  if (!vv) return;
+  const syncKB = () => {
+    const kb = Math.max(0, window.innerHeight - vv.height - vv.offsetTop);
+    document.documentElement.style.setProperty("--kb", `${kb}px`);
+  };
+  syncKB();
+  vv.addEventListener("resize", syncKB);
+  vv.addEventListener("scroll", syncKB);
+  return () => {
+    vv.removeEventListener("resize", syncKB);
+    vv.removeEventListener("scroll", syncKB);
+  };
+}, []);
+
+
     // ユーザー入力を即時反映（入力欄上のユーザー吹き出しに“上書き”）
     const userText = input;
     setUserEcho(userText);
@@ -94,6 +112,17 @@ if (data.meta?.step != null) setStep(data.meta.step);
       e.preventDefault();
       onSend();
     }
+  }
+
+  function onFocusLock() {
+    window.scrollTo(0, 0);
+    document.body.style.height = "100dvh";
+    document.body.style.overflow = "hidden";
+  }
+  function onFocusUnlock() {
+    document.body.style.height = "";
+    document.body.style.overflow = "";
+    window.scrollTo(0, 0);
   }
 
   function statusStepLabel(step) {
@@ -175,22 +204,22 @@ if (data.meta?.step != null) setStep(data.meta.step);
     <footer className="input-bar">
       <div className="input-inner">
         <textarea
-          ref={taRef}
-          className="textarea"
-          placeholder={
-  step === 1
-    ? "求職者IDを入力してください（メールに届いているID）…"
-    : "メッセージを入力…"
-}
-          
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          onKeyDown={onKeyDown}
-          onCompositionStart={() => setIsComposing(true)}
-          onCompositionEnd={() => setIsComposing(false)}
-          onBlur={() => setIsComposing(false)}
-          autoComplete="off"
-        />
+  ref={taRef}
+  className="textarea"
+  placeholder={
+    step === 1
+      ? "求職者IDを入力してください（メールに届いているID）…"
+      : "メッセージを入力…"
+  }
+  value={input}
+  onChange={(e) => setInput(e.target.value)}
+  onKeyDown={onKeyDown}
+  onCompositionStart={() => setIsComposing(true)}
+  onCompositionEnd={() => setIsComposing(false)}
+  onBlur={() => { setIsComposing(false); onFocusUnlock(); }}  // ← 追加
+  onFocus={onFocusLock}                                       // ← 追加
+  autoComplete="off"
+/>
         <button
           type="button"
           className="send"
