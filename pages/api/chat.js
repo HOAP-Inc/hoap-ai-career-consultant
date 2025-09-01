@@ -332,17 +332,16 @@ if (s.step === 2) {
   }
 }
     if (chosen) {
-      s.status.role = chosen;           // 表示用は選ばれた正式ラベル
-      s.status.licenses = [chosen];     // 所有資格も確定（単一）
-      const id = tagIdByName.get(chosen);
-      s.status.role_ids = id ? [id] : [];
-      s.drill = { phase: null, count: 0, category: null, awaitingChoice: false, options: [] };
-      s.step = 3;
-      return res.json(withMeta({
-        response: "受け取ったよ！次に【今どこで働いてる？】を教えてね。\n（例）○○病院 外来／△△クリニック",
-        step: 3, status: s.status, isNumberConfirmed: true, candidateNumber: s.status.number, debug: debugState(s)
-      }, 3));
-    }
+  s.status.role = chosen;                  // 表示用は選ばれた正式ラベル
+  s.status.licenses = [chosen];            // 所有資格も確定（単一）
+  s.status.role_ids = getIdsForLicenseLabel(chosen); // ← 逆引きでID化
+  s.drill = { phase: null, count: 0, category: null, awaitingChoice: false, options: [] };
+  s.step = 3;
+  return res.json(withMeta({
+    response: "受け取ったよ！次に【今どこで働いてる？】を教えてね。\n（例）○○病院 外来／△△クリニック",
+    step: 3, status: s.status, isNumberConfirmed: true, candidateNumber: s.status.number, debug: debugState(s)
+  }, 3));
+}
     // 再提示
     return res.json(withMeta({
       response: `ごめん、もう一度教えて！この中だとどれが一番近い？『${s.drill.options.map(x=>`［${x}］`).join("／")}』`,
@@ -363,17 +362,15 @@ if (s.step === 2) {
     }, 3));
   }
   if (found.length === 1) {
-    // 候補1つ：自動確定
-    s.status.role = found[0];
-    s.status.licenses = [found[0]];
-    const id = tagIdByName.get(found[0]);
-    s.status.role_ids = id ? [id] : [];
-    s.step = 3;
-    return res.json(withMeta({
-      response: "受け取ったよ！次に【今どこで働いてる？】を教えてね。\n（例）○○病院 外来／△△クリニック",
-      step: 3, status: s.status, isNumberConfirmed: true, candidateNumber: s.status.number, debug: debugState(s)
-    }, 3));
-  }
+  s.status.role = found[0];
+  s.status.licenses = [found[0]];
+  s.status.role_ids = getIdsForLicenseLabel(found[0]); // ← 逆引きでID化（ラベル/別名どちらでも拾える）
+  s.step = 3;
+  return res.json(withMeta({
+    response: "受け取ったよ！次に【今どこで働いてる？】を教えてね。\n（例）○○病院 外来／△△クリニック",
+    step: 3, status: s.status, isNumberConfirmed: true, candidateNumber: s.status.number, debug: debugState(s)
+  }, 3));
+}
   // 候補が複数：選択肢を提示
   const options = found.slice(0, 6);
   s.drill.phase = "license";
@@ -398,6 +395,7 @@ if (s.step === 3) {
     step: 4, status: s.status, isNumberConfirmed: true, candidateNumber: s.status.number, debug: debugState(s)
   }, 4));
 }
+  
   // ---- Step4：転職理由（深掘り2回→候補提示） ----
 if (s.step === 4) {
   // 1) カテゴリ選択待ち（最終手段）
@@ -759,18 +757,68 @@ function matchLicensesInText(text = "") {
   return Array.from(set);
 }
 
-// 入力文に含まれる tags.json 名称を検出して ID 配列で返す（重複排除）
- function matchTagIdsInText(text = "") {
- const norm = String(text || "");
- const set = new Set();
- for (const t of (Array.isArray(tagList) ? tagList : [])) {
- const name = String(t?.name ?? "");
- if (!name) continue;
- const fw = name.replace(/\(/g, "（").replace(/\)/g, "）").replace(/~/g, "～");
- const hw = name.replace(/（/g, "(").replace(/）/g, ")").replace(/～/g, "~");
- if (norm.includes(name) || norm.includes(fw) || norm.includes(hw)) {
- if (t.id != null) set.add(t.id);
- }
- }
- return Array.from(set);
+// 入力文に含まれる tags.json 名称を検出して ID 配列で返す
+function matchTagIdsInText(text = "") {
+  const raw = String(text || "").trim();
+  if (!raw) return [];
+
+  // ① まずは厳密一致（tagIdByName は全角/半角ゆらぎを両方登録済み）
+  const direct = tagIdByName.get(raw);
+  if (direct != null) return [direct];
+
+  // ② 全角↔半角ゆらぎを揃えて再度厳密一致
+  const toFW = (s) => s.replace(/\(/g, "（").replace(/\)/g, "）").replace(/~/g, "～");
+  const toHW = (s) => s.replace(/（/g, "(").replace(/）/g, ")").replace(/～/g, "~");
+  const fw = toFW(raw);
+  const hw = toHW(raw);
+  const byFW = tagIdByName.get(fw);
+  if (byFW != null) return [byFW];
+  const byHW = tagIdByName.get(hw);
+  if (byHW != null) return [byHW];
+
+  // ③ サブストリング一致（文章中に含まれるパターン）
+  const normalize = (s) => {
+    const z = String(s || "");
+    const h = toHW(toFW(z));
+    // 区切り記号等を除去して比較の取りこぼしを減らす
+    return h.replace(/[ \t\r\n\u3000、。・／\/＿\-–—~～]/g, "");
+  };
+  const normText = normalize(raw);
+  const set = new Set();
+
+  for (const t of (Array.isArray(tagList) ? tagList : [])) {
+    const name = String(t?.name ?? "");
+    if (!name) continue;
+    const n = normalize(name);
+    if (n && normText.includes(n)) {
+      if (t.id != null) set.add(t.id);
+    }
+  }
+  return Array.from(set);
+}
+// ラベル（正式ラベル）から、別名も含めて tags.json の ID を集める
+function getIdsForLicenseLabel(label = "") {
+  if (!label) return [];
+  const names = new Set();
+
+  // ラベル自身（全角/半角ゆらぎ込み）
+  names.add(label);
+  names.add(label.replace(/\(/g, "（").replace(/\)/g, "）").replace(/~/g, "～"));
+  names.add(label.replace(/（/g, "(").replace(/）/g, ")").replace(/～/g, "~"));
+
+  // licenseMap は「別名 → [ラベル…]」。この中で label を含む別名を全部拾う
+  for (const [alias, labels] of licenseMap.entries()) {
+    if (!Array.isArray(labels)) continue;
+    if (!labels.includes(label)) continue;
+    names.add(alias);
+    names.add(alias.replace(/\(/g, "（").replace(/\)/g, "）").replace(/~/g, "～"));
+    names.add(alias.replace(/（/g, "(").replace(/）/g, ")").replace(/～/g, "~"));
+  }
+
+  const ids = new Set();
+  for (const n of names) {
+    const id = tagIdByName.get(n);
+    if (id != null) ids.add(id);
+  }
+  return Array.from(ids);
 }
