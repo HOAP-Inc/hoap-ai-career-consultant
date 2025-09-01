@@ -796,29 +796,64 @@ function matchTagIdsInText(text = "") {
   }
   return Array.from(set);
 }
-// ラベル（正式ラベル）から、別名も含めて tags.json の ID を集める
+// ラベル（正式ラベル）から、別名も含めて tags.json の ID を集める（正規化＋双方向部分一致）
 function getIdsForLicenseLabel(label = "") {
   if (!label) return [];
-  const names = new Set();
 
-  // ラベル自身（全角/半角ゆらぎ込み）
-  names.add(label);
-  names.add(label.replace(/\(/g, "（").replace(/\)/g, "）").replace(/~/g, "～"));
-  names.add(label.replace(/（/g, "(").replace(/）/g, ")").replace(/～/g, "~"));
+  // 全角/半角ゆらぎと区切り記号を吸収して比較する
+  const toFW = (s) => String(s || "").replace(/\(/g, "（").replace(/\)/g, "）").replace(/~/g, "～");
+  const toHW = (s) => String(s || "").replace(/（/g, "(").replace(/）/g, ")").replace(/～/g, "~");
+  const scrub = (s) =>
+    String(s || "").trim().replace(/[ \t\r\n\u3000、。・／\/＿\u2013\u2014\-~～]/g, "");
+  const normalize = (s) => scrub(toHW(toFW(String(s || ""))));
 
-  // licenseMap は「別名 → [ラベル…]」。この中で label を含む別名を全部拾う
+  // このラベルに紐づく「検索語」セット（ラベル自身＋ゆらぎ＋別名）
+  const nameSet = new Set();
+  const pushAllForms = (s) => {
+    if (!s) return;
+    nameSet.add(s);
+    nameSet.add(toFW(s));
+    nameSet.add(toHW(s));
+  };
+
+  // ラベル自身
+  pushAllForms(label);
+
+  // licenseMap は「別名 → [ラベル…]」。label を含むすべての別名を追加
   for (const [alias, labels] of licenseMap.entries()) {
-    if (!Array.isArray(labels)) continue;
-    if (!labels.includes(label)) continue;
-    names.add(alias);
-    names.add(alias.replace(/\(/g, "（").replace(/\)/g, "）").replace(/~/g, "～"));
-    names.add(alias.replace(/（/g, "(").replace(/）/g, ")").replace(/～/g, "~"));
+    if (Array.isArray(labels) && labels.includes(label)) {
+      pushAllForms(alias);
+    }
   }
 
-  const ids = new Set();
-  for (const n of names) {
+  // まずは tagIdByName での厳密一致（高速パス）
+  const exactIds = new Set();
+  for (const n of nameSet) {
     const id = tagIdByName.get(n);
-    if (id != null) ids.add(id);
+    if (id != null) exactIds.add(id);
   }
+  if (exactIds.size) return Array.from(exactIds);
+
+  // 厳密一致で取れない場合は、tags.json 全走査で双方向部分一致
+  const needles = Array.from(nameSet).map(normalize).filter(Boolean);
+  const ids = new Set();
+
+  for (const t of (Array.isArray(tagList) ? tagList : [])) {
+    const name = String(t?.name ?? "");
+    if (!name) continue;
+
+    const normTag = normalize(name);
+    if (!normTag) continue;
+
+    for (const nd of needles) {
+      if (!nd) continue;
+      // 「タグ名が検索語に含まれる」または「検索語がタグ名に含まれる」
+      if (normTag.includes(nd) || nd.includes(normTag)) {
+        if (t.id != null) ids.add(t.id);
+        break;
+      }
+    }
+  }
+
   return Array.from(ids);
 }
