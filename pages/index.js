@@ -211,7 +211,7 @@ if (data.meta?.step != null) setStep(data.meta.step);
       : "メッセージを入力…"
   }
   value={input}
-  onChange={(e) => { setInput(e.target.value); setUserEcho(e.target.value); }}
+  onChange={(e) => { setInput(e.target.value); }}
   onKeyDown={onKeyDown}
   onCompositionStart={() => setIsComposing(true)}
   onCompositionEnd={() => setIsComposing(false)}
