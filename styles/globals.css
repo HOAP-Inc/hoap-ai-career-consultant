@@ -290,95 +290,82 @@ html, body, #__next { height: 100%; }
 
 @media (max-width: 640px){
 
-  /* ====== 1) ステージを深くして背景を“ステータスまで”見せる ====== */
+  /* レイアウト全体：高さを実画面に合わせ、入力欄分の余白は控えめに */
+  .container{
+    height: 100dvh;
+    overflow-y: auto;
+    padding-bottom: 140px; /* 入力欄ぶん。130〜160で微調整可 */
+  }
+
+  /* ヘッダ/ステータスをコンパクト化して、ステージに高さを回す */
+  .header{ padding-top: 4px; padding-bottom: 4px; }
+  .status-row{ margin: 4px 0 8px; gap: 6px; }
+  .badge{ padding: 4px 8px; font-size: 11px; }
+  .status-progress{ height: 4px; margin: 6px 0 12px; }
+
+  /* ステージ：上詰め・深め。背景は常に同位置で固定表示 */
   .duo-stage{
-    height: 580px;           /* ステータス行の直前まで背景が届く */
-    margin-bottom: 0;
+    margin: 6px 0 8px;
+    height: 600px;  /* 既存より+20で可視領域を確保 */
+    position: relative;
   }
-  .duo-stage::after{
-    content:"";
-    position:absolute; left:0; right:0;
-    bottom:-28px; height:28px;          /* 20〜36pxで微調整OK */
-    background: #fff0;                  /* 要素上のBGを邪魔しない */
-  }
+  .duo-stage::after{ content:""; position:absolute; left:0; right:0; bottom:-24px; height:24px; background: transparent; }
 
-  /* 机（背景）をもっと上へ */
+  /* 背景（机）— 大きめにしつつ“上寄せ”。ステップ遷移でも位置が変わらない */
   .duo-stage__bg{
-    background-size: 115%;
-    background-position: center 40px;   /* 30〜60pxで微調整OK */
+    background-size: 118%;
+    background-position: center 20px; /* 10〜40で調整可。上に詰める */
   }
 
-  /* ====== 2) ほーぷちゃん／セリフの当たりを弱める ====== */
+  /* ほーぷちゃん — 既存より一回り小さく。位置は固定で被りにくく */
   .duo-stage__hoap{
-    width: min(60vw, 330px); 
+    width: min(56vw, 300px);
     right: 6%;
-    bottom: -2%;             /* 足元を見せつつ被りを防ぐ */
+    bottom: -4%;
     transform: none;
     z-index: 1;
   }
 
+  /* 吹き出し — 上に寄せ、横幅を広げて横長化。文字は少し詰める */
   .duo-stage__bubble{
     left: 6%;
-    top: 8%;                
-    width: 76vw;             
-    max-width: 76vw;
-    font-size: 14px;         
-    line-height: 1.65;
+    top: 3%;            /* 上へ。2〜6%で好み調整 */
+    width: 82vw;        /* 横広げる */
+    max-width: 82vw;
+    font-size: 14px;
+    line-height: 1.6;
     padding: 12px 14px;
     transform: none;
     z-index: 2;
   }
   .duo-stage__bubble::before{ display:none; }
 
-  /* ====== 3) 入力欄を少しコンパクトに ====== */
+  /* 入力欄：1行相当に。iOSの自動ズーム回避で16px以上を維持 */
   .textarea{
+    font-size: 16px;     /* iOSズーム防止 */
     min-height: 44px;
-    padding: 10px 12px;
-    font-size: 14px;
-  }
-  .send{
-    width:44px; height:44px;
-  }
-
-  /* 進捗バー直下のユーザー吹き出し */
-  .user-echo{
-    position: relative;
-    bottom: auto;
-    margin: 10px 0 4px;
-    justify-content: flex-start;
-    z-index: 1;
-  }
-  .user-echo__bubble{
-    max-width: 92vw;
-  }
-}
-
-/* === 入力中でも画面を動かさないための最終調整（スマホ専用） === */
-html, body { overscroll-behavior-y: none; }
-
-@media (max-width: 640px){
-  /* 画面の実高さを固定し、キーボード出現でも揺れにくくする */
-  .container{
-    height: 100dvh;          /* 既存に追加でOK（上書き目的） */
-    overflow-y: auto;
-    padding-bottom: 160px;   /* 入力欄ぶんの余白。140〜180で微調整 */
-  }
-
-  /* iOSの自動ズーム防止（最小16px）＆少しだけコンパクト */
-  .textarea{
-    font-size: 16px;
-    min-height: 44px;
+    max-height: 44px;
     padding: 10px 12px;
   }
   .send{ width:44px; height:44px; }
 
-  /* VisualViewport で得た --kb（キーボード高）だけUIを持ち上げる */
+  /* 送信メッセージ表示（ユーザー吹き出し）：幅を約半分へ */
+  .user-echo{
+    position: relative;
+    bottom: auto;
+    margin: 8px 0 4px;
+    justify-content: flex-start;
+    z-index: 25;
+    transform: translateY(calc(var(--kb, 0px) * -1)); /* キーボード追従 */
+  }
+  .user-echo__bubble{
+    max-width: 48vw;   /* ← “半分”目安。46〜52で微調整可 */
+    padding: 8px 10px;
+  }
+
+  /* 入力バーもキーボード高で追従（VisualViewportで同期された --kb を使用） */
   .input-bar{
     transform: translateY(calc(var(--kb, 0px) * -1));
     z-index: 30;
-  }
-  .user-echo{
-    transform: translateY(calc(var(--kb, 0px) * -1));
-    z-index: 25;
   }
 }
