@@ -310,19 +310,20 @@ html, body, #__next { height: 100%; }
     z-index: 20;
     padding-top: 3px;
     padding-bottom: 3px;
+    margin-bottom: 0;
   }
   .badge{ padding:4px 8px; font-size:11px; }
 
   .status-row{
     position: sticky;
-    top: 26px;              /* ヘッダ直下 */
+    top: 38px;              /* ヘッダ直下 */
     z-index: 19;
     margin: 3px 0 5px;
     gap: 6px;
   }
   .status-progress{
     position: sticky;
-    top: 54px;              /* ステータス直下 */
+    top: 66px;              /* ステータス直下 */
     z-index: 18;
     height: 4px;
     margin: 3px 0 11px;
@@ -331,7 +332,7 @@ html, body, #__next { height: 100%; }
   /* ほーぷちゃんエリア */
   .duo-stage{
     margin: 0;
-    margin-top: 4px;
+    margin-top: 16px;
     height: 480px;
     position: relative;
     overflow: hidden;
