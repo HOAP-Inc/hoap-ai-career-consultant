@@ -358,7 +358,7 @@ html, body, #__next { height: 100%; }
   position: fixed;                                   /* 画面下に固定 */
   left: 0; right: 0;
   bottom: calc(84px + env(safe-area-inset-bottom));  /* 入力バー直上に配置 */
-  padding: 0 16px;                                   /* 入力欄と左右を合わせる */
+  padding: 0 88px 0 16px;   /* 右に送信ボタンぶん余裕 */
   margin: 0;
   display: flex;
   justify-content: flex-end;
@@ -368,7 +368,7 @@ html, body, #__next { height: 100%; }
 }
   .user-echo__bubble{
     pointer-events: auto;
-    max-width: 78vw;
+    max-width: calc(100vw - 104px);  /* 左16px + 右88px を差し引いた幅 */
     padding: 10px 12px;
   }
 
