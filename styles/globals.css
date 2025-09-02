@@ -139,6 +139,7 @@ body{
 /* メッセージリストの一番下へスムーズスクロール */
 .container{ scroll-behavior: smooth; }
 .chat{ scroll-behavior: smooth; }
+
 /* ===== Status progress bar ===== */
 .status-progress{
   width:100%;
@@ -307,30 +308,30 @@ html, body, #__next { height: 100%; }
     position: sticky;
     top: 0;
     z-index: 20;
-    padding-top: 2px;
-    padding-bottom: 2px;
+    padding-top: 4px;
+    padding-bottom: 4px;
   }
   .badge{ padding:4px 8px; font-size:11px; }
 
   .status-row{
     position: sticky;
-    top: 24px;              /* ヘッダ直下 */
+    top: 28px;              /* ヘッダ直下 */
     z-index: 19;
-    margin: 2px 0 2px;
+    margin: 4px 0 6px;
     gap: 6px;
   }
   .status-progress{
     position: sticky;
-    top: 48px;              /* ステータス直下 */
+    top: 56px;              /* ステータス直下 */
     z-index: 18;
     height: 4px;
-    margin: 2px 0 120px;
+    margin: 4px 0 12px;
   }
 
   /* ほーぷちゃんエリア */
   .duo-stage{
     margin: 0;
-    margin-top: 0;
+    margin-top: 6px;
     height: 480px;
     position: relative;
     overflow: hidden;
