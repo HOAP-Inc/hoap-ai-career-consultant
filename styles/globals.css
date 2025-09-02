@@ -292,34 +292,53 @@ html, body, #__next { height: 100%; }
   white-space: pre-wrap;
 }
 
-/* === Mobile (<=640px) — 既存の @media をこの1つに置換 === */
+/* === Mobile (<=640px) — 置き換え版 === */
 @media (max-width: 640px){
 
-  /* レイアウト全体：入力欄ぶん余白は控えめ */
+  /* 全体 */
   .container{
     height: 100dvh;
     overflow-y: auto;
     padding-bottom: 140px;
   }
 
-  /* ヘッダ/ステータスをコンパクトに */
-  .header{ padding-top:4px; padding-bottom:4px; }
+  /* ヘッダ/ステータス/進捗：上に詰める */
+  .header{
+    position: sticky;
+    top: 0;
+    z-index: 20;
+    padding-top: 2px;
+    padding-bottom: 2px;
+  }
   .badge{ padding:4px 8px; font-size:11px; }
-  .status-row{ position: sticky; top: 8px;  z-index: 19; margin: 4px 0 4px; gap: 6px; }
-  .status-progress{ position: sticky; top: 36px; z-index: 18; height: 4px; margin: 2px 0 6px; }
- 
-  /* ほーぷちゃんステージ */
+
+  .status-row{
+    position: sticky;
+    top: 24px;              /* ヘッダ直下 */
+    z-index: 19;
+    margin: 2px 0 2px;
+    gap: 6px;
+  }
+  .status-progress{
+    position: sticky;
+    top: 48px;              /* ステータス直下 */
+    z-index: 18;
+    height: 4px;
+    margin: 2px 0 120px;
+  }
+
+  /* ほーぷちゃんエリア */
   .duo-stage{
     margin: 0;
-    height: 480px;
-    transform: none;
     margin-top: 0;
+    height: 480px;
     position: relative;
     overflow: hidden;
+    transform: none;
   }
   .duo-stage__bg{
     background-size: 102%;
-    background-position: center bottom -16px; /* ← 常に下端基準 */
+    background-position: center bottom -16px;
   }
   .duo-stage__hoap{
     width: min(50vw, 280px);
@@ -330,90 +349,51 @@ html, body, #__next { height: 100%; }
   .duo-stage__bubble{
     left: 6%;
     top: 6%;
-    right: auto;         /* ← 右固定は外す */
-    bottom: auto;        /* ← 高さは max-height で制御 */
-    width: 84vw;         /* ← 横幅を固定に戻す */
+    right: auto;
+    bottom: auto;
+    width: 84vw;
     max-width: 84vw;
-    font-size:14px; line-height:1.6;
+    font-size:14px;
+    line-height:1.6;
     padding:12px 14px;
     z-index: 2;
-
-    max-height: calc(100% - 28px); /* ステージ内に収める上限 */
-    overflow-y: auto;               /* セリフだけスクロール */
+    max-height: calc(100% - 28px);
+    overflow-y: auto;
     -webkit-overflow-scrolling: touch;
     overscroll-behavior: contain;
   }
   .duo-stage__bubble::before{ display:none; }
 
-  /* 入力欄：2段に戻す（min〜maxで可変） */
+  /* 入力欄 */
   .textarea{
     font-size:16px;
-    min-height:48px;    /* 1行ぶんの最小値 */
-    max-height:96px;    /* 2行まで自動拡張 */
+    min-height:48px;
+    max-height:96px;
     padding:12px;
     line-height:1.5;
   }
   .send{ width:44px; height:44px; }
-
-  /* ユーザー吹き出し：余白をさらに圧縮（直上に寄せる） */
-  .user-echo{
-  position: fixed;                                   /* 画面下に固定 */
-  left: auto;              /* ← 左寄せ解除 */
-  right: 16px;             /* ← 右端に寄せる */
-  bottom: calc(112px + env(safe-area-inset-bottom));  /* 入力バー直上に配置 */
-  padding: 0;
-  margin: 0;
-  display: flex;
-  justify-content: flex-end;
-  z-index: 25;
-  transform: translateY(calc(var(--kb, 0px) * -1));   /* 入力バーと同期 */
-  pointer-events: none;
-}
-  .user-echo__bubble{
-    pointer-events: auto;
-    max-width: calc(100vw - 104px);  /* 左16px + 右88px を差し引いた幅 */
-    padding: 10px 12px;
-  }
-
-  /* 入力バー：キーボード追従 */
   .input-bar{
     transform: translateY(calc(var(--kb, 0px) * -1));
     z-index: 30;
   }
-  /* 1) ヘッダを最上に密着 */
-.header{
-  position: sticky !important;
-  top: 0 !important;
-  padding-top: 2px !important;
-  padding-bottom: 2px !important;
-  z-index: 20 !important;
-}
 
-/* 2) ステータスバーをさらに上へ */
-.status-row{
-  position: sticky !important;
-  top: 24px !important;        /* ← 28 → 24 に上げる */
-  margin: 2px 0 2px !important;
-  z-index: 19 !important;
-}
-
-/* 3) 進捗バーも連動して上へ（ステータス直下に密着） */
-.status-progress{
-  position: sticky !important;
-  top: 48px !important;        /* ← 60 → 48 に上げる */
-  height: 4px !important;
-  margin: 2px 0 6px !important;
-  z-index: 18 !important;
-}
-
-/* 4) ほーぷちゃんエリアの上マージンを削って全体を上詰め */
-.duo-stage{
-  margin-top: 0 !important;    /* ← 14px → 0 */
-}
-
-/* 念のため：ユーザー吹き出しは入力欄追従のまま */
-.user-echo{
-  bottom: calc(112px + env(safe-area-inset-bottom)) !important;
-  transform: translateY(calc(var(--kb, 0px) * -1)) !important;
-}
+  /* ユーザー吹き出し：入力欄と同期して常に少し上 */
+  .user-echo{
+    position: fixed;
+    right: 16px;
+    bottom: calc(112px + env(safe-area-inset-bottom));
+    padding: 0;
+    margin: 0;
+    display: flex;
+    justify-content: flex-end;
+    z-index: 25;
+    transform: translateY(calc(var(--kb, 0px) * -1));
+    pointer-events: none;
+  }
+  .user-echo__bubble{
+    pointer-events: auto;
+    max-width: calc(100vw - 104px);
+    padding: 10px 12px;
+  }
 }
