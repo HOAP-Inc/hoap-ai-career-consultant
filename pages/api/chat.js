@@ -594,13 +594,17 @@ if (s.step === 4) {
   // ---- Step5：絶対に外せない条件（Must） ----
   if (s.step === 5) {
     if (isNone(text)) {
-      s.step = 6;
-      const empM0 = await generateEmpathy(text || "", s);
-return res.json(withMeta({
-  response: `${empM0}\nありがとう！それじゃあ次は【あったらいいな（希望条件）】を教えてね。`,
-  step: 6, ...
-}, 6));
-    }
+  s.step = 6;
+  const empM0 = await generateEmpathy(text || "", s);
+  return res.json(withMeta({
+    response: `${empM0}\nありがとう！それじゃあ次は【あったらいいな（希望条件）】を教えてね。`,
+    step: 6,
+    status: s.status,
+    isNumberConfirmed: true,
+    candidateNumber: s.status.number,
+    debug: debugState(s),
+  }, 6));
+}
 
     const tags = matchTags(text, mustWantItems);
     if (tags.length) {
@@ -614,18 +618,26 @@ return res.json(withMeta({
       }
       const line = added.map(t => `そっか、『${t}』が絶対ってことだね！`).join("\n");
       const empM1 = await generateEmpathy(text || "", s);
+const empM1 = await generateEmpathy(text || "", s);
 return res.json(withMeta({
   response: `${empM1}\n${line}\n他にも絶対条件はある？（なければ「ない」って返してね）`,
-  step: 5, ...
+  step: 5,
+  status: s.status,
+  isNumberConfirmed: true,
+  candidateNumber: s.status.number,
+  debug: debugState(s),
 }, 5));
-    }
 
     s.status.memo.must_raw ??= [];
-    s.status.memo.must_raw.push(text);
-    const empM2 = await generateEmpathy(text || "", s);
+s.status.memo.must_raw.push(text);
+const empM2 = await generateEmpathy(text || "", s);
 return res.json(withMeta({
   response: `${empM2}\nそっか、わかった！\n他にも絶対条件はある？（なければ「ない」って返してね）`,
-  step: 5, ...
+  step: 5,
+  status: s.status,
+  isNumberConfirmed: true,
+  candidateNumber: s.status.number,
+  debug: debugState(s),
 }, 5));
   }
 
