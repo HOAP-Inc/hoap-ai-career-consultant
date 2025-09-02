@@ -333,20 +333,20 @@ html, body, #__next { height: 100%; }
   /* ほーぷちゃんエリア */
   .duo-stage{
     margin: 0;
-    margin-top: 13px;
-    height: 480px;
+    margin-top: 10px;
+    height: 410px;
     position: relative;
     overflow: hidden;
     transform: none;
   }
   .duo-stage__bg{
-    background-size: 102%;
-    background-position: center bottom -16px;
+    background-size: 96%;
+    background-position: center bottom -8px;
   }
   .duo-stage__hoap{
-    width: min(50vw, 280px);
-    right: 6%;
-    bottom: -4%;
+    width: min(46vw, 240px);
+    right: 6%
+    bottom: -8%;
     z-index: 1;
   }
   .duo-stage__bubble{
@@ -354,13 +354,13 @@ html, body, #__next { height: 100%; }
     top: 6%;
     right: auto;
     bottom: auto;
-    width: 84vw;
-    max-width: 84vw;
+    width: 82vw;
+    max-width: 82vw;
     font-size:14px;
     line-height:1.6;
     padding:12px 14px;
     z-index: 2;
-    max-height: calc(100% - 28px);
+    max-height: calc(100% - 24px);
     overflow-y: auto;
     -webkit-overflow-scrolling: touch;
     overscroll-behavior: contain;
