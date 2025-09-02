@@ -169,9 +169,10 @@ html, body, #__next { height: 100%; }
 }
 
 .chat.list {
-  flex: 0 0 auto;        /* コンテンツ分だけ高さを持つ */
-  min-height: unset;
-  overflow: visible;     /* ← ここはスクロールさせない */
+  flex: 1 1 auto;     /* 余った高さを受け取る */
+  min-height: 0;      /* ここが超重要 */
+  overflow-y: auto;   /* ここで縦スクロールを許可 */
+  overflow-x: hidden; /* 横は念のため隠す */
 }
 /* ---- sticky top (ヘッダ/ステータス/プログレスを上部固定) ---- */
 .header {
