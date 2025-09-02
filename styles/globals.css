@@ -349,7 +349,7 @@ html, body, #__next { height: 100%; }
   width: min(50vw, 280px);
   right: 6%;
   top: auto !important;      /* top基準を無効化 */
-  bottom: 12px !important;    /* ← 下端から8pxの位置に固定 */
+  bottom: 6px !important;    /* ← 下端から8pxの位置に固定 */
   z-index: 1;
 }
   .duo-stage__bubble{
