@@ -378,7 +378,8 @@ html, body, #__next { height: 100%; }
 .duo-stage__hoap{
   width: min(50vw, 280px);
   right: 6%;
-  bottom: 12% !important;   /* 6% → 12%：ほーぷちゃんを上へ */
+  top: auto !important;      /* top基準を無効化 */
+  bottom: 8px !important;    /* ← 下端から8pxの位置に固定 */
   z-index: 1;
 }
 
