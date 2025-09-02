@@ -308,30 +308,30 @@ html, body, #__next { height: 100%; }
     position: sticky;
     top: 0;
     z-index: 20;
-    padding-top: 4px;
-    padding-bottom: 4px;
+    padding-top: 3px;
+    padding-bottom: 3px;
   }
   .badge{ padding:4px 8px; font-size:11px; }
 
   .status-row{
     position: sticky;
-    top: 28px;              /* ヘッダ直下 */
+    top: 26px;              /* ヘッダ直下 */
     z-index: 19;
-    margin: 4px 0 6px;
+    margin: 3px 0 5px;
     gap: 6px;
   }
   .status-progress{
     position: sticky;
-    top: 56px;              /* ステータス直下 */
+    top: 54px;              /* ステータス直下 */
     z-index: 18;
     height: 4px;
-    margin: 4px 0 12px;
+    margin: 3px 0 11px;
   }
 
   /* ほーぷちゃんエリア */
   .duo-stage{
     margin: 0;
-    margin-top: 6px;
+    margin-top: 4px;
     height: 480px;
     position: relative;
     overflow: hidden;
