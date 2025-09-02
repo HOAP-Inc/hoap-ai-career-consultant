@@ -378,4 +378,5 @@ html, body, #__next { height: 100%; }
     transform: translateY(calc(var(--kb, 0px) * -1));
     z-index: 30;
   }
+  .duo-stage{ outline: 2px solid magenta !important; }
 }
