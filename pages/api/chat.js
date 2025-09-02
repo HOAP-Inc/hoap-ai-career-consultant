@@ -488,54 +488,60 @@ return res.json(withMeta({
 }
   
   // 3) 1回目の入力を受信 → 推定 or 汎用深掘りへ
-  if (s.drill.count === 0) {
-    s.status.reason = text || "";
-    s.status.memo.reason_raw = text || "";
-    s.drill.reasonBuf = [text || ""];
+if (s.drill.count === 0) {
+  s.status.reason = text || "";
+  s.status.memo.reason_raw = text || "";
+  s.drill.reasonBuf = [text || ""];
 
-    const { best, hits } = scoreCategories(s.drill.reasonBuf.join(" "));
-    if (!best || hits === 0 || noOptionCategory(best)) {
-      // 未マッチでもスキップせず、必ず深掘りへ
-      s.drill.category = null;
-      s.drill.count = 1;
-      const q = GENERIC_REASON_Q.deep1[0];
-      return res.json(withMeta({
-        response: q, step: 4, status: s.status, isNumberConfirmed: true, candidateNumber: s.status.number, debug: debugState(s)
-      }, 4));
-    }
-    // 推定できたらカテゴリ深掘りへ
-    s.drill.category = best;
+  const { best, hits } = scoreCategories(s.drill.reasonBuf.join(" "));
+  if (!best || hits === 0 || noOptionCategory(best)) {
+    // 未マッチでもスキップせず、必ず深掘りへ
+    s.drill.category = null;
     s.drill.count = 1;
-    const q = transferReasonFlow[best].deep1[0] || "それについて、もう少し詳しく教えて！";
-    rconst emp1 = await generateEmpathy(text || "", s);
-return res.json(withMeta({
-  response: `${emp1}\n${q}`, step: 4, ...
-}, 4));
-  }
-
-  // 4) 2回目の深掘り
-  if (s.drill.count === 1) {
-    s.drill.reasonBuf.push(text || "");
-    const joined = s.drill.reasonBuf.join(" ");
-
-    // 未確定なら再推定
-    if (!s.drill.category) {
-      const { best, hits } = scoreCategories(joined);
-      if (best && hits > 0 && !noOptionCategory(best)) {
-        s.drill.category = best;
-      }
-    }
-
-    s.drill.count = 2;
-    const cat = s.drill.category;
-    const q = cat
-      ? (transferReasonFlow[cat].deep2[0] || "なるほど。他に具体例があれば教えて！")
-      : (GENERIC_REASON_Q.deep2[0]);
+    const q = GENERIC_REASON_Q.deep1[0];
+    const emp0 = await generateEmpathy(s.status.reason || text || "", s);
     return res.json(withMeta({
-      response: q, step: 4, status: s.status, isNumberConfirmed: true, candidateNumber: s.status.number, debug: debugState(s)
+      response: `${emp0}\n${q}`,
+      step: 4, status: s.status, isNumberConfirmed: true, candidateNumber: s.status.number, debug: debugState(s)
     }, 4));
   }
 
+  // 推定できたらカテゴリ深掘りへ
+  s.drill.category = best;
+  s.drill.count = 1;
+  const q = transferReasonFlow[best].deep1[0] || "それについて、もう少し詳しく教えて！";
+  const emp0 = await generateEmpathy(s.status.reason || text || "", s);
+  return res.json(withMeta({
+    response: `${emp0}\n${q}`,
+    step: 4, status: s.status, isNumberConfirmed: true, candidateNumber: s.status.number, debug: debugState(s)
+  }, 4));
+}
+
+  // 4) 2回目の深掘り
+if (s.drill.count === 1) {
+  s.drill.reasonBuf.push(text || "");
+  const joined = s.drill.reasonBuf.join(" ");
+
+  // 未確定なら再推定
+  if (!s.drill.category) {
+    const { best, hits } = scoreCategories(joined);
+    if (best && hits > 0 && !noOptionCategory(best)) {
+      s.drill.category = best;
+    }
+  }
+
+  s.drill.count = 2;
+  const cat = s.drill.category;
+  const q = cat
+    ? (transferReasonFlow[cat].deep2[0] || "なるほど。他に具体例があれば教えて！")
+    : (GENERIC_REASON_Q.deep2[0]);
+
+  const emp1 = await generateEmpathy(text || "", s);
+  return res.json(withMeta({
+    response: `${emp1}\n${q}`,
+    step: 4, status: s.status, isNumberConfirmed: true, candidateNumber: s.status.number, debug: debugState(s)
+  }, 4));
+}
   // 5) 深掘り後の確定（カテゴリ不明ならカテゴリ選択へ）
   if (s.drill.count === 2) {
     s.drill.reasonBuf.push(text || "");
@@ -554,8 +560,8 @@ return res.json(withMeta({
         s.drill.options = pool;
        const empC = await generateEmpathy(s.drill.reasonBuf.join(" "), s);
 return res.json(withMeta({
-  response: `${empC}\nこの中だとどれが一番近い？『${pool.map(...)}』`,
-  step: 4, ...
+  response: `${empC}\nこの中だとどれが一番近い？『${pool.map(x=>`［${x}］`).join("／")}』`,
+  step: 4, status: s.status, isNumberConfirmed: true, candidateNumber: s.status.number, debug: debugState(s)
 }, 4));
       }
     }
