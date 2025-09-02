@@ -333,8 +333,8 @@ html, body, #__next { height: 100%; }
   /* ほーぷちゃんエリア */
   .duo-stage{
     margin: 0;
-    margin-top: 10px !important;
-    height: 360px !important;
+    margin-top: 8px !important;
+    height: 340px !important;
     position: relative;
     overflow: hidden;
     transform: none;
@@ -346,12 +346,12 @@ html, body, #__next { height: 100%; }
   .duo-stage__hoap{
     width: min(50vw, 280px);
     right: 6%;
-    bottom: -0%;
+    bottom: 6%;
     z-index: 1;
   }
   .duo-stage__bubble{
     left: 6%;
-    top: 6%;
+    top: 12%;
     right: auto;
     bottom: auto;
     width: 84vw;
@@ -366,6 +366,19 @@ html, body, #__next { height: 100%; }
     overscroll-behavior: contain;
   }
   .duo-stage__bubble::before{ display:none; }
+
+  /* ほーぷちゃんエリア内側の余白を詰める（これが効いてなかった） */
+.duo-stage__wrap{
+  padding: 6px 12px;
+}
+
+/* ほーぷちゃん ↔ セリフのスキマをさらに圧縮 */
+.duo-stage__hoap{
+  width: min(50vw, 280px);
+  right: 6%;
+  bottom: 12% !important;   /* 6% → 12%：ほーぷちゃんを上へ */
+  z-index: 1;
+}
 
   /* 入力欄 */
   .textarea{
