@@ -617,7 +617,6 @@ if (s.step === 4) {
         if (id && !s.status.must_ids.includes(id)) s.status.must_ids.push(id);
       }
       const line = added.map(t => `そっか、『${t}』が絶対ってことだね！`).join("\n");
-      const empM1 = await generateEmpathy(text || "", s);
 const empM1 = await generateEmpathy(text || "", s);
 return res.json(withMeta({
   response: `${empM1}\n${line}\n他にも絶対条件はある？（なければ「ない」って返してね）`,
@@ -627,7 +626,7 @@ return res.json(withMeta({
   candidateNumber: s.status.number,
   debug: debugState(s),
 }, 5));
-
+}
     s.status.memo.must_raw ??= [];
 s.status.memo.must_raw.push(text);
 const empM2 = await generateEmpathy(text || "", s);
