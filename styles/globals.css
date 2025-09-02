@@ -247,7 +247,7 @@ html, body, #__next { height: 100%; }
 /* ほーぷちゃんの吹き出し（書き換え式） */
 .duo-stage__bubble{
   position: absolute;          /* 画像の“上”に重ねる */
-  left: 6%; top: 10%;
+  left: 6%; top: 8%;
   max-width: 56%;
   background: #fff;
   border: 1px solid #f3e8ff;
@@ -331,8 +331,10 @@ html, body, #__next { height: 100%; }
     font-size:14px; line-height:1.6;
     padding:12px 14px;
     z-index: 2;
-    max-height: 52vh;               /* 画面の半分くらいに抑える */
+    max-height: calc(100% - 28px); /* ← vhを使わず“ステージ相対”にする */
     overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain;
   }
   .duo-stage__bubble::before{ display:none; }
 
