@@ -349,12 +349,12 @@ html, body, #__next { height: 100%; }
   width: min(50vw, 280px);
   right: 6%;
   top: auto !important;      /* top基準を無効化 */
-  bottom: 4px !important;    
+  bottom: 1px !important;    
   z-index: 1;
 }
   .duo-stage__bubble{
     left: 6%;
-    top: 6%;
+    top: 8%;
     right: auto;
     bottom: auto;
     width: 84vw;
