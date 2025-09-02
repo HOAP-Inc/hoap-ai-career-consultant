@@ -380,4 +380,40 @@ html, body, #__next { height: 100%; }
     transform: translateY(calc(var(--kb, 0px) * -1));
     z-index: 30;
   }
+  /* 1) ヘッダを最上に密着 */
+.header{
+  position: sticky !important;
+  top: 0 !important;
+  padding-top: 2px !important;
+  padding-bottom: 2px !important;
+  z-index: 20 !important;
+}
+
+/* 2) ステータスバーをさらに上へ */
+.status-row{
+  position: sticky !important;
+  top: 24px !important;        /* ← 28 → 24 に上げる */
+  margin: 2px 0 2px !important;
+  z-index: 19 !important;
+}
+
+/* 3) 進捗バーも連動して上へ（ステータス直下に密着） */
+.status-progress{
+  position: sticky !important;
+  top: 48px !important;        /* ← 60 → 48 に上げる */
+  height: 4px !important;
+  margin: 2px 0 6px !important;
+  z-index: 18 !important;
+}
+
+/* 4) ほーぷちゃんエリアの上マージンを削って全体を上詰め */
+.duo-stage{
+  margin-top: 0 !important;    /* ← 14px → 0 */
+}
+
+/* 念のため：ユーザー吹き出しは入力欄追従のまま */
+.user-echo{
+  bottom: calc(112px + env(safe-area-inset-bottom)) !important;
+  transform: translateY(calc(var(--kb, 0px) * -1)) !important;
+}
 }
