@@ -305,15 +305,15 @@ html, body, #__next { height: 100%; }
   /* ヘッダ/ステータスをコンパクトに */
   .header{ padding-top:4px; padding-bottom:4px; }
   .badge{ padding:4px 8px; font-size:11px; }
-  .status-row{ position: sticky; top: 28px; z-index: 19; margin: 8px 0 6px; gap: 6px; }
-  .status-progress{ position: sticky; top: 60px; z-index: 18; height: 4px; margin: 4px 0 8px; }
+  .status-row{ position: sticky; top: 8px;  z-index: 19; margin: 4px 0 4px; gap: 6px; }
+  .status-progress{ position: sticky; top: 36px; z-index: 18; height: 4px; margin: 2px 0 6px; }
  
   /* ほーぷちゃんステージ */
   .duo-stage{
     margin: 0;
     height: 480px;
     transform: none;
-    margin-top: 14px;
+    margin-top: 0;
     position: relative;
     overflow: hidden;
   }
@@ -380,5 +380,4 @@ html, body, #__next { height: 100%; }
     transform: translateY(calc(var(--kb, 0px) * -1));
     z-index: 30;
   }
-  .duo-stage{ outline: 2px solid magenta !important; }
 }
