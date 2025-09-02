@@ -310,8 +310,8 @@ html, body, #__next { height: 100%; }
 
   /* ほーぷちゃんステージ */
   .duo-stage{
-    margin: 4px 0 6px;
-    height: 680px;      /* ステージは深めのまま */
+    margin: 4px 0 0;   /* 旧: margin: 4px 0 6px; 下マージンを0に */
+    height: 620px;     /* 旧: 680px → 少し浅くして上へ詰める */
     position: relative;
     overflow: hidden;
   }
