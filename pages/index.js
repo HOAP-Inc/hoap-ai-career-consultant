@@ -21,6 +21,7 @@ const [sessionId] = useState(() => Math.random().toString(36).slice(2));
 const [step, setStep] = useState(0);
 const [isComposing, setIsComposing] = useState(false);
 const [aiText, setAiText] = useState("");      // ほーぷちゃんの吹き出し用 文言
+const [isTyping, setIsTyping] = useState(false); // 返答待ちのタイピング表示
 const [userEcho, setUserEcho] = useState("");  // 入力欄上のユーザー吹き出し用 文言
 
 const listRef = useRef(null);
@@ -146,6 +147,10 @@ useLayoutEffect(() => {
     setUserEcho(userText);
     setInput("");
 
+    // ここで「・・・」を即表示
+    setIsTyping(true);
+    setAiText("・・・");
+
     try {
       const res = await fetch("/api/chat", {
         method: "POST",
@@ -156,6 +161,7 @@ useLayoutEffect(() => {
 
       // AI応答は“上書き”で表示（単一吹き出し）
       setAiText(data.response);
+      setIsTyping(false);
 
       // ステータス・ステップ更新（meta.statusBar を使う）
 if (data.meta?.statusBar) setStatus(data.meta.statusBar);
@@ -163,6 +169,7 @@ if (data.meta?.step != null) setStep(data.meta.step);
     } catch (err) {
       console.error(err);
      setAiText("通信エラーが発生したよ🙏");
+     setIsTyping(false);
     } finally {
       setSending(false);
     }
@@ -230,7 +237,7 @@ if (data.meta?.step != null) setStep(data.meta.step);
   <div className="duo-stage__bg" />
   <div className="duo-stage__wrap">
     <img className="duo-stage__hoap" src={hoapSrc} alt="ほーぷちゃん" />
-    <div className="duo-stage__bubble">
+    <div className={`duo-stage__bubble ${isTyping ? "typing" : ""}`} aria-live="polite">
       {aiText || "…"}
     </div>
   </div>
