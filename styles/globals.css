@@ -356,8 +356,9 @@ html, body, #__next { height: 100%; }
   /* ユーザー吹き出し：余白をさらに圧縮（直上に寄せる） */
   .user-echo{
   position: fixed;                                   /* 画面下に固定 */
-  left: 0; right: 0;
-  bottom: calc(84px + env(safe-area-inset-bottom));  /* 入力バー直上に配置 */
+  left: auto;              /* ← 左寄せ解除 */
+  right: 16px;             /* ← 右端に寄せる */
+  bottom: calc(100px + env(safe-area-inset-bottom));  /* 入力バー直上に配置 */
   padding: 0 88px 0 16px;   /* 右に送信ボタンぶん余裕 */
   margin: 0;
   display: flex;
