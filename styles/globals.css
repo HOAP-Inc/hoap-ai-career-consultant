@@ -343,12 +343,13 @@ html, body, #__next { height: 100%; }
     background-size: 102%;
     background-position: center bottom -24px;
   }
-  .duo-stage__hoap{
+  
+  /* ほーぷちゃん ↔ セリフのスキマをさらに圧縮 */
+.duo-stage__hoap{
   width: min(50vw, 280px);
   right: 6%;
-  top: auto;        /* bottom優先を解除 */
-  bottom: auto;     /* ←これ大事、効いてる bottom を無効化 */
-  top: 68%;         /* 上から 68% の位置に置く（数値で調整） */
+  top: auto !important;      /* top基準を無効化 */
+  bottom: 12px !important;    /* ← 下端から8pxの位置に固定 */
   z-index: 1;
 }
   .duo-stage__bubble{
@@ -372,15 +373,6 @@ html, body, #__next { height: 100%; }
   /* ほーぷちゃんエリア内側の余白を詰める（これが効いてなかった） */
 .duo-stage__wrap{
   padding: 6px 12px;
-}
-
-/* ほーぷちゃん ↔ セリフのスキマをさらに圧縮 */
-.duo-stage__hoap{
-  width: min(50vw, 280px);
-  right: 6%;
-  top: auto !important;      /* top基準を無効化 */
-  bottom: 8px !important;    /* ← 下端から8pxの位置に固定 */
-  z-index: 1;
 }
 
   /* 入力欄 */
