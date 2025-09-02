@@ -300,7 +300,7 @@ html, body, #__next { height: 100%; }
   .container{
     height: 100dvh;
     overflow-y: auto;
-    padding-bottom: 140px;
+    padding-bottom: 112px;
     padding-top: 0;
   }
 
