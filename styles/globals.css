@@ -311,8 +311,9 @@ html, body, #__next { height: 100%; }
   /* ほーぷちゃんステージ */
   .duo-stage{
     margin: 0;
-    height: 500px;
-    transform: translateY(-12px);
+    height: 480px;
+    transform: none;
+    margin-top: 14px;
     position: relative;
     overflow: hidden;
   }
