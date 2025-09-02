@@ -304,21 +304,9 @@ html, body, #__next { height: 100%; }
 
   /* ヘッダ/ステータスをコンパクトに */
   .header{ padding-top:4px; padding-bottom:4px; }
-  .status-row{
-  position: sticky;
-  top: 35px;
-  z-index: 19;
-  margin: 8px 0 6px;
-  gap: 6px;
-}
   .badge{ padding:4px 8px; font-size:11px; }
-  .status-progress{
-  position: sticky;
-  top: 70px;
-  z-index: 18;
-  height: 4px;
-  margin: 4px 0 8px;
-}
+  .status-row{ position: sticky; top: 32px; z-index: 19; margin: 8px 0 6px; gap: 6px; }
+　.status-progress{ position: sticky; top: 64px; z-index: 18; height: 4px; margin: 4px 0 8px; }
  
   /* ほーぷちゃんステージ */
   .duo-stage{
