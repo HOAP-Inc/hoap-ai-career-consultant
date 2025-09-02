@@ -346,7 +346,7 @@ html, body, #__next { height: 100%; }
   .duo-stage__hoap{
     width: min(50vw, 280px);
     right: 6%;
-    bottom: -12%;
+    bottom: -0%;
     z-index: 1;
   }
   .duo-stage__bubble{
