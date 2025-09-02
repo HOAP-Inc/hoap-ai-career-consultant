@@ -306,7 +306,7 @@ html, body, #__next { height: 100%; }
   .header{ padding-top:4px; padding-bottom:4px; }
   .status-row{
   position: sticky;
-  top: 40px;
+  top: 35px;
   z-index: 19;
   margin: 8px 0 6px;
   gap: 6px;
@@ -314,7 +314,7 @@ html, body, #__next { height: 100%; }
   .badge{ padding:4px 8px; font-size:11px; }
   .status-progress{
   position: sticky;
-  top: 76px;
+  top: 70px;
   z-index: 18;
   height: 4px;
   margin: 4px 0 8px;
@@ -323,7 +323,7 @@ html, body, #__next { height: 100%; }
   /* ほーぷちゃんステージ */
   .duo-stage{
     margin: 4px 0 0;   /* 旧: margin: 4px 0 6px; 下マージンを0に */
-    height: 540px;   
+    height: 500px;   
     position: relative;
     overflow: hidden;
   }
