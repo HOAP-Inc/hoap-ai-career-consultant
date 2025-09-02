@@ -316,14 +316,14 @@ html, body, #__next { height: 100%; }
 
   .status-row{
     position: sticky;
-    top: 38px;              /* ヘッダ直下 */
+    top: 36px;              /* ヘッダ直下 */
     z-index: 19;
     margin: 3px 0 5px;
     gap: 6px;
   }
   .status-progress{
     position: sticky;
-    top: 66px;              /* ステータス直下 */
+    top: 64px;              /* ステータス直下 */
     z-index: 18;
     height: 4px;
     margin: 3px 0 11px;
@@ -332,7 +332,7 @@ html, body, #__next { height: 100%; }
   /* ほーぷちゃんエリア */
   .duo-stage{
     margin: 0;
-    margin-top: 16px;
+    margin-top: 14px;
     height: 480px;
     position: relative;
     overflow: hidden;
