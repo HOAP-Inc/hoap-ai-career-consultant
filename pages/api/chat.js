@@ -364,7 +364,7 @@ if (s.step === 2) {
     s.status.role_ids = getIdsForLicenseLabel(exact);
     s.step = 3;
     return res.json(withMeta({
-      response: "受け取ったよ！次に【今どこで働いてる？】を教えてね。\n（例）○○病院 外来／△△クリニック",
+      response: "受け取ったよ！次に【今どこで働いてる？】を教えてね。\n（例）急性期病棟／訪問看護ステーション",
       step: 3, status: s.status, isNumberConfirmed: true,
       candidateNumber: s.status.number, debug: debugState(s)
     }, 3));
@@ -377,7 +377,7 @@ if (s.step === 2) {
     s.status.role_ids = getIdsForLicenseLabel(found[0]);
     s.step = 3;
     return res.json(withMeta({
-      response: "受け取ったよ！次に【今どこで働いてる？】を教えてね。\n（例）○○病院 外来／△△クリニック",
+      response: "受け取ったよ！次に【今どこで働いてる？】を教えてね。\n（例）急性期病棟／訪問看護ステーション",
       step: 3, status: s.status, isNumberConfirmed: true,
       candidateNumber: s.status.number, debug: debugState(s)
     }, 3));
