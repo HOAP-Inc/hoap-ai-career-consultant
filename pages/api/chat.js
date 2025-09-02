@@ -481,12 +481,12 @@ if (s.step === 4) {
     step: 5, status: s.status, isNumberConfirmed: true, candidateNumber: s.status.number, debug: debugState(s)
   }, 5));
 }
-    return res.json(withMeta({
-      response: `ごめん、もう一度教えて！この中だとどれが一番近い？『${s.drill.options.map(x=>`［${x}］`).join("／")}』`,
-      step: 4, status: s.status, isNumberConfirmed: true, candidateNumber: s.status.number, debug: debugState(s)
-    }, 4));
-  }
-
+    rconst emp0 = await generateEmpathy(s.status.reason || text || "", s);
+return res.json(withMeta({
+  response: `${emp0}\n${q}`, step: 4, ...
+}, 4));
+}
+  
   // 3) 1回目の入力を受信 → 推定 or 汎用深掘りへ
   if (s.drill.count === 0) {
     s.status.reason = text || "";
@@ -507,9 +507,10 @@ if (s.step === 4) {
     s.drill.category = best;
     s.drill.count = 1;
     const q = transferReasonFlow[best].deep1[0] || "それについて、もう少し詳しく教えて！";
-    return res.json(withMeta({
-      response: q, step: 4, status: s.status, isNumberConfirmed: true, candidateNumber: s.status.number, debug: debugState(s)
-    }, 4));
+    rconst emp1 = await generateEmpathy(text || "", s);
+return res.json(withMeta({
+  response: `${emp1}\n${q}`, step: 4, ...
+}, 4));
   }
 
   // 4) 2回目の深掘り
@@ -551,10 +552,11 @@ if (s.step === 4) {
         s.drill.phase = "reason-cat";
         s.drill.awaitingChoice = true;
         s.drill.options = pool;
-        return res.json(withMeta({
-          response: `どのカテゴリが一番近い？『${pool.map(x=>`［${x}］`).join("／")}』`,
-          step: 4, status: s.status, isNumberConfirmed: true, candidateNumber: s.status.number, debug: debugState(s)
-        }, 4));
+       const empC = await generateEmpathy(s.drill.reasonBuf.join(" "), s);
+return res.json(withMeta({
+  response: `${empC}\nこの中だとどれが一番近い？『${pool.map(...)}』`,
+  step: 4, ...
+}, 4));
       }
     }
 
@@ -586,10 +588,11 @@ return res.json(withMeta({
   if (s.step === 5) {
     if (isNone(text)) {
       s.step = 6;
-      return res.json(withMeta({
-        response: "ありがとう！それじゃあ次は【あったらいいな（希望条件）】を教えてね。",
-        step: 6, status: s.status, isNumberConfirmed: true, candidateNumber: s.status.number, debug: debugState(s)
-      }, 6));
+      const empM0 = await generateEmpathy(text || "", s);
+return res.json(withMeta({
+  response: `${empM0}\nありがとう！それじゃあ次は【あったらいいな（希望条件）】を教えてね。`,
+  step: 6, ...
+}, 6));
     }
 
     const tags = matchTags(text, mustWantItems);
@@ -603,86 +606,95 @@ return res.json(withMeta({
         if (id && !s.status.must_ids.includes(id)) s.status.must_ids.push(id);
       }
       const line = added.map(t => `そっか、『${t}』が絶対ってことだね！`).join("\n");
-      return res.json(withMeta({
-        response: `${line}\n他にも絶対条件はある？（なければ「ない」って返してね）`,
-        step: 5, status: s.status, isNumberConfirmed: true, candidateNumber: s.status.number, debug: debugState(s)
-      }, 5));
+      const empM1 = await generateEmpathy(text || "", s);
+return res.json(withMeta({
+  response: `${empM1}\n${line}\n他にも絶対条件はある？（なければ「ない」って返してね）`,
+  step: 5, ...
+}, 5));
     }
 
     s.status.memo.must_raw ??= [];
     s.status.memo.must_raw.push(text);
-    return res.json(withMeta({
-      response: "そっか、わかった！大事な希望だね◎\n他にも絶対条件はある？（なければ「ない」って返してね）",
-      step: 5, status: s.status, isNumberConfirmed: true, candidateNumber: s.status.number, debug: debugState(s)
-    }, 5));
+    const empM2 = await generateEmpathy(text || "", s);
+return res.json(withMeta({
+  response: `${empM2}\nそっか、わかった！\n他にも絶対条件はある？（なければ「ない」って返してね）`,
+  step: 5, ...
+}, 5));
   }
 
   // ---- Step6：あったらいいな（Want） ----
-  if (s.step === 6) {
-    if (isNone(text)) {
-      s.step = 7;
-      return res.json(withMeta({
-        response: "質問は残り2つ！\nまずは【いま出来ること・得意なこと（Can）】を教えてね。自由に書いてOKだよ。",
-        step: 7, status: s.status, isNumberConfirmed: true, candidateNumber: s.status.number, debug: debugState(s)
-      }, 7));
-    }
-
-    const tags = matchTags(text, mustWantItems);
-    if (tags.length) {
-      const added = [];
-      for (const t of tags.slice(0, 3)) {
-        if (!s.status.want.includes(t)) { s.status.want.push(t); added.push(t); }
-      }
-      for (const label of added) {
-        const id = tagIdByName.get(label);
-        if (id && !s.status.want_ids.includes(id)) s.status.want_ids.push(id);
-      }
-      const line = added.map(t => `了解！『${t}』だと嬉しいってことだね！`).join("\n");
-      return res.json(withMeta({
-        response: `${line}\n他にもあったらいいなっていうのはある？（なければ「ない」って返してね）`,
-        step: 6, status: s.status, isNumberConfirmed: true, candidateNumber: s.status.number, debug: debugState(s)
-      }, 6));
-    }
-
-    s.status.memo.want_raw ??= [];
-    s.status.memo.want_raw.push(text);
+if (s.step === 6) {
+  if (isNone(text)) {
+    s.step = 7;
+    const empW0 = await generateEmpathy(text || "", s);
     return res.json(withMeta({
-      response: "了解！気持ちは受け取ったよ◎\n他にもあったらいいなっていうのはある？（なければ「ない」って返してね）",
+      response: `${empW0}\n質問は残り2つ！\nまずは【いま出来ること・得意なこと（Can）】を教えてね。自由に書いてOKだよ。`,
+      step: 7, status: s.status, isNumberConfirmed: true, candidateNumber: s.status.number, debug: debugState(s)
+    }, 7));
+  }
+
+  const tags = matchTags(text, mustWantItems);
+  if (tags.length) {
+    const added = [];
+    for (const t of tags.slice(0, 3)) {
+      if (!s.status.want.includes(t)) { s.status.want.push(t); added.push(t); }
+    }
+    for (const label of added) {
+      const id = tagIdByName.get(label);
+      if (id && !s.status.want_ids.includes(id)) s.status.want_ids.push(id);
+    }
+    const line = added.map(t => `了解！『${t}』だと嬉しいってことだね！`).join("\n");
+    const empW1 = await generateEmpathy(text || "", s);
+    return res.json(withMeta({
+      response: `${empW1}\n${line}\n他にもあったらいいなっていうのはある？（なければ「ない」って返してね）`,
       step: 6, status: s.status, isNumberConfirmed: true, candidateNumber: s.status.number, debug: debugState(s)
     }, 6));
   }
 
+  s.status.memo.want_raw ??= [];
+  s.status.memo.want_raw.push(text);
+  const empW2 = await generateEmpathy(text || "", s);
+  return res.json(withMeta({
+    response: `${empW2}\n了解！気持ちは受け取ったよ◎\n他にもあったらいいなっていうのはある？（なければ「ない」って返してね）`,
+    step: 6, status: s.status, isNumberConfirmed: true, candidateNumber: s.status.number, debug: debugState(s)
+  }, 6));
+}
+
+
   // ---- Step7：Can ----
-  if (s.step === 7) {
-    s.status.can = text || "";
-    s.step = 8;
-    return res.json(withMeta({
-      response: "これが最後の質問👏\n【これから挑戦したいこと（Will）】を教えてね。自由に書いてOKだよ。",
-      step: 8, status: s.status, isNumberConfirmed: true, candidateNumber: s.status.number, debug: debugState(s)
-    }, 8));
-  }
+if (s.step === 7) {
+  s.status.can = text || "";
+  s.step = 8;
+  const empCan = await generateEmpathy(text || "", s);
+  return res.json(withMeta({
+    response: `${empCan}\nこれが最後の質問👏\n【これから挑戦したいこと（Will）】を教えてね。自由に書いてOKだよ。`,
+    step: 8, status: s.status, isNumberConfirmed: true, candidateNumber: s.status.number, debug: debugState(s)
+  }, 8));
+}
 
-  // ---- Step8：Will ----
-  if (s.step === 8) {
-    s.status.will = text || "";
-    s.step = 9;
-    return res.json(withMeta({
-      response: "今日はたくさん話してくれてありがとう！\n整理した内容は担当エージェントにしっかり共有するね。面談でさらに具体化していこう！",
-      step: 9, status: s.status, isNumberConfirmed: true, candidateNumber: s.status.number, debug: debugState(s)
-    }, 9));
-  }
+// ---- Step8：Will ----
+if (s.step === 8) {
+  s.status.will = text || "";
+  s.step = 9;
+  const empWill = await generateEmpathy(text || "", s);
+  return res.json(withMeta({
+    response: `${empWill}\n今日はたくさん話してくれてありがとう！\n整理した内容は担当エージェントにしっかり共有するね。面談でさらに具体化していこう！`,
+    step: 9, status: s.status, isNumberConfirmed: true, candidateNumber: s.status.number, debug: debugState(s)
+  }, 9));
+}
 
-  // ---- Step9：完了後の追加発話 ----
-  if (s.step === 9) {
-    return res.json(withMeta({
-      response: "長い時間付き合ってくれてありがとう！続きは担当エージェントと話そうね！",
-      step: 9,
-      status: s.status,
-      isNumberConfirmed: true,
-      candidateNumber: s.status.number,
-      debug: debugState(s),
-    }, 9));
-  }
+// ---- Step9：完了後の追加発話 ----
+if (s.step === 9) {
+  const empDone = await generateEmpathy(text || "", s);
+  return res.json(withMeta({
+    response: `${empDone}\n長い時間付き合ってくれてありがとう！続きは担当エージェントと話そうね！`,
+    step: 9,
+    status: s.status,
+    isNumberConfirmed: true,
+    candidateNumber: s.status.number,
+    debug: debugState(s),
+  }, 9));
+}
 
   // 想定外フォールバック
   return res.json(withMeta({
@@ -697,107 +709,58 @@ return res.json(withMeta({
  
 // ---- 入口 ここまで ----
 
-// ==== 共感生成（OpenAI＋ローカル多様化） ====
-// userText: ここまでの発話まとめ
-// s: セッション（文脈注入と重複ガード用）
+// ==== 共感生成（自然な会話風） ====
 async function generateEmpathy(userText, s){
-  const fallbackPool = [
-    "話してくれて助かる。大事な視点だね。",
-    "その感覚、無理ないよ。受け止めた。",
-    "うん、それはしんどい。ここで整理しよう。",
-    "わかった。その気持ちが出るのは自然だよ。",
-    "なるほど。その違和感は置き去りにしない。"
-  ];
-  const pickFallback = () => {
-    const last = s?.drill?.lastEmpathy || "";
-    // 直近と被らないもの
-    const pool = fallbackPool.filter(x => x !== last);
-    return pool[Math.floor(Math.random() * pool.length)] || fallbackPool[0];
-  };
-
   const key = process.env.OPENAI_API_KEY;
-  // 文脈素材
-  const recentUtter = Array.isArray(s?.drill?.reasonBuf) ? s.drill.reasonBuf.slice(-3) : [];
-  const cat = s?.drill?.category || "";
+  const fallback = "今の話、ちゃんと受け取ったよ。";
+  const recent = Array.isArray(s?.drill?.reasonBuf) ? s.drill.reasonBuf.slice(-3).join(" / ") : "";
   const role = s?.status?.role || "";
   const place = s?.status?.place || "";
-  const lastEmp = s?.drill?.lastEmpathy || "";
-  const ngStarts = ["話してくれてありがとう", "大切な気持ちだね", "わかるよ", "そうだよね"];
+  const cat = s?.drill?.category || "";
 
-  // OpenAI未設定ならローカル生成
-  if (!key) {
-    const local = localEmpathy(userText, cat);
-    const chosen = local !== lastEmp ? local : pickFallback();
-    if (s?.drill) s.drill.lastEmpathy = chosen;
-    return chosen;
-  }
+  if (!key) return fallback;
 
   try {
     const { default: OpenAI } = await import("openai");
     const client = new OpenAI({ apiKey: key });
 
-    // 生成条件を厳密に指定
     const system = [
-      "あなたは日本語で短く自然に共感を返す面談AI。",
-      "条件: 1文のみ、最大30文字。質問禁止。説教禁止。",
-      "語頭の定型は避ける。例: 話してくれてありがとう、わかるよ、そうだよね。",
-      "断定強すぎは避ける。絵文字は0〜1個まで。",
-      "同じ言い回しを続けて使わない。"
+      "あなたは日本語で自然に寄り添う会話を返すAI。",
+      "決まり文句やお祈り文句は禁止。",
+      "丁寧すぎず、崩しすぎない口調で、自然な長さの一段落。",
+      "質問で終わらない。説教しない。"
     ].join("\n");
 
-    const context = [
-      `直近発話: ${recentUtter.join(" / ") || "なし"}`,
-      `カテゴリ: ${cat || "未確定"}`,
+    const user = [
+      `直近の発話: ${recent || "なし"}`,
       `職種: ${role || "未入力"}`,
       `現職: ${place || "未入力"}`,
-      `避けたい語頭: ${ngStarts.join("、")}`,
-      `直近の共感文: ${lastEmp || "なし"}`,
+      `カテゴリ: ${cat || "未確定"}`,
       "",
-      `素材本文: ${userText || "（内容なし）"}`
+      `今回の発話: ${userText || "（内容なし）"}`,
+      "",
+      "避ける言い回し例: ありがとう 大切 寄り添う わかる そうだよね 安心して 頑張ろう 大丈夫 受け止めた 整理しよう"
     ].join("\n");
 
     const rsp = await client.chat.completions.create({
       model: "gpt-4o-mini",
       temperature: 0.9,
       top_p: 0.9,
-      presence_penalty: 1.1,
-      frequency_penalty: 0.6,
       messages: [
         { role: "system", content: system },
-        { role: "user", content: context }
+        { role: "user", content: user }
       ],
-      max_tokens: 60,
+      max_tokens: 180,
     });
 
     let txt = rsp?.choices?.[0]?.message?.content?.trim() || "";
-
-    // 後処理: 30文字制限、疑問文禁止、重複回避、ダブルクオーテーション除去
-    txt = txt.replace(/\"/g, "");
-    if (txt.length > 30) txt = txt.slice(0, 30);
-    if (/[?？]$/.test(txt)) txt = txt.replace(/[?？]+$/g, "");
-    // 語頭NG回避
-    for (const ng of ngStarts) {
-      if (txt.startsWith(ng)) {
-        txt = txt.replace(ng, "その気持ち、ちゃんと届いた");
-        break;
-      }
-    }
-    // 直近とほぼ同一ならローカル補正
-    if (lastEmp && jaccard2gram(txt, lastEmp) > 0.85) {
-      const local = localEmpathy(userText, cat);
-      txt = local !== lastEmp ? local : pickFallback();
-    }
-
-    if (s?.drill) s.drill.lastEmpathy = txt;
-    return txt || pickFallback();
-  } catch (e) {
-    console.error("generateEmpathy error:", e);
-    const fb = pickFallback();
-    if (s?.drill) s.drill.lastEmpathy = fb;
-    return fb;
+    // 後処理（記号やダブりの軽整形）
+    txt = txt.replace(/\"/g, "").replace(/\s+\n/g, "\n").replace(/\n{3,}/g, "\n\n");
+    return txt || fallback;
+  } catch {
+    return fallback;
   }
 }
-
 // ローカル簡易生成（カテゴリとキーワードで揺らぎ）
 function localEmpathy(text = "", cat = ""){
   const t = String(text);
