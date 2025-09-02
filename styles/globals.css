@@ -209,7 +209,7 @@ html, body, #__next { height: 100%; }
   position: relative;
   height: 460px;                 /* PC基準を縦長に */
   border-radius: 16px;
-  overflow: hidden;
+  overflow: visible;
   box-shadow: var(--card-shadow);
 }
 .duo-stage__bg{
@@ -257,6 +257,9 @@ html, body, #__next { height: 100%; }
   line-height: 1.8;
   white-space: pre-wrap;
   box-shadow: var(--card-shadow);
+  max-height: calc(100% - 40px);   /* ステージ内に収める上限 */
+  overflow-y: auto;                 /* 吹き出し自体をスクロール */
+  -webkit-overflow-scrolling: touch;
 }
 .duo-stage__bubble::before{
   content:"";
@@ -310,6 +313,7 @@ html, body, #__next { height: 100%; }
     margin: 4px 0 6px;
     height: 680px;      /* ステージは深めのまま */
     position: relative;
+    overflow: visible;
   }
   .duo-stage__bg{
     background-size: 102%;
@@ -327,6 +331,8 @@ html, body, #__next { height: 100%; }
     font-size:14px; line-height:1.6;
     padding:12px 14px;
     z-index: 2;
+    max-height: 52vh;               /* 画面の半分くらいに抑える */
+    overflow-y: auto;
   }
   .duo-stage__bubble::before{ display:none; }
 
