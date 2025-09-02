@@ -327,14 +327,17 @@ html, body, #__next { height: 100%; }
   }
   .duo-stage__bubble{
     left: 6%;
-    right: 24%;
-    top: 6%;             /* 少し下げる */
-    bottom: 18%;        /* ← 下端も固定して高さを自動確定 */
-    width: auto; max-width: none;
+    top: 6%;
+    right: auto;         /* ← 右固定は外す */
+    bottom: auto;        /* ← 高さは max-height で制御 */
+    width: 84vw;         /* ← 横幅を固定に戻す */
+    max-width: 84vw;
     font-size:14px; line-height:1.6;
     padding:12px 14px;
     z-index: 2;
-    overflow-y: auto;     /* セリフだけ縦スクロール */
+
+    max-height: calc(100% - 28px); /* ステージ内に収める上限 */
+    overflow-y: auto;               /* セリフだけスクロール */
     -webkit-overflow-scrolling: touch;
     overscroll-behavior: contain;
   }
