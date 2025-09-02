@@ -327,9 +327,9 @@ html, body, #__next { height: 100%; }
   }
   .duo-stage__bubble{
     left: 6%;
-    right: 6%;
+    right: 24%;
     top: 6%;             /* 少し下げる */
-    bottom: 16px;        /* ← 下端も固定して高さを自動確定 */
+    bottom: 18%;        /* ← 下端も固定して高さを自動確定 */
     width: auto; max-width: none;
     font-size:14px; line-height:1.6;
     padding:12px 14px;
