@@ -355,14 +355,17 @@ html, body, #__next { height: 100%; }
 
   /* ユーザー吹き出し：余白をさらに圧縮（直上に寄せる） */
   .user-echo{
-    position: sticky;
-    bottom: 84px;        /* 入力バーの実高さに合わせて微調整（72〜96px目安） */
-    margin: 4px 0;
-    justify-content: flex-end;
-    z-index: 25;
-    transform: none;
-    pointer-events: none;
-  }
+  position: fixed;                                   /* 画面下に固定 */
+  left: 0; right: 0;
+  bottom: calc(84px + env(safe-area-inset-bottom));  /* 入力バー直上に配置 */
+  padding: 0 16px;                                   /* 入力欄と左右を合わせる */
+  margin: 0;
+  display: flex;
+  justify-content: flex-end;
+  z-index: 25;
+  transform: none;
+  pointer-events: none;
+}
   .user-echo__bubble{
     pointer-events: auto;
     max-width: 78vw;
