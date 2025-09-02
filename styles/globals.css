@@ -333,8 +333,8 @@ html, body, #__next { height: 100%; }
   /* ほーぷちゃんエリア */
   .duo-stage{
     margin: 0;
-    margin-top: 10px;
-    height: 360px;
+    margin-top: 10px !important;
+    height: 360px !important;
     position: relative;
     overflow: hidden;
     transform: none;
