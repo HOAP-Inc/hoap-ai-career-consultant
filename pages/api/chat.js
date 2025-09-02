@@ -102,6 +102,18 @@ const GENERIC_REASON_Q = {
   ],
 };
 
+// ポジティブ動機の簡易判定
+function isPositiveMotivation(text = "") {
+  const t = String(text);
+  return /(挑戦|やりたい|なりたい|目指(す|して)|スキルアップ|学びたい|成長|キャリア|経験を積みたい|管理者|リーダー|責任|役職|昇進|昇格|資格(を取りたい)?|新しいこと|幅を広げたい)/.test(t);
+}
+
+// ポジティブ用の汎用深掘り
+const GENERIC_REASON_Q_POS = {
+  deep1: ["目指している姿や挑戦したいことは何？直近でやってみたい具体例があれば教えて！"],
+  deep2: ["実現のために今足りていない経験やスキルはある？どのくらいの期間で動きたい？"],
+};
+
 // テキスト全体からカテゴリごとのヒット数を採点
 function scoreCategories(text) {
   const t = (text || "").toLowerCase();
@@ -495,16 +507,21 @@ if (s.step === 4) {
 
     const { best, hits } = scoreCategories(s.drill.reasonBuf.join(" "));
     if (!best || hits === 0 || noOptionCategory(best)) {
-      // 未マッチでもスキップせず、必ず深掘りへ
-      s.drill.category = null;
-      s.drill.count = 1;
-      const q = GENERIC_REASON_Q.deep1[0];
-      const emp0 = await generateEmpathy(s.status.reason || text || "", s);
-      return res.json(withMeta({
-        response: `${emp0}\n${q}`,
-        step: 4, status: s.status, isNumberConfirmed: true, candidateNumber: s.status.number, debug: debugState(s)
-      }, 4));
-    }
+  const positive = isPositiveMotivation(s.status.reason || text || "");
+  // ポジなら流れを自然にするためカテゴリをキャリア寄りに暫定セット
+  s.drill.category = positive ? "仕事内容・キャリアに関すること" : null;
+  s.drill.count = 1;
+
+  const q = positive
+    ? GENERIC_REASON_Q_POS.deep1[0]
+    : GENERIC_REASON_Q.deep1[0];
+
+  const emp0 = await generateEmpathy(s.status.reason || text || "", s);
+  return res.json(withMeta({
+    response: `${emp0}\n${q}`,
+    step: 4, status: s.status, isNumberConfirmed: true, candidateNumber: s.status.number, debug: debugState(s)
+  }, 4));
+}
 
     // 推定できたらカテゴリ深掘りへ
     s.drill.category = best;
@@ -532,16 +549,25 @@ if (s.step === 4) {
 
     s.drill.count = 2;
     const cat = s.drill.category;
-    const q = cat
-      ? (transferReasonFlow[cat].deep2[0] || "なるほど。他に具体例があれば教えて！")
-      : (GENERIC_REASON_Q.deep2[0]);
-
-    const emp1 = await generateEmpathy(text || "", s);
-    return res.json(withMeta({
-      response: `${emp1}\n${q}`,
-      step: 4, status: s.status, isNumberConfirmed: true, candidateNumber: s.status.number, debug: debugState(s)
-    }, 4));
+   const positive = isPositiveMotivation(joined);
+  let q;
+  if (!cat) {
+    // カテゴリ未確定：ポジ/ネガで汎用質問を出し分け
+    q = positive ? GENERIC_REASON_Q_POS.deep2[0] : GENERIC_REASON_Q.deep2[0];
+  } else if (cat === "仕事内容・キャリアに関すること" && positive) {
+    // キャリア系かつ前向きなら、前向きの聞き方に
+    q = "どんな役割で力を発揮したい？身につけたいスキルや専門領域があれば教えて！";
+  } else {
+    // 従来どおりカテゴリ固有の深掘り
+    q = transferReasonFlow[cat].deep2[0] || "なるほど。他に具体例があれば教えて！";
   }
+
+  const emp1 = await generateEmpathy(text || "", s);
+  return res.json(withMeta({
+    response: `${emp1}\n${q}`,
+    step: 4, status: s.status, isNumberConfirmed: true, candidateNumber: s.status.number, debug: debugState(s)
+  }, 4));
+}
 
   // 5) 深掘り後の確定（カテゴリ不明ならカテゴリ選択へ）
   if (s.drill.count === 2) {
