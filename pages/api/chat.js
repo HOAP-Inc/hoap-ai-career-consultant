@@ -877,9 +877,13 @@ function pickTopKOptions(options = [], userText = "", k = 3){
 function enforcePlainEnding(text = '') {
   let t = String(text).trim();
   if (!t) return t;
-  t = t.replace(/[?？]+\s*$/u, 'ね。');
-  t = t.replace(/(でしょうか|ですか|ますか)\s*$/u, 'だよ。');
-  if (!/[。！!＞）)\]]$/.test(t)) t += '。';
+
+  // 軽い整形だけ（改行の詰めすぎ防止など）
+  t = t.replace(/\s+\n/g, '\n').replace(/\n{3,}/g, '\n\n');
+
+  // 語尾は基本そのまま。終端に句読点等がなければ「。」だけ付ける
+  if (!/[。！？!？＞）)\]]$/.test(t)) t += '。';
+
   return t;
 }
 
