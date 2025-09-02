@@ -338,7 +338,7 @@ if (s.step === 2) {
   s.drill = { phase: null, count: 0, category: null, awaitingChoice: false, options: [] };
   s.step = 3;
   return res.json(withMeta({
-    response: "受け取ったよ！次に【今どこで働いてる？】を教えてね。\n（例）○○病院 外来／△△クリニック",
+    response: "受け取ったよ！次に【今どこで働いてる？】を教えてね。\n（例）急性期病棟／訪問看護ステーション",
     step: 3, status: s.status, isNumberConfirmed: true, candidateNumber: s.status.number, debug: debugState(s)
   }, 3));
 }
@@ -774,6 +774,9 @@ async function generateEmpathy(userText, s){
     let txt = rsp?.choices?.[0]?.message?.content?.trim() || "";
     // 後処理（記号やダブりの軽整形）
     txt = txt.replace(/\"/g, "").replace(/\s+\n/g, "\n").replace(/\n{3,}/g, "\n\n");
+
+    txt = enforcePlainEnding(txt);
+    
     return txt || fallback;
   } catch {
     return fallback;
@@ -878,9 +881,6 @@ function enforcePlainEnding(text = '') {
 
 function withMeta(payload, step) {
   const statusBar = buildStatusBar(payload.status);
-  if (payload && typeof payload.response === "string") {
-    payload.response = enforcePlainEnding(payload.response);
-  }
   return {
     ...payload,
     meta: {
