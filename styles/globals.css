@@ -407,4 +407,25 @@ html, body, #__next { height: 100%; }
     max-width: calc(100vw - 104px);
     padding: 10px 12px;
   }
+  /* --- typing dots (AIが考え中のとき) --- */
+.duo-stage__bubble.typing {
+  letter-spacing: .02em;
+}
+
+.duo-stage__bubble.typing::after {
+  content: "…";
+  margin-left: .2em;
+  display: inline-block;
+  width: 1.2em;
+  overflow: hidden;
+  animation: hoapTyping 1s steps(3, end) infinite;
+}
+
+/* contentの増減っぽく見せる：幅を段階的に変えるだけ（安全） */
+@keyframes hoapTyping {
+  0%   { width: 0;   }
+  33%  { width: 0.4em; }
+  66%  { width: 0.8em; }
+  100% { width: 1.2em; }
+}
 }
