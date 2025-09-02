@@ -421,42 +421,42 @@ if (s.step === 3) {
     step: 4, status: s.status, isNumberConfirmed: true, candidateNumber: s.status.number, debug: debugState(s)
   }, 4));
 }
-  
+
   // ---- Step4：転職理由（深掘り2回→候補提示） ----
 if (s.step === 4) {
   // 1) カテゴリ選択待ち（最終手段）
   if (s.drill.phase === "reason-cat" && s.drill.awaitingChoice && s.drill.options?.length) {
     const pick = normalizePick(text);
     const chosenCat = s.drill.options.find(o => o === pick);
-   if (chosenCat) {
-  s.drill.category = chosenCat;
+    if (chosenCat) {
+      s.drill.category = chosenCat;
 
-  // ここまでのユーザー発話をまとめる
-  const joinedUser = s.drill.reasonBuf.join(" ");
+      // ここまでのユーザー発話をまとめる
+      const joinedUser = s.drill.reasonBuf.join(" ");
 
-  // カテゴリ内の候補を「もっとも合いそうな3つ」に絞る
-  const allOptions = (transferReasonFlow[chosenCat]?.internal_options || []);
-  const topOptions = pickTopKOptions(allOptions, joinedUser, 3);
+      // カテゴリ内の候補を「もっとも合いそうな3つ」に絞る
+      const allOptions = (transferReasonFlow[chosenCat]?.internal_options || []);
+      const topOptions = pickTopKOptions(allOptions, joinedUser, 3);
 
-  // 候補が出せる場合：選択肢提示
-  if (topOptions.length) {
-    s.drill.phase = "reason";
-    s.drill.awaitingChoice = true;
-    s.drill.options = topOptions;
-    return res.json(withMeta({
-      response: `この中だとどれが一番近い？『${topOptions.map(x=>`［${x}］`).join("／")}』`,
-      step: 4, status: s.status, isNumberConfirmed: true, candidateNumber: s.status.number, debug: debugState(s)
-    }, 4));
-  }
+      // 候補が出せる場合：選択肢提示
+      if (topOptions.length) {
+        s.drill.phase = "reason";
+        s.drill.awaitingChoice = true;
+        s.drill.options = topOptions;
+        return res.json(withMeta({
+          response: `この中だとどれが一番近い？『${topOptions.map(x=>`［${x}］`).join("／")}』`,
+          step: 4, status: s.status, isNumberConfirmed: true, candidateNumber: s.status.number, debug: debugState(s)
+        }, 4));
+      }
 
-  // 候補が出せない場合：共感を返して Must へ
-  const empathy = await generateEmpathy(joinedUser || s.status.reason || "", s);
-  s.step = 5;
-  return res.json(withMeta({
-    response: `${empathy}\n\n${mustIntroText()}`,
-    step: 5, status: s.status, isNumberConfirmed: true, candidateNumber: s.status.number, debug: debugState(s)
-  }, 5));
-}
+      // 候補が出せない場合：共感を返して Must へ
+      const empathy = await generateEmpathy(joinedUser || s.status.reason || "", s);
+      s.step = 5;
+      return res.json(withMeta({
+        response: `${empathy}\n\n${mustIntroText()}`,
+        step: 5, status: s.status, isNumberConfirmed: true, candidateNumber: s.status.number, debug: debugState(s)
+      }, 5));
+    }
     // 再提示
     return res.json(withMeta({
       response: `ごめん、もう一度カテゴリを教えて！『${s.drill.options.map(x=>`［${x}］`).join("／")}』`,
@@ -469,36 +469,47 @@ if (s.step === 4) {
     const pick = normalizePick(text);
     const chosen = s.drill.options.find(o => o === pick);
     if (chosen) {
-  const joinedUser = s.drill.reasonBuf.join(" ");
-  const empathy = await generateEmpathy(joinedUser || s.status.reason || "", s);
-  const repeat = `つまり『${chosen}』ってことだね！`;
+      const joinedUser = s.drill.reasonBuf.join(" ");
+      const empathy = await generateEmpathy(joinedUser || s.status.reason || "", s);
+      const repeat = `つまり『${chosen}』ってことだね！`;
 
-  s.status.reason_tag = chosen;
-  s.step = 5;
+      s.status.reason_tag = chosen;
+      s.step = 5;
 
-  return res.json(withMeta({
-    response: `${empathy}\n${repeat}\n\n${mustIntroText()}`,
-    step: 5, status: s.status, isNumberConfirmed: true, candidateNumber: s.status.number, debug: debugState(s)
-  }, 5));
-}
-    rconst emp0 = await generateEmpathy(s.status.reason || text || "", s);
-return res.json(withMeta({
-  response: `${emp0}\n${q}`, step: 4, ...
-}, 4));
-}
-  
+      return res.json(withMeta({
+        response: `${empathy}\n${repeat}\n\n${mustIntroText()}`,
+        step: 5, status: s.status, isNumberConfirmed: true, candidateNumber: s.status.number, debug: debugState(s)
+      }, 5));
+    }
+    return res.json(withMeta({
+      response: `ごめん、もう一度教えて！この中だとどれが一番近い？『${s.drill.options.map(x=>`［${x}］`).join("／")}』`,
+      step: 4, status: s.status, isNumberConfirmed: true, candidateNumber: s.status.number, debug: debugState(s)
+    }, 4));
+  }
+
   // 3) 1回目の入力を受信 → 推定 or 汎用深掘りへ
-if (s.drill.count === 0) {
-  s.status.reason = text || "";
-  s.status.memo.reason_raw = text || "";
-  s.drill.reasonBuf = [text || ""];
+  if (s.drill.count === 0) {
+    s.status.reason = text || "";
+    s.status.memo.reason_raw = text || "";
+    s.drill.reasonBuf = [text || ""];
 
-  const { best, hits } = scoreCategories(s.drill.reasonBuf.join(" "));
-  if (!best || hits === 0 || noOptionCategory(best)) {
-    // 未マッチでもスキップせず、必ず深掘りへ
-    s.drill.category = null;
+    const { best, hits } = scoreCategories(s.drill.reasonBuf.join(" "));
+    if (!best || hits === 0 || noOptionCategory(best)) {
+      // 未マッチでもスキップせず、必ず深掘りへ
+      s.drill.category = null;
+      s.drill.count = 1;
+      const q = GENERIC_REASON_Q.deep1[0];
+      const emp0 = await generateEmpathy(s.status.reason || text || "", s);
+      return res.json(withMeta({
+        response: `${emp0}\n${q}`,
+        step: 4, status: s.status, isNumberConfirmed: true, candidateNumber: s.status.number, debug: debugState(s)
+      }, 4));
+    }
+
+    // 推定できたらカテゴリ深掘りへ
+    s.drill.category = best;
     s.drill.count = 1;
-    const q = GENERIC_REASON_Q.deep1[0];
+    const q = transferReasonFlow[best].deep1[0] || "それについて、もう少し詳しく教えて！";
     const emp0 = await generateEmpathy(s.status.reason || text || "", s);
     return res.json(withMeta({
       response: `${emp0}\n${q}`,
@@ -506,42 +517,32 @@ if (s.drill.count === 0) {
     }, 4));
   }
 
-  // 推定できたらカテゴリ深掘りへ
-  s.drill.category = best;
-  s.drill.count = 1;
-  const q = transferReasonFlow[best].deep1[0] || "それについて、もう少し詳しく教えて！";
-  const emp0 = await generateEmpathy(s.status.reason || text || "", s);
-  return res.json(withMeta({
-    response: `${emp0}\n${q}`,
-    step: 4, status: s.status, isNumberConfirmed: true, candidateNumber: s.status.number, debug: debugState(s)
-  }, 4));
-}
-
   // 4) 2回目の深掘り
-if (s.drill.count === 1) {
-  s.drill.reasonBuf.push(text || "");
-  const joined = s.drill.reasonBuf.join(" ");
+  if (s.drill.count === 1) {
+    s.drill.reasonBuf.push(text || "");
+    const joined = s.drill.reasonBuf.join(" ");
 
-  // 未確定なら再推定
-  if (!s.drill.category) {
-    const { best, hits } = scoreCategories(joined);
-    if (best && hits > 0 && !noOptionCategory(best)) {
-      s.drill.category = best;
+    // 未確定なら再推定
+    if (!s.drill.category) {
+      const { best, hits } = scoreCategories(joined);
+      if (best && hits > 0 && !noOptionCategory(best)) {
+        s.drill.category = best;
+      }
     }
+
+    s.drill.count = 2;
+    const cat = s.drill.category;
+    const q = cat
+      ? (transferReasonFlow[cat].deep2[0] || "なるほど。他に具体例があれば教えて！")
+      : (GENERIC_REASON_Q.deep2[0]);
+
+    const emp1 = await generateEmpathy(text || "", s);
+    return res.json(withMeta({
+      response: `${emp1}\n${q}`,
+      step: 4, status: s.status, isNumberConfirmed: true, candidateNumber: s.status.number, debug: debugState(s)
+    }, 4));
   }
 
-  s.drill.count = 2;
-  const cat = s.drill.category;
-  const q = cat
-    ? (transferReasonFlow[cat].deep2[0] || "なるほど。他に具体例があれば教えて！")
-    : (GENERIC_REASON_Q.deep2[0]);
-
-  const emp1 = await generateEmpathy(text || "", s);
-  return res.json(withMeta({
-    response: `${emp1}\n${q}`,
-    step: 4, status: s.status, isNumberConfirmed: true, candidateNumber: s.status.number, debug: debugState(s)
-  }, 4));
-}
   // 5) 深掘り後の確定（カテゴリ不明ならカテゴリ選択へ）
   if (s.drill.count === 2) {
     s.drill.reasonBuf.push(text || "");
@@ -558,38 +559,38 @@ if (s.drill.count === 1) {
         s.drill.phase = "reason-cat";
         s.drill.awaitingChoice = true;
         s.drill.options = pool;
-       const empC = await generateEmpathy(s.drill.reasonBuf.join(" "), s);
-return res.json(withMeta({
-  response: `${empC}\nこの中だとどれが一番近い？『${pool.map(x=>`［${x}］`).join("／")}』`,
-  step: 4, status: s.status, isNumberConfirmed: true, candidateNumber: s.status.number, debug: debugState(s)
-}, 4));
+        const empC = await generateEmpathy(s.drill.reasonBuf.join(" "), s);
+        return res.json(withMeta({
+          response: `${empC}\nどのカテゴリが一番近い？『${pool.map(x=>`［${x}］`).join("／")}』`,
+          step: 4, status: s.status, isNumberConfirmed: true, candidateNumber: s.status.number, debug: debugState(s)
+        }, 4));
       }
     }
 
     const cat = s.drill.category;
-const allOptions = (transferReasonFlow[cat].internal_options || []);
-const joinedUser = s.drill.reasonBuf.join(" "); // ここまでのユーザー発話
-const options = pickTopKOptions(allOptions, joinedUser, 3);
+    const allOptions = (transferReasonFlow[cat].internal_options || []);
+    const joinedUser = s.drill.reasonBuf.join(" "); // ここまでのユーザー発話
+    const options = pickTopKOptions(allOptions, joinedUser, 3);
 
-if (!options.length) {
-  const empathy = await generateEmpathy(joinedUser || s.status.reason || "", s);
-  s.step = 5;
-  return res.json(withMeta({
-    response: `${empathy}\n\n${mustIntroText()}`,
-    step: 5, status: s.status, isNumberConfirmed: true, candidateNumber: s.status.number, debug: debugState(s)
-  }, 5));
-}
+    if (!options.length) {
+      const empathy = await generateEmpathy(joinedUser || s.status.reason || "", s);
+      s.step = 5;
+      return res.json(withMeta({
+        response: `${empathy}\n\n${mustIntroText()}`,
+        step: 5, status: s.status, isNumberConfirmed: true, candidateNumber: s.status.number, debug: debugState(s)
+      }, 5));
+    }
 
-s.drill.phase = "reason";
-s.drill.awaitingChoice = true;
-s.drill.options = options;
-return res.json(withMeta({
-  response: `この中だとどれが一番近い？『${options.map(x=>`［${x}］`).join("／")}』`,
-  step: 4, status: s.status, isNumberConfirmed: true, candidateNumber: s.status.number, debug: debugState(s)
-}, 4));
+    s.drill.phase = "reason";
+    s.drill.awaitingChoice = true;
+    s.drill.options = options;
+    return res.json(withMeta({
+      response: `この中だとどれが一番近い？『${options.map(x=>`［${x}］`).join("／")}』`,
+      step: 4, status: s.status, isNumberConfirmed: true, candidateNumber: s.status.number, debug: debugState(s)
+    }, 4));
   }
 }
-
+  
   // ---- Step5：絶対に外せない条件（Must） ----
   if (s.step === 5) {
     if (isNone(text)) {
