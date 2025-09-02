@@ -865,8 +865,22 @@ function pickTopKOptions(options = [], userText = "", k = 3){
     .map(s => s.opt);
 }
 // ---- ヘルパ ----
+
+// 疑問で終わらせないフィルタ
+function enforcePlainEnding(text = '') {
+  let t = String(text).trim();
+  if (!t) return t;
+  t = t.replace(/[?？]+\s*$/u, 'ね。');
+  t = t.replace(/(でしょうか|ですか|ますか)\s*$/u, 'だよ。');
+  if (!/[。！!＞）)\]]$/.test(t)) t += '。';
+  return t;
+}
+
 function withMeta(payload, step) {
   const statusBar = buildStatusBar(payload.status);
+  if (payload && typeof payload.response === "string") {
+    payload.response = enforcePlainEnding(payload.response);
+  }
   return {
     ...payload,
     meta: {
