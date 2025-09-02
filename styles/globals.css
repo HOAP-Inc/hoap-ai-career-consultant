@@ -358,8 +358,8 @@ html, body, #__next { height: 100%; }
   position: fixed;                                   /* 画面下に固定 */
   left: auto;              /* ← 左寄せ解除 */
   right: 16px;             /* ← 右端に寄せる */
-  bottom: calc(100px + env(safe-area-inset-bottom));  /* 入力バー直上に配置 */
-  padding: 0 88px 0 16px;   /* 右に送信ボタンぶん余裕 */
+  bottom: calc(120px + env(safe-area-inset-bottom));  /* 入力バー直上に配置 */
+  padding: 0;
   margin: 0;
   display: flex;
   justify-content: flex-end;
