@@ -968,14 +968,25 @@ function buildStatusBar(st) {
   const fmtIds = (arr = []) => (arr || []).map(id => `ID:${id}`).join(",");
 
   return {
+    // 数字だけ → 変更なし
     求職者ID: st.number || "",
+
+    // STEP2はlicenses.jsonの正式名称（ID不要）をそのまま表示
     職種: (Array.isArray(st.licenses) && st.licenses[0]) ? st.licenses[0] : (st.role || ""),
+
+    // IDは ID:123 の表記で括弧内表示（現行どおり）
     現職: st.place
       ? (st.place_ids?.length ? `${st.place}（${fmtIds(st.place_ids)}）` : st.place)
       : "",
+
+    // 「済」をやめる：確定（reason_tagあり）まで空表示にする
+    // ＝入力中や未確定の段階（STEP2,3,4の途中）では何も出さない
     転職目的: st.reason_tag
       ? (st.reason_ids?.length ? `${st.reason_tag}（${fmtIds(st.reason_ids)}）` : st.reason_tag)
-      : (st.reason ? '済' : ''),
+      : "",
+
+    // Must/Wantはこれまでどおり。IDは「ID:xxx」で表示
+    // 「済」は文言入力だけの一時保存（memo.*_raw）時にのみ表示
     Must: st.must.length
       ? (st.must_ids?.length
           ? `${st.must.join("／")}（${fmtIds(st.must_ids)}）`
@@ -986,10 +997,13 @@ function buildStatusBar(st) {
           ? `${st.want.join("／")}（${fmtIds(st.want_ids)}）`
           : `${st.want.join("／")}`)
       : (st.memo?.want_raw?.length ? "済" : ""),
+
+    // Can/Willは入力完了時にだけ「済」
     Can: st.can ? "済" : "",
     Will: st.will ? "済" : "",
   };
 }
+
 function debugState(s) {
   return {
     drill: { ...s.drill },
