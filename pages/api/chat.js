@@ -968,9 +968,7 @@ function buildStatusBar(st) {
 
   return {
     求職者ID: st.number || "",
-    職種: st.role
-      ? (st.role_ids?.length ? `${st.role}（${fmtIds(st.role_ids)}）` : st.role)
-      : "",
+    職種: st.role ? st.role : "",
     現職: st.place
       ? (st.place_ids?.length ? `${st.place}（${fmtIds(st.place_ids)}）` : st.place)
       : "",
