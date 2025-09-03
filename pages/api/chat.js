@@ -501,7 +501,7 @@ if (s.step === 4) {
     }
     // 再提示
     return res.json(withMeta({
-      response: `ごめん、もう一度カテゴリを教えて！『${s.drill.options.map(x=>`［${x}］`).join("／")}』`,
+      response: `ごめん、もう一度どれが近いか教えて！『${s.drill.options.map(x=>`［${x}］`).join("／")}』`,
       step: 4, status: s.status, isNumberConfirmed: true, candidateNumber: s.status.number, debug: debugState(s)
     }, 4));
   }
@@ -513,7 +513,7 @@ if (s.drill.phase === "reason" && s.drill.awaitingChoice && s.drill.options?.len
   if (chosen) {
     const joinedUser = s.drill.reasonBuf.join(" ");
     const empathy = await generateEmpathy(joinedUser || s.status.reason || "", s);
-    const repeat = `つまり『${chosen}』ってことだね！`;
+    const repeat = `『${chosen}』だね！担当エージェントに伝えておくね。`;
 
     s.status.reason_tag = chosen;
 
@@ -679,7 +679,7 @@ if (s.drill.phase === "reason" && s.drill.awaitingChoice && s.drill.options?.len
         const id = tagIdByName.get(label);
         if (id && !s.status.must_ids.includes(id)) s.status.must_ids.push(id);
       }
-      const line = added.map(t => `そっか、『${t}』が絶対ってことだね！`).join("\n");
+      const line = added.map(t => `『${t}』だね！これも記憶したよ！`).join("\n");
 const empM1 = await generateEmpathy(text || "", s);
 return res.json(withMeta({
   response: `${empM1}\n${line}\n他にも絶対条件はある？（なければ「ない」って返してね）`,
@@ -810,10 +810,11 @@ async function generateEmpathy(userText, s){
   "決まり文句やお祈り文句は禁止。",
   "丁寧すぎず、崩しすぎない口調。",
   "敬語は禁止。寄り添うキャリアエージェントという立場の口調。",
-  "質問で終わらない。説教しない。",
-  "返答は必ず疑問文で終わらせない。",
+  "質問系、疑問系で終わらない。言い切り分で終わる。説教しない。",
+  "必ず言い切り分で終わる。",
+  "説教しない。",
   "無理に転職や現職へ留まることを勧めない。",
-  "返答は必ず100文字以内に収める。自然な文にする。"
+  "返答は必ず100文字以内に収める。前後の流れから自然な文にする。"
 ].join("\n");
 
     const user = [
@@ -968,7 +969,7 @@ function buildStatusBar(st) {
 
   return {
     求職者ID: st.number || "",
-    職種: st.role ? st.role : "",
+    職種: (Array.isArray(st.licenses) && st.licenses[0]) ? st.licenses[0] : (st.role || ""),
     現職: st.place
       ? (st.place_ids?.length ? `${st.place}（${fmtIds(st.place_ids)}）` : st.place)
       : "",
