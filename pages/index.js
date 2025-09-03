@@ -42,6 +42,23 @@ const revertTimerRef = useRef(null);
   const MAX_STEP = 9;
   const progress = Math.min(100, Math.max(0, Math.round((step / MAX_STEP) * 100)));
 
+  // ステータス表示用：IDだけ出す。未マッチは 済。求職者IDは原文。
+function displayIdsOrDone(key, val) {
+  if (key === '求職者ID') return val ?? '';
+
+  const s = String(val ?? '');
+
+  // 例）'ラベル（ID:123,456）' から 123,456 を抜く
+  const m = s.match(/ID:([^）)]+)[）)]?/);
+  if (m && m[1]) {
+    return m[1].trim();
+  }
+
+  // 値が空 or 初期値は空表示。それ以外は 済
+  if (!s || s === '未入力' || s === '0件') return '';
+  return '済';
+}
+
   // ★最初の挨拶をサーバーから1回だけ取得
   useEffect(() => {
   let aborted = false;
@@ -256,7 +273,7 @@ if (data.meta?.step != null) setStep(data.meta.step);
         "Will",
       ].map((k) => (
         <span key={k} className="badge">
-          {k}：{status[k] ?? ""}
+          {k}：{displayIdsOrDone(k, status[k])}
         </span>
       ))}
     </div>
