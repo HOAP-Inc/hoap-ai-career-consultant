@@ -1162,3 +1162,4 @@ function getIdsForLicenseLabel(label = "") {
 
   return Array.from(ids);
 }
+  }
