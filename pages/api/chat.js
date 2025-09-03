@@ -79,6 +79,35 @@ try {
   console.error("tagIdByName 構築失敗:", e);
 }
 
+// ---- 転職理由の名称→ID マップ（job_change_purposes.json）----
+let reasonList = [];
+try {
+  const raw = require('../../job_change_purposes.json');  // tags.json と同じ階層に置いた前提
+  if (Array.isArray(raw?.items))       reasonList = raw.items;
+  else if (Array.isArray(raw?.tags))   reasonList = raw.tags;
+  else if (Array.isArray(raw))         reasonList = raw;
+  else                                 reasonList = [];
+} catch (e) {
+  console.error('job_change_purposes.json 読み込み失敗:', e);
+  reasonList = [];
+}
+
+const reasonIdByName = new Map();
+try {
+  for (const t of (Array.isArray(reasonList) ? reasonList : [])) {
+    const name = String(t?.name ?? '');
+    const id   = t?.id;
+    if (!name || id == null) continue;
+    const fw = name.replace(/\(/g, '（').replace(/\)/g, '）').replace(/~/g, '～');
+    const hw = name.replace(/（/g, '(').replace(/）/g, ')').replace(/～/g, '~');
+    reasonIdByName.set(name, id);
+    reasonIdByName.set(fw, id);
+    reasonIdByName.set(hw, id);
+  }
+} catch (e) {
+  console.error('reasonIdByName 構築失敗:', e);
+}
+
 // ---- Step ラベル（UI用） ----
 const STEP_LABELS = {
    1: "求職者ID",
@@ -245,6 +274,7 @@ function initSession() {
       place_ids: [],    // ← 追加：現職（施設/形態など）の tags.json ID
       reason: "",
       reason_tag: "",
+      reason_ids: [],
       must: [],
       want: [],
       must_ids: [],
@@ -486,13 +516,16 @@ if (s.step === 4) {
       const repeat = `つまり『${chosen}』ってことだね！`;
 
       s.status.reason_tag = chosen;
-      s.step = 5;
+      // 名前からID引く。見つからなければ空配列
+const rid = reasonIdByName.get(chosen);
+s.status.reason_ids = Array.isArray(rid) ? rid : (rid != null ? [rid] : []);
 
-      return res.json(withMeta({
-        response: `${empathy}\n${repeat}\n\n${mustIntroText()}`,
-        step: 5, status: s.status, isNumberConfirmed: true, candidateNumber: s.status.number, debug: debugState(s)
-      }, 5));
-    }
+s.step = 5;
+
+return res.json(withMeta({
+  response: `${empathy}\n${repeat}\n\n${mustIntroText()}`,
+  step: 5, status: s.status, isNumberConfirmed: true, candidateNumber: s.status.number, debug: debugState(s)
+}, 5));
     return res.json(withMeta({
       response: `ごめん、もう一度教えて！この中だとどれが一番近い？『${s.drill.options.map(x=>`［${x}］`).join("／")}』`,
       step: 4, status: s.status, isNumberConfirmed: true, candidateNumber: s.status.number, debug: debugState(s)
@@ -935,7 +968,9 @@ function buildStatusBar(st) {
     現職: st.place
       ? (st.place_ids?.length ? `${st.place}（ID:${st.place_ids.join(",")}）` : st.place)
       : "",
-    転職目的: st.reason_tag ? st.reason_tag : (st.reason ? "済" : ""),
+    転職目的: st.reason_tag
+      ? (st.reason_ids?.length ? `${st.reason_tag}（ID:${st.reason_ids.join(',')}）` : st.reason_tag)
+      : (st.reason ? '済' : ''),
     Must: st.must.length
       ? (st.must_ids?.length
           ? `${st.must.join("／")}（ID:${st.must_ids.join(",")}）`
