@@ -507,30 +507,34 @@ if (s.step === 4) {
   }
 
   // 2) 具体候補の選択（確定）
-  if (s.drill.phase === "reason" && s.drill.awaitingChoice && s.drill.options?.length) {
-    const pick = normalizePick(text);
-    const chosen = s.drill.options.find(o => o === pick);
-    if (chosen) {
-      const joinedUser = s.drill.reasonBuf.join(" ");
-      const empathy = await generateEmpathy(joinedUser || s.status.reason || "", s);
-      const repeat = `つまり『${chosen}』ってことだね！`;
+if (s.drill.phase === "reason" && s.drill.awaitingChoice && s.drill.options?.length) {
+  const pick = normalizePick(text);
+  const chosen = s.drill.options.find(o => o === pick);
+  if (chosen) {
+    const joinedUser = s.drill.reasonBuf.join(" ");
+    const empathy = await generateEmpathy(joinedUser || s.status.reason || "", s);
+    const repeat = `つまり『${chosen}』ってことだね！`;
 
-      s.status.reason_tag = chosen;
-      // 名前からID引く。見つからなければ空配列
-const rid = reasonIdByName.get(chosen);
-s.status.reason_ids = Array.isArray(rid) ? rid : (rid != null ? [rid] : []);
+    s.status.reason_tag = chosen;
 
-s.step = 5;
+    // 名前からID引く。見つからなければ空配列
+    const rid = reasonIdByName.get(chosen);
+    s.status.reason_ids = Array.isArray(rid) ? rid : (rid != null ? [rid] : []);
 
-return res.json(withMeta({
-  response: `${empathy}\n${repeat}\n\n${mustIntroText()}`,
-  step: 5, status: s.status, isNumberConfirmed: true, candidateNumber: s.status.number, debug: debugState(s)
-}, 5));
+    s.step = 5;
+
     return res.json(withMeta({
-      response: `ごめん、もう一度教えて！この中だとどれが一番近い？『${s.drill.options.map(x=>`［${x}］`).join("／")}』`,
-      step: 4, status: s.status, isNumberConfirmed: true, candidateNumber: s.status.number, debug: debugState(s)
-    }, 4));
+      response: `${empathy}\n${repeat}\n\n${mustIntroText()}`,
+      step: 5, status: s.status, isNumberConfirmed: true, candidateNumber: s.status.number, debug: debugState(s)
+    }, 5));
   }
+
+  // 再提示（候補に一致しなかったときだけ）
+  return res.json(withMeta({
+    response: `ごめん、もう一度教えて！この中だとどれが一番近い？『${s.drill.options.map(x=>`［${x}］`).join("／")}』`,
+    step: 4, status: s.status, isNumberConfirmed: true, candidateNumber: s.status.number, debug: debugState(s)
+  }, 4));
+}
 
   // 3) 1回目の入力を受信 → 推定 or 汎用深掘りへ
   if (s.drill.count === 0) {
