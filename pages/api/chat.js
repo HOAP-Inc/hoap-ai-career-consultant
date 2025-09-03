@@ -374,9 +374,9 @@ if (s.step === 2) {
   }
 }
     if (chosen) {
-  s.status.role = chosen;                  // 表示用は選ばれた正式ラベル
-  s.status.licenses = [chosen];            // 所有資格も確定（単一）
-  s.status.role_ids = getIdsForLicenseLabel(chosen); // ← 逆引きでID化
+  s.status.role = chosen;
+  s.status.licenses = [chosen];
+  s.status.role_ids = []; // ← tags.json由来のID取得フローを廃止
   s.drill = { phase: null, count: 0, category: null, awaitingChoice: false, options: [] };
   s.step = 3;
   return res.json(withMeta({
@@ -403,7 +403,7 @@ if (s.step === 2) {
   if (exact) {
     s.status.role = exact;
     s.status.licenses = [exact];
-    s.status.role_ids = getIdsForLicenseLabel(exact);
+    s.status.role_ids = [];
     s.step = 3;
     return res.json(withMeta({
       response: "受け取ったよ！次に【今どこで働いてる？】を教えてね。\n（例）急性期病棟／訪問看護ステーション",
@@ -416,7 +416,7 @@ if (s.step === 2) {
   if (found.length === 1) {
     s.status.role = found[0];
     s.status.licenses = [found[0]];
-    s.status.role_ids = getIdsForLicenseLabel(found[0]);
+    s.status.role_ids = [];
     s.step = 3;
     return res.json(withMeta({
       response: "受け取ったよ！次に【今どこで働いてる？】を教えてね。\n（例）急性期病棟／訪問看護ステーション",
@@ -964,25 +964,27 @@ function withMeta(payload, step) {
 }
 
 function buildStatusBar(st) {
+  const fmtIds = (arr = []) => (arr || []).map(id => `ID:${id}`).join(",");
+
   return {
     求職者ID: st.number || "",
     職種: st.role
-      ? (st.role_ids?.length ? `${st.role}（ID:${st.role_ids[0]}）` : st.role)
+      ? (st.role_ids?.length ? `${st.role}（${fmtIds(st.role_ids)}）` : st.role)
       : "",
     現職: st.place
-      ? (st.place_ids?.length ? `${st.place}（ID:${st.place_ids.join(",")}）` : st.place)
+      ? (st.place_ids?.length ? `${st.place}（${fmtIds(st.place_ids)}）` : st.place)
       : "",
     転職目的: st.reason_tag
-      ? (st.reason_ids?.length ? `${st.reason_tag}（ID:${st.reason_ids.join(',')}）` : st.reason_tag)
+      ? (st.reason_ids?.length ? `${st.reason_tag}（${fmtIds(st.reason_ids)}）` : st.reason_tag)
       : (st.reason ? '済' : ''),
     Must: st.must.length
       ? (st.must_ids?.length
-          ? `${st.must.join("／")}（ID:${st.must_ids.join(",")}）`
+          ? `${st.must.join("／")}（${fmtIds(st.must_ids)}）`
           : `${st.must.join("／")}`)
       : (st.memo?.must_raw?.length ? "済" : ""),
     Want: st.want.length
       ? (st.want_ids?.length
-          ? `${st.want.join("／")}（ID:${st.want_ids.join(",")}）`
+          ? `${st.want.join("／")}（${fmtIds(st.want_ids)}）`
           : `${st.want.join("／")}`)
       : (st.memo?.want_raw?.length ? "済" : ""),
     Can: st.can ? "済" : "",
