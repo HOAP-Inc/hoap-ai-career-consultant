@@ -60,6 +60,24 @@ try {
   console.error("licenseMap 構築に失敗:", e);
 }
 
+// 追加：公式資格ラベル集合（STEP2の整合判定に使う）
+const OFFICIAL_LICENSES = new Set();
+try {
+  // licenses.json から（"文字列" or {label}）を拾う
+  for (const [, arr] of Object.entries(licenses || {})) {
+    if (!Array.isArray(arr)) continue;
+    for (const item of arr) {
+      const label = typeof item === "string" ? item : item?.label;
+      if (label) OFFICIAL_LICENSES.add(label);
+    }
+  }
+  // 念のため、licenseMapの値（= 正式ラベル群）も取り込む
+  for (const [, labels] of licenseMap.entries()) {
+    if (!Array.isArray(labels)) continue;
+    for (const l of labels) if (l) OFFICIAL_LICENSES.add(l);
+  }
+} catch {}
+
 // ←この1行を“この関数の直後”に追加（単数名を呼ばれても動くように）
 const matchLicenseInText = matchLicensesInText;
 
@@ -964,45 +982,6 @@ function withMeta(payload, step) {
   };
 }
 
-function buildStatusBar(st) {
-  const fmtIds = (arr = []) => (arr || []).map(id => `ID:${id}`).join(",");
-
-  return {
-    // 数字だけ → 変更なし
-    求職者ID: st.number || "",
-
-    // STEP2はlicenses.jsonの正式名称（ID不要）をそのまま表示
-    職種: (Array.isArray(st.licenses) && st.licenses[0]) ? st.licenses[0] : (st.role || ""),
-
-    // IDは ID:123 の表記で括弧内表示（現行どおり）
-    現職: st.place
-      ? (st.place_ids?.length ? `${st.place}（${fmtIds(st.place_ids)}）` : st.place)
-      : "",
-
-    // 「済」をやめる：確定（reason_tagあり）まで空表示にする
-    // ＝入力中や未確定の段階（STEP2,3,4の途中）では何も出さない
-    転職目的: st.reason_tag
-      ? (st.reason_ids?.length ? `${st.reason_tag}（${fmtIds(st.reason_ids)}）` : st.reason_tag)
-      : "",
-
-    // Must/Wantはこれまでどおり。IDは「ID:xxx」で表示
-    // 「済」は文言入力だけの一時保存（memo.*_raw）時にのみ表示
-    Must: st.must.length
-      ? (st.must_ids?.length
-          ? `${st.must.join("／")}（${fmtIds(st.must_ids)}）`
-          : `${st.must.join("／")}`)
-      : (st.memo?.must_raw?.length ? "済" : ""),
-    Want: st.want.length
-      ? (st.want_ids?.length
-          ? `${st.want.join("／")}（${fmtIds(st.want_ids)}）`
-          : `${st.want.join("／")}`)
-      : (st.memo?.want_raw?.length ? "済" : ""),
-
-    // Can/Willは入力完了時にだけ「済」
-    Can: st.can ? "済" : "",
-    Will: st.will ? "済" : "",
-  };
-}
 
 function debugState(s) {
   return {
@@ -1014,7 +993,76 @@ function debugState(s) {
     wantCount: s.status.want.length,
   };
 }
+function buildStatusBar(st) {
+  const fmtIds = (arr = []) => (arr || []).map(id => `ID:${id}`).join(",");
 
+  // ====== 整合チェック（簡潔版）======
+  // STEP2（職種/資格）：licenses.json に正式ラベルが存在すれば整合とみなす
+  const lic = Array.isArray(st.licenses) ? st.licenses[0] : "";
+  const roleLabel = lic || st.role || "";
+  const roleIsConsistent =
+    roleLabel ? OFFICIAL_LICENSES.has(roleLabel) : false;
+
+  // 現職：tags.json の ID が取れていれば整合
+  const placeIsConsistent = Array.isArray(st.place_ids) && st.place_ids.length > 0;
+
+  // 転職目的：job_change_purposes.json の ID が取れていれば整合
+  const reasonIsConsistent = Array.isArray(st.reason_ids) && st.reason_ids.length > 0;
+
+  // Must/Want：いずれか1つでも tags.json の ID が取れていれば「整合あり」とみなす
+  const mustIsConsistent = Array.isArray(st.must_ids) && st.must_ids.length > 0;
+  const wantIsConsistent = Array.isArray(st.want_ids) && st.want_ids.length > 0;
+
+  return {
+    求職者ID: st.number || "",
+
+    // STEP2：整合したら正式名称（licenses.json）をそのまま表示。整合しなければ「済」。
+    職種:
+      roleLabel
+        ? (roleIsConsistent ? roleLabel : "済")
+        : "",
+
+    // 現職：整合したら「テキスト（ID:xxx,ID:yyy）」、整合しなければ入力があっても「済」
+    現職:
+      st.place
+        ? (placeIsConsistent ? `${st.place}（${fmtIds(st.place_ids)}）` : "済")
+        : "",
+
+    // 転職目的：整合したら「ラベル（ID:xxx）」、整合しなければ「済」
+    転職目的:
+      (st.reason_tag || st.reason)
+        ? (reasonIsConsistent
+            ? (st.reason_ids?.length
+                ? `${st.reason_tag}（${fmtIds(st.reason_ids)}）`
+                : st.reason_tag || "")
+            : "済")
+        : "",
+
+    // Must：整合したら「A／B（ID:...）」、整合しなければ（入力ありのとき）「済」
+    Must:
+      (Array.isArray(st.must) && st.must.length > 0) || (st.memo?.must_raw?.length)
+        ? (mustIsConsistent
+            ? (st.must_ids?.length
+                ? `${st.must.join("／")}（${fmtIds(st.must_ids)}）`
+                : st.must.join("／"))
+            : "済")
+        : "",
+
+    // Want：同上
+    Want:
+      (Array.isArray(st.want) && st.want.length > 0) || (st.memo?.want_raw?.length)
+        ? (wantIsConsistent
+            ? (st.want_ids?.length
+                ? `${st.want.join("／")}（${fmtIds(st.want_ids)}）`
+                : st.want.join("／"))
+            : "済")
+        : "",
+
+    // Can/Will は JSON 整合の概念がないので、入力済みなら「済」、未入力は空
+    Can: st.can ? "済" : "",
+    Will: st.will ? "済" : "",
+  };
+}
 // 0.5 を使わない進行に合わせた文言
 function nextAfterId(s) {
   switch (s.step) {
