@@ -1119,16 +1119,28 @@ function isNone(text) {
 }
 
 // 入力に含まれる資格ラベル候補をすべて返す（同一ラベルは重複排除）
+// ★正規化して部分一致するように改善版
 function matchLicensesInText(text = "") {
-  const norm = String(text).trim();
-  const set = new Set();
-  for (const [alias, labels] of licenseMap.entries()) {
-    if (!alias || !norm.includes(alias)) continue;
-    for (const l of labels) set.add(l);
-  }
-  return Array.from(set);
-}
+  const toFW = (s) => String(s || "").replace(/\(/g,"（").replace(/\)/g,"）").replace(/~/g,"～");
+  const toHW = (s) => String(s || "").replace(/（/g,"(").replace(/）/g,")").replace(/～/g,"~");
+  const scrub = (s) =>
+    String(s || "")
+      .toLowerCase()
+      .replace(/[ \t\r\n\u3000、。・／\/＿\u2013\u2014\-~～!?！？。、，．・]/g,"");
+  const norm = (s) => scrub(toHW(toFW(s)));
 
+  const normText = norm(text);
+  if (!normText) return [];
+
+  const out = new Set();
+  for (const [alias, labels] of licenseMap.entries()) {
+    if (!alias || !Array.isArray(labels) || !labels.length) continue;
+    if (normText.includes(norm(alias))) {
+      for (const l of labels) if (l) out.add(l);
+    }
+  }
+  return Array.from(out);
+}
 // 入力文に含まれる tags.json 名称を検出して ID 配列で返す
 function matchTagIdsInText(text = "") {
   const raw = String(text || "").trim();
