@@ -596,22 +596,28 @@ if (s.step === 4) {
       }, 5));
     }
 
-    // いいえ or 別意見：Noを記録し、深掘り1回目へ
+        // いいえ or 別意見：Noを記録し、深掘り1回目へ
     if (isNo(text)) {
-      s.drill.flags.privateDeclined = true;
-      s.drill.count = 1; // 深掘り1回目へ
+      s.drill.flags.privateDeclined = true;   // 以後の強制固定をOFFにする
+      s.drill.count = 1;                       // 深掘り1回目へ
       s.drill.phase = "reason";
       s.drill.awaitingChoice = false;
 
       const emp0 = await generateEmpathy(text, s);
-      // カテゴリ未確定で深掘り開始（一般 or 前向き）
+
+      // ★追加：オンコール文脈でプライベート否定になったら固定文を必ず挟む
+      // （reason_tag / reason_ids は一切確定させず＝未マッチのまま）
+      const fixed = "オンコールがない職場を考えていこうね。";
+
+      // カテゴリ未確定で深掘り開始（前向き/通常で質問を切り替え）
       const cls = classifyMotivation(s.drill.reasonBuf.join(" "));
       const q = (cls === "pos" || cls === "mixed")
         ? GENERIC_REASON_Q_POS.deep1[0]
         : GENERIC_REASON_Q.deep1[0];
 
       return res.json(withMeta({
-        response: joinEmp(emp0, q),
+        // 共感 → 固定文 → 深掘り質問（未マッチのまま進行）
+        response: joinEmp(emp0, `${fixed}\n\n${q}`),
         step: 4, status: s.status, isNumberConfirmed: true, candidateNumber: s.status.number, debug: debugState(s)
       }, 4));
     }
