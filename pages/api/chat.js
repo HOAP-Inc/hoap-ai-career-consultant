@@ -1124,15 +1124,16 @@ function buildStatusBar(st) {
         ? (placeIsConsistent ? `${st.place}（${fmtIds(st.place_ids)}）` : "済")
         : "",
 
-    // 転職目的：整合したら「ラベル（ID:xxx）」、整合しなければ「済」
+    // ★ 転職目的：初回の自由入力（reason のみ）は空欄。
+    //    候補確定（reason_tag が入る）で表示。IDがあればID付きで表示。
     転職目的:
-      (st.reason_tag || st.reason)
-        ? (reasonIsConsistent
-            ? (st.reason_ids?.length
-                ? `${st.reason_tag}（${fmtIds(st.reason_ids)}）`
-                : st.reason_tag || "")
-            : "済")
-        : "",
+      reasonIsConsistent
+        ? (st.reason_ids?.length
+            ? `${st.reason_tag}（${fmtIds(st.reason_ids)}）`
+            : (st.reason_tag || ""))     // タグは確定したがIDだけ取れない時
+        : (st.reason_tag                 // タグ未確定までは空欄。従来の「済」は出さない
+            ? st.reason_tag
+            : ""),                       
 
     // Must：整合したら「A／B（ID:...）」、整合しなければ（入力ありのとき）「済」
     Must:
@@ -1159,6 +1160,7 @@ function buildStatusBar(st) {
     Will: st.will ? "済" : "",
   };
 }
+
 // 0.5 を使わない進行に合わせた文言
 function nextAfterId(s) {
   switch (s.step) {
