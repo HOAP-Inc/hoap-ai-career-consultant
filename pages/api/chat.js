@@ -367,7 +367,7 @@ function initSession() {
   return {
     step: 1,
     isNumberConfirmed: false,
-    drill: { phase: null, count: 0, category: null, awaitingChoice: false, options: [], reasonBuf: [] },
+    drill: { phase: null, count: 0, category: null, awaitingChoice: false, options: [], reasonBuf: [],flags: {} },
     status: {
       number: "",
       role: "",
@@ -723,69 +723,72 @@ if (chosen) {
   }, 4));
 }
   
-  // 3) 1回目の入力を受信 → 推定 or 汎用深掘りへ
-  if (s.drill.count === 0) {
-    s.status.reason = text || "";
-    s.status.memo.reason_raw = text || "";
-    s.drill.reasonBuf = [text || ""];
+  // 3) 1回目の入力を受信 → まずはオンコール/夜勤の早期確認へ
+if (s.drill.count === 0) {
+  s.status.reason = text || "";
+  s.status.memo.reason_raw = text || "";
+  s.drill.reasonBuf = [text || ""];
 
-    const forced0 = forcePrivateOncallNight(text);
-if (forced0) {
-  s.drill.category = forced0.category;  // プライベートに関すること
-  s.drill.count = 1;
-  const emp0 = await generateEmpathy(text, s);
-  // 深掘り質問はプライベート系の deep1 を使う
-  const q = pickDeepQuestion(forced0.category, "deep1", text);
-  return res.json(withMeta({
-    response: `${emp0}\n${q}`,
-    step: 4, status: s.status, isNumberConfirmed: true,
-    candidateNumber: s.status.number, debug: debugState(s)
-  }, 4));
-}
+  const forced0 = forcePrivateOncallNight(text);
+  if (forced0) {
+    // 深掘りには進まず、まずは1回でキャッチアップ → 確認だけする
+    s.drill.category = forced0.category;              // "プライベートに関すること"
+    s.drill.phase = "private-confirm";                // ← 確認フェーズに入る
+    s.drill.awaitingChoice = true;
+    s.drill.count = 0;                                // ← 深掘り回数は進めない
+    s.drill.flags = s.drill.flags || {};             // ← 念のため初期化
 
-    // 先行判定：管理者/上司 × ネガ → 「働く仲間に関すること」へ寄せる
-if (detectBossRelationIssue(text)) {
-  s.drill.category = "働く仲間に関すること";
-  s.drill.count = 1;
-  const q = pickDeepQuestion("働く仲間に関すること", "deep1", text);
-  const emp0 = await generateEmpathy(text, s);
-  return res.json(withMeta({
-    response: joinEmp(emp0, q),
-    step: 4, status: s.status, isNumberConfirmed: true, candidateNumber: s.status.number, debug: debugState(s)
-  }, 4));
-}
+    const emp0 = await generateEmpathy(text, s);
+    const confirmText = "プライベートや家庭との両立に理解がほしい感じ？";
+    return res.json(withMeta({
+      response: joinEmp(emp0, confirmText),
+      step: 4, status: s.status, isNumberConfirmed: true,
+      candidateNumber: s.status.number, debug: debugState(s)
+    }, 4));
+  }
 
-    const { best, hits } = scoreCategories(s.drill.reasonBuf.join(" "));
-if (!best || hits === 0 || noOptionCategory(best)) {
-  const cls = classifyMotivation(s.status.reason || text || "");
-  // pos/mixed はキャリア寄せ。neg/neutral は未確定のまま汎用Qへ。
-  s.drill.category = (cls === "pos" || cls === "mixed")
-    ? "仕事内容・キャリアに関すること"
-    : null;
-  s.drill.count = 1;
+  // （以下はオンコール/夜勤じゃない通常ルート。元の処理そのまま）
+  // 先行判定：管理者/上司 × ネガ → 「働く仲間に関すること」へ寄せる
+  if (detectBossRelationIssue(text)) {
+    s.drill.category = "働く仲間に関すること";
+    s.drill.count = 1;
+    const q = pickDeepQuestion("働く仲間に関すること", "deep1", text);
+    const emp0 = await generateEmpathy(text, s);
+    return res.json(withMeta({
+      response: joinEmp(emp0, q),
+      step: 4, status: s.status, isNumberConfirmed: true, candidateNumber: s.status.number, debug: debugState(s)
+    }, 4));
+  }
 
-  const q =
-    (cls === "pos" || cls === "mixed")
+  const { best, hits } = scoreCategories(s.drill.reasonBuf.join(" "));
+  if (!best || hits === 0 || noOptionCategory(best)) {
+    const cls = classifyMotivation(s.status.reason || text || "");
+    s.drill.category = (cls === "pos" || cls === "mixed")
+      ? "仕事内容・キャリアに関すること"
+      : null;
+    s.drill.count = 1;
+
+    const q = (cls === "pos" || cls === "mixed")
       ? GENERIC_REASON_Q_POS.deep1[0]
       : GENERIC_REASON_Q.deep1[0];
 
-  const emp0 = await generateEmpathy(s.status.reason || text || "", s);
-  return res.json(withMeta({
-    response: joinEmp(emp0, q),
-    step: 4, status: s.status, isNumberConfirmed: true, candidateNumber: s.status.number, debug: debugState(s)
-  }, 4));
-}
-
-    // 推定できたらカテゴリ深掘りへ
-    s.drill.category = best;
-    s.drill.count = 1;
-    const q = pickDeepQuestion(best, "deep1", s.status.reason || text || "");
     const emp0 = await generateEmpathy(s.status.reason || text || "", s);
     return res.json(withMeta({
       response: joinEmp(emp0, q),
       step: 4, status: s.status, isNumberConfirmed: true, candidateNumber: s.status.number, debug: debugState(s)
     }, 4));
   }
+
+  // 推定できたらカテゴリ深掘りへ
+  s.drill.category = best;
+  s.drill.count = 1;
+  const q = pickDeepQuestion(best, "deep1", s.status.reason || text || "");
+  const emp0 = await generateEmpathy(s.status.reason || text || "", s);
+  return res.json(withMeta({
+    response: joinEmp(emp0, q),
+    step: 4, status: s.status, isNumberConfirmed: true, candidateNumber: s.status.number, debug: debugState(s)
+  }, 4));
+}
 
   // 4) 2回目の深掘り
   if (s.drill.count === 1) {
