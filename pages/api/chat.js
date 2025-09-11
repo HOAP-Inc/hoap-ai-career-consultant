@@ -829,7 +829,7 @@ return res.json(withMeta({
 s.status.memo.must_raw.push(text);
 const empM2 = await generateEmpathy(text || "", s);
 return res.json(withMeta({
-  response: `${empM2}\nそっか、わかった！\n他にも絶対条件はある？（なければ「ない」って返してね）`,
+  response: `${empM2}\n他にも絶対条件はある？（なければ「ない」って返してね）`,
   step: 5,
   status: s.status,
   isNumberConfirmed: true,
@@ -1159,7 +1159,7 @@ function enforcePlainEnding(text = '') {
 }
 
 function withMeta(payload, step) {
-  const statusBar = buildStatusBar(payload.status);
+  const statusBar = buildStatusBar(payload.status, step);
   return {
     ...payload,
     meta: {
@@ -1182,73 +1182,76 @@ function debugState(s) {
     wantCount: s.status.want.length,
   };
 }
-function buildStatusBar(st) {
+function buildStatusBar(st, currentStep = 0) {
   const fmtIds = (arr = []) => (arr || []).map(id => `ID:${id}`).join(",");
 
   // ====== 整合チェック（簡潔版）======
-  // STEP2（職種/資格）：licenses.json に正式ラベルが存在すれば整合とみなす
   const lic = Array.isArray(st.licenses) ? st.licenses[0] : "";
   const roleLabel = lic || st.role || "";
-  const roleIsConsistent =
-    roleLabel ? OFFICIAL_LICENSES.has(roleLabel) : false;
+  const roleIsConsistent = roleLabel ? OFFICIAL_LICENSES.has(roleLabel) : false;
 
-  // 現職：tags.json の ID が取れていれば整合
-  const placeIsConsistent = Array.isArray(st.place_ids) && st.place_ids.length > 0;
-
-  // 転職目的：job_change_purposes.json の ID が取れていれば整合
+  const placeIsConsistent  = Array.isArray(st.place_ids)  && st.place_ids.length  > 0;
   const reasonIsConsistent = Array.isArray(st.reason_ids) && st.reason_ids.length > 0;
+  const mustIsConsistent   = Array.isArray(st.must_ids)   && st.must_ids.length   > 0;
+  const wantIsConsistent   = Array.isArray(st.want_ids)   && st.want_ids.length   > 0;
 
-  // Must/Want：いずれか1つでも tags.json の ID が取れていれば「整合あり」とみなす
-  const mustIsConsistent = Array.isArray(st.must_ids) && st.must_ids.length > 0;
-  const wantIsConsistent = Array.isArray(st.want_ids) && st.want_ids.length > 0;
+  // 受付中フラグ（この間は「済」を出さない）
+  const inMustPhase = currentStep === 5;
+  const inWantPhase = currentStep === 6;
 
   return {
     求職者ID: st.number || "",
 
-    // STEP2：整合したら正式名称（licenses.json）をそのまま表示。整合しなければ「済」。
     職種:
       roleLabel
         ? (roleIsConsistent ? roleLabel : "済")
         : "",
 
-    // 現職：整合したら「テキスト（ID:xxx,ID:yyy）」、整合しなければ入力があっても「済」
     現職:
       st.place
         ? (placeIsConsistent ? `${st.place}（${fmtIds(st.place_ids)}）` : "済")
         : "",
 
-    // ★ 転職目的：初回の自由入力（reason のみ）は空欄。
-    //    候補確定（reason_tag が入る）で表示。IDがあればID付きで表示。
     転職目的:
       reasonIsConsistent
         ? (st.reason_ids?.length
             ? `${st.reason_tag}（${fmtIds(st.reason_ids)}）`
-            : (st.reason_tag || ""))     // タグは確定したがIDだけ取れない時
-        : (st.reason_tag                 // タグ未確定までは空欄。従来の「済」は出さない
-            ? st.reason_tag
-            : ""),                       
+            : (st.reason_tag || ""))
+        : (st.reason_tag ? st.reason_tag : ""),
 
-    // Must：整合したら「A／B（ID:...）」、整合しなければ（入力ありのとき）「済」
+    // ←ここがポイント：Step5の最中は「済」を出さない
     Must:
-      (Array.isArray(st.must) && st.must.length > 0) || (st.memo?.must_raw?.length)
-        ? (mustIsConsistent
-            ? (st.must_ids?.length
-                ? `${st.must.join("／")}（${fmtIds(st.must_ids)}）`
-                : st.must.join("／"))
-            : "済")
-        : "",
+      (() => {
+        if (Array.isArray(st.must) && st.must.length > 0) {
+          // 入力済みなら、IDの有無に関わらずラベルをそのまま表示（受付中はこれが自然）
+          return mustIsConsistent
+            ? (st.must_ids?.length ? `${st.must.join("／")}（${fmtIds(st.must_ids)}）` : st.must.join("／"))
+            : st.must.join("／");
+        }
+        // テキストだけ（辞書非ヒット）を memo に溜めているケース
+        const hasRaw = Array.isArray(st.memo?.must_raw) && st.memo.must_raw.length > 0;
+        if (hasRaw) {
+          // 受付中なら空欄（未完了）。受付終了後（Stepを越えたら）だけ「済」を出す
+          return inMustPhase ? "" : (mustIsConsistent ? st.must.join("／") : "済");
+        }
+        return "";
+      })(),
 
-    // Want：同上
+    // Want も同様に受付中は「済」を出さない
     Want:
-      (Array.isArray(st.want) && st.want.length > 0) || (st.memo?.want_raw?.length)
-        ? (wantIsConsistent
-            ? (st.want_ids?.length
-                ? `${st.want.join("／")}（${fmtIds(st.want_ids)}）`
-                : st.want.join("／"))
-            : "済")
-        : "",
+      (() => {
+        if (Array.isArray(st.want) && st.want.length > 0) {
+          return wantIsConsistent
+            ? (st.want_ids?.length ? `${st.want.join("／")}（${fmtIds(st.want_ids)}）` : st.want.join("／"))
+            : st.want.join("／");
+        }
+        const hasRaw = Array.isArray(st.memo?.want_raw) && st.memo.want_raw.length > 0;
+        if (hasRaw) {
+          return inWantPhase ? "" : (wantIsConsistent ? st.want.join("／") : "済");
+        }
+        return "";
+      })(),
 
-    // Can/Will は JSON 整合の概念がないので、入力済みなら「済」、未入力は空
     Can: st.can ? "済" : "",
     Will: st.will ? "済" : "",
   };
