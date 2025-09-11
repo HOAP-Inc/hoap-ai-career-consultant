@@ -749,19 +749,18 @@ if (!cat) {
   
   // ---- Step5：絶対に外せない条件（Must） ----
   if (s.step === 5) {
-    if (isNone(text)) {
-  s.step = 6;
-  const empM0 = await generateEmpathy(text || "", s);
-  return res.json(withMeta({
-    response: `${empM0}\nありがとう！それじゃあ次は【あったらいいな（希望条件）】を教えてね。`,
-    step: 6,
-    status: s.status,
-    isNumberConfirmed: true,
-    candidateNumber: s.status.number,
-    debug: debugState(s),
-  }, 6));
-}
-
+  if (isNone(text)) {
+    s.step = 6;
+    return res.json(withMeta({
+      response: "ありがとう！それじゃあ次は【あったらいいな（希望条件）】を教えてね。",
+      step: 6,
+      status: s.status,
+      isNumberConfirmed: true,
+      candidateNumber: s.status.number,
+      debug: debugState(s),
+    }, 6));
+  }
+    
     const tags = matchTags(text, mustWantItems);
     if (tags.length) {
       const added = [];
@@ -800,9 +799,8 @@ return res.json(withMeta({
 if (s.step === 6) {
   if (isNone(text)) {
     s.step = 7;
-    const empW0 = await generateEmpathy(text || "", s);
     return res.json(withMeta({
-      response: `${empW0}\n質問は残り2つ！\nまずは【いま出来ること・得意なこと（Can）】を教えてね。自由に書いてOKだよ。`,
+      response: "質問は残り2つ！\nまずは【いま出来ること・得意なこと（Can）】を教えてね。自由に書いてOKだよ。",
       step: 7, status: s.status, isNumberConfirmed: true, candidateNumber: s.status.number, debug: debugState(s)
     }, 7));
   }
@@ -841,7 +839,7 @@ if (s.step === 7) {
   s.step = 8;
   const empCan = await generateEmpathy(text || "", s);
   return res.json(withMeta({
-    response: `${empCan}\nこれが最後の質問👏\n【これから挑戦したいこと（Will）】を教えてね。自由に書いてOKだよ。`,
+    response: ${empCan}\nこれが最後の質問👏\n【これから挑戦したいこと（Will）】を教えてね。自由に書いてOKだよ。,
     step: 8, status: s.status, isNumberConfirmed: true, candidateNumber: s.status.number, debug: debugState(s)
   }, 8));
 }
