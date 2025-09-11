@@ -296,15 +296,11 @@ const transferReasonFlow = {
 },
   "労働条件に関すること": {
   keywords: [
-  "残業","夜勤","休日","有給","働き方","時間","シフト","勤務時間","連勤","休憩",
-  "オンコール","呼び出し","副業","兼業","社会保険","保険","健保","厚生年金","診療時間",
+  "残業","休日","有給","働き方","時間","シフト","勤務時間","連勤","休憩",
+  "呼び出し","副業","兼業","社会保険","保険","健保","厚生年金","診療時間",
   "自己研鑽","勉強","学習","研修時間","直行直帰","事務所","立ち寄り","朝礼","日報","定時",
   "サービス残業","申請制","人員配置","希望日","半休","時間有休","承認","就業規則","許可",
   "健康保険","雇用保険","労災","手続き","始業前","準備","清掃","打刻",
-  // ここから訪問移動系の追加
-  "移動が自転車","自転車移動","自転車で訪問","自転車訪問","訪問の移動が自転車",
-  "雨の日の訪問がつらい","坂道がきつい","移動負担が重い","移動距離が長い",
-  "運転なしで訪問したい","車の運転が不安","運転したくない","訪問時の移動負担を減らしたい"
 ],
   internal_options: [
     "直行直帰ができる職場で働きたい",
@@ -320,7 +316,7 @@ const transferReasonFlow = {
 },
   
   "プライベートに関すること": {
-    keywords: ["家庭","育児","子育て","両立","ライフステージ","子ども","家族","介護","保育園","送迎","学校行事","通院","発熱","中抜け","時短","イベント","飲み会","BBQ","社員旅行","早朝清掃","強制","業務外","就業後","休日","オフ","プライベート","仲良く","交流","ごはん","趣味"],
+    keywords: ["家庭","介護","育児","子育て","両立","ライフステージ","子ども","家族","介護","保育園","送迎","学校行事","通院","発熱","中抜け","時短","イベント","飲み会","BBQ","社員旅行","早朝清掃","強制","業務外","就業後","休日","オフ","プライベート","仲良く","交流","ごはん","趣味","オンコール","夜勤"],
     internal_options: [
       "家庭との両立に理解のある職場で働きたい",
       "勤務時間外でイベントがない職場で働きたい",
@@ -593,6 +589,20 @@ if (s.step === 4) {
       // ここまでのユーザー発話をまとめる
       const joinedUser = s.drill.reasonBuf.join(" ");
 
+      // オンコール/夜勤なら強制でプライベート × 候補固定
+const forced1 = forcePrivateOncallNight(joinedUser);
+if (forced1) {
+  s.drill.category = forced1.category;
+  s.drill.phase = "reason";
+  s.drill.awaitingChoice = true;
+  s.drill.options = forced1.options; // ← 「家庭との両立に理解のある職場で働きたい」だけ
+  return res.json(withMeta({
+    response: `この中だとどれが一番近い？『${s.drill.options.map(x=>`［${x}］`).join("／")}』`,
+    step: 4, status: s.status, isNumberConfirmed: true,
+    candidateNumber: s.status.number, debug: debugState(s)
+  }, 4));
+}
+
       // カテゴリ内の候補を「もっとも合いそうな3つ」に絞る
       const allOptions = (transferReasonFlow[chosenCat]?.internal_options || []);
       const topOptions = rankReasonOptions(allOptions, joinedUser, 3);
@@ -655,6 +665,20 @@ if (s.drill.phase === "reason" && s.drill.awaitingChoice && s.drill.options?.len
     s.status.reason = text || "";
     s.status.memo.reason_raw = text || "";
     s.drill.reasonBuf = [text || ""];
+
+    const forced0 = forcePrivateOncallNight(text);
+if (forced0) {
+  s.drill.category = forced0.category;  // プライベートに関すること
+  s.drill.count = 1;
+  const emp0 = await generateEmpathy(text, s);
+  // 深掘り質問はプライベート系の deep1 を使う
+  const q = pickDeepQuestion(forced0.category, "deep1", text);
+  return res.json(withMeta({
+    response: `${emp0}\n${q}`,
+    step: 4, status: s.status, isNumberConfirmed: true,
+    candidateNumber: s.status.number, debug: debugState(s)
+  }, 4));
+}
 
     // 先行判定：管理者/上司 × ネガ → 「働く仲間に関すること」へ寄せる
 if (detectBossRelationIssue(text)) {
@@ -769,6 +793,21 @@ if (!cat) {
     const cat = s.drill.category;
     const allOptions = (transferReasonFlow[cat].internal_options || []);
     const joinedUser = s.drill.reasonBuf.join(" "); // ここまでのユーザー発話
+    
+    // オンコール/夜勤なら強制でプライベート × 候補固定
+const forced2 = forcePrivateOncallNight(joinedUser);
+if (forced2) {
+  s.drill.category = forced2.category;
+  s.drill.phase = "reason";
+  s.drill.awaitingChoice = true;
+  s.drill.options = forced2.options; // ← 固定1択
+  return res.json(withMeta({
+    response: `この中だとどれが一番近い？『${s.drill.options.map(x=>`［${x}］`).join("／")}』`,
+    step: 4, status: s.status, isNumberConfirmed: true,
+    candidateNumber: s.status.number, debug: debugState(s)
+  }, 4));
+}
+
     const options = rankReasonOptions(allOptions, joinedUser, 3);
 
     if (!options.length) {
@@ -1142,6 +1181,18 @@ function rankReasonOptions(options = [], userText = "", k = 3) {
     .slice(0, k)
     .map(s => s.opt);
 }
+
+function forcePrivateOncallNight(userText = "") {
+  const t = String(userText || "");
+  if (/(オンコール|ｵﾝｺｰﾙ|夜勤)/i.test(t)) {
+    return {
+      category: "プライベートに関すること",
+      options: ["家庭との両立に理解のある職場で働きたい"],
+    };
+  }
+  return null;
+}
+
 // ---- ヘルパ ----
 
 // 疑問で終わらせないフィルタ
