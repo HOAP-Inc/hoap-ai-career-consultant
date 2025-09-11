@@ -663,7 +663,7 @@ if (detectBossRelationIssue(text)) {
   const q = pickDeepQuestion("働く仲間に関すること", "deep1", text);
   const emp0 = await generateEmpathy(text, s);
   return res.json(withMeta({
-    response: `${emp0}\n${q}`,
+    response: joinEmp(emp0, q),
     step: 4, status: s.status, isNumberConfirmed: true, candidateNumber: s.status.number, debug: debugState(s)
   }, 4));
 }
@@ -684,7 +684,7 @@ if (!best || hits === 0 || noOptionCategory(best)) {
 
   const emp0 = await generateEmpathy(s.status.reason || text || "", s);
   return res.json(withMeta({
-    response: `${emp0}\n${q}`,
+    response: joinEmp(emp0, q),
     step: 4, status: s.status, isNumberConfirmed: true, candidateNumber: s.status.number, debug: debugState(s)
   }, 4));
 }
@@ -695,7 +695,7 @@ if (!best || hits === 0 || noOptionCategory(best)) {
     const q = pickDeepQuestion(best, "deep1", s.status.reason || text || "");
     const emp0 = await generateEmpathy(s.status.reason || text || "", s);
     return res.json(withMeta({
-      response: `${emp0}\n${q}`,
+      response: joinEmp(emp0, q),
       step: 4, status: s.status, isNumberConfirmed: true, candidateNumber: s.status.number, debug: debugState(s)
     }, 4));
   }
@@ -737,7 +737,7 @@ if (!cat) {
 
   const emp1 = await generateEmpathy(text || "", s);
   return res.json(withMeta({
-    response: `${emp1}\n${q}`,
+    response: joinEmp(emp1, q),
     step: 4, status: s.status, isNumberConfirmed: true, candidateNumber: s.status.number, debug: debugState(s)
   }, 4));
 }
@@ -760,7 +760,7 @@ if (!cat) {
         s.drill.options = pool;
         const empC = await generateEmpathy(s.drill.reasonBuf.join(" "), s);
         return res.json(withMeta({
-          response: `${empC}\nどのカテゴリが一番近い？『${pool.map(x=>`［${x}］`).join("／")}』`,
+          response: joinEmp(empC, `ちなみに、この中だとどのカテゴリが一番近い？『${pool.map(x=>`［${x}］`).join("／")}』`),
           step: 4, status: s.status, isNumberConfirmed: true, candidateNumber: s.status.number, debug: debugState(s)
         }, 4));
       }
@@ -817,7 +817,7 @@ if (!cat) {
       const line = added.map(t => `『${t}』だね！これも記憶したよ！`).join("\n");
 const empM1 = await generateEmpathy(text || "", s);
 return res.json(withMeta({
-  response: `${empM1}\n${line}\n他にも絶対条件はある？（なければ「ない」って返してね）`,
+  response: joinEmp(empM1, `${line}\n他にも絶対条件はある？（なければ「ない」って返してね）`),
   step: 5,
   status: s.status,
   isNumberConfirmed: true,
@@ -829,7 +829,7 @@ return res.json(withMeta({
 s.status.memo.must_raw.push(text);
 const empM2 = await generateEmpathy(text || "", s);
 return res.json(withMeta({
-  response: `${empM2}\n他にも絶対条件はある？（なければ「ない」って返してね）`,
+  response: joinEmp(empM2, "他にも絶対条件はある？（なければ「ない」って返してね）"),
   step: 5,
   status: s.status,
   isNumberConfirmed: true,
@@ -858,10 +858,10 @@ if (s.step === 6) {
       const id = tagIdByName.get(label);
       if (id && !s.status.want_ids.includes(id)) s.status.want_ids.push(id);
     }
-    const line = added.map(t => `了解！『${t}』だと嬉しいってことだね！`).join("\n");
+    const line = added.map(t => `『${t}』だと嬉しいってことだね！`).join("\n");
     const empW1 = await generateEmpathy(text || "", s);
     return res.json(withMeta({
-      response: `${empW1}\n${line}\n他にもあったらいいなっていうのはある？（なければ「ない」って返してね）`,
+      response: joinEmp(empW1, `${line}\n他にもあったらいいなっていうのはある？（なければ「ない」って返してね）`),
       step: 6, status: s.status, isNumberConfirmed: true, candidateNumber: s.status.number, debug: debugState(s)
     }, 6));
   }
@@ -870,7 +870,7 @@ if (s.step === 6) {
   s.status.memo.want_raw.push(text);
   const empW2 = await generateEmpathy(text || "", s);
   return res.json(withMeta({
-    response: `${empW2}\n了解！気持ちは受け取ったよ◎\n他にもあったらいいなっていうのはある？（なければ「ない」って返してね）`,
+    rresponse: joinEmp(empW2, "他にもあったらいいなっていうのはある？（なければ「ない」って返してね）"),
     step: 6, status: s.status, isNumberConfirmed: true, candidateNumber: s.status.number, debug: debugState(s)
   }, 6));
 }
@@ -882,7 +882,7 @@ if (s.step === 7) {
   s.step = 8;
   const empCan = await generateEmpathy(text || "", s);
   return res.json(withMeta({
-    response: `${empCan}\nこれが最後の質問👏\n【これから挑戦したいこと（Will）】を教えてね。自由に書いてOKだよ。`,
+    response: joinEmp(empCan, "これが最後の質問👏\n【これから挑戦したいこと（Will）】を教えてね。自由に書いてOKだよ。"),
     step: 8,
     status: s.status,
     isNumberConfirmed: true,
@@ -897,7 +897,7 @@ if (s.step === 8) {
   s.step = 9;
   const empWill = await generateEmpathy(text || "", s);
   return res.json(withMeta({
-    response: `${empWill}\n今日はたくさん話してくれてありがとう！\n整理した内容は担当エージェントにしっかり共有するね。面談でさらに具体化していこう！`,
+    response: joinEmp(empWill, "今日はたくさん話してくれてありがとう！\n整理した内容は担当エージェントにしっかり共有するね。面談でさらに具体化していこう！"),
     step: 9, status: s.status, isNumberConfirmed: true, candidateNumber: s.status.number, debug: debugState(s)
   }, 9));
 }
@@ -906,7 +906,7 @@ if (s.step === 8) {
 if (s.step === 9) {
   const empDone = await generateEmpathy(text || "", s);
   return res.json(withMeta({
-    response: `${empDone}\n長い時間付き合ってくれてありがとう！続きは担当エージェントと話そうね！`,
+    response: joinEmp(empDone, "長い時間付き合ってくれてありがとう！続きは担当エージェントと話そうね！"),
     step: 9,
     status: s.status,
     isNumberConfirmed: true,
@@ -1156,6 +1156,12 @@ function enforcePlainEnding(text = '') {
   if (!/[。！？!？＞）)\]]$/.test(t)) t += '。';
 
   return t;
+}
+
+function joinEmp(a, b) {
+  const left  = String(a || "").trimEnd();           // 共感文の末尾を整える
+  const right = String(b || "").replace(/^\n+/, ""); // 定型文の先頭改行は削る
+  return `${left}\n\n${right}`;                      // 空行1つでつなぐ
 }
 
 function withMeta(payload, step) {
