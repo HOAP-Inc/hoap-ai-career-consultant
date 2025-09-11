@@ -654,7 +654,7 @@ if (s.drill.phase === "private-confirm" && s.drill.awaitingChoice) {
       response: joinEmp(emp0, q),
       step: 4, status: s.status, isNumberConfirmed: true, candidateNumber: s.status.number, debug: debugState(s)
     }, 4));
-  }
+  
   // 1) カテゴリ選択待ち（最終手段）
   if (s.drill.phase === "reason-cat" && s.drill.awaitingChoice && s.drill.options?.length) {
     const pick = normalizePick(text);
