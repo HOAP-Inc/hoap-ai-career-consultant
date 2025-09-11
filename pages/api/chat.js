@@ -839,8 +839,12 @@ if (s.step === 7) {
   s.step = 8;
   const empCan = await generateEmpathy(text || "", s);
   return res.json(withMeta({
-    response: ${empCan}\nこれが最後の質問👏\n【これから挑戦したいこと（Will）】を教えてね。自由に書いてOKだよ。,
-    step: 8, status: s.status, isNumberConfirmed: true, candidateNumber: s.status.number, debug: debugState(s)
+    response: `${empCan}\nこれが最後の質問👏\n【これから挑戦したいこと（Will）】を教えてね。自由に書いてOKだよ。`,
+    step: 8,
+    status: s.status,
+    isNumberConfirmed: true,
+    candidateNumber: s.status.number,
+    debug: debugState(s)
   }, 8));
 }
 
