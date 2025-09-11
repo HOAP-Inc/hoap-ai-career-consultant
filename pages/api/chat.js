@@ -579,6 +579,64 @@ if (s.step === 3) {
 
   // ---- Step4：転職理由（深掘り2回→候補提示） ----
 if (s.step === 4) {
+
+  // 0) オンコール/夜勤→ 早期確認フェーズの応答
+  if (s.drill.phase === "private-confirm" && s.drill.awaitingChoice) {
+    // はい：即タグ確定→Step5へ
+    if (isYes(text)) {
+      const tag = "家庭との両立に理解のある職場で働きたい";
+      s.status.reason_tag = tag;
+      const rid = reasonIdByName.get(tag);
+      s.status.reason_ids = Array.isArray(rid) ? rid : (rid != null ? [rid] : []);
+      s.drill = { phase: null, count: 0, category: null, awaitingChoice: false, options: [], reasonBuf: s.drill.reasonBuf, flags: s.drill.flags };
+      s.step = 5;
+      return res.json(withMeta({
+        response: `『${tag}』だね！担当エージェントに伝えておくね。\n\n${mustIntroText()}`,
+        step: 5, status: s.status, isNumberConfirmed: true, candidateNumber: s.status.number, debug: debugState(s)
+      }, 5));
+    }
+
+    // いいえ or 別意見：Noを記録し、深掘り1回目へ
+    if (isNo(text)) {
+      s.drill.flags.privateDeclined = true;
+      s.drill.count = 1; // 深掘り1回目へ
+      s.drill.phase = "reason";
+      s.drill.awaitingChoice = false;
+
+      const emp0 = await generateEmpathy(text, s);
+      // カテゴリ未確定で深掘り開始（一般 or 前向き）
+      const cls = classifyMotivation(s.drill.reasonBuf.join(" "));
+      const q = (cls === "pos" || cls === "mixed")
+        ? GENERIC_REASON_Q_POS.deep1[0]
+        : GENERIC_REASON_Q.deep1[0];
+
+      return res.json(withMeta({
+        response: joinEmp(emp0, q),
+        step: 4, status: s.status, isNumberConfirmed: true, candidateNumber: s.status.number, debug: debugState(s)
+      }, 4));
+    }
+
+    // 別意見（自由文）：理由バッファに追記して深掘り1回目へ
+    s.drill.reasonBuf.push(text || "");
+    s.drill.flags.privateDeclined = true;
+    s.drill.count = 1;
+    s.drill.phase = "reason";
+    s.drill.awaitingChoice = false;
+
+    const emp0 = await generateEmpathy(text, s);
+    const { best, hits } = scoreCategories(s.drill.reasonBuf.join(" "));
+    if (best && hits > 0 && !noOptionCategory(best)) s.drill.category = best;
+
+    const cls = classifyMotivation(s.drill.reasonBuf.join(" "));
+    const q = !s.drill.category
+      ? ((cls === "pos" || cls === "mixed") ? GENERIC_REASON_Q_POS.deep1[0] : GENERIC_REASON_Q.deep1[0])
+      : pickDeepQuestion(s.drill.category, "deep1", s.drill.reasonBuf.join(" "));
+
+    return res.json(withMeta({
+      response: joinEmp(emp0, q),
+      step: 4, status: s.status, isNumberConfirmed: true, candidateNumber: s.status.number, debug: debugState(s)
+    }, 4));
+  }
   // 1) カテゴリ選択待ち（最終手段）
   if (s.drill.phase === "reason-cat" && s.drill.awaitingChoice && s.drill.options?.length) {
     const pick = normalizePick(text);
@@ -636,23 +694,27 @@ return res.json(withMeta({
   // 2) 具体候補の選択（確定）
 if (s.drill.phase === "reason" && s.drill.awaitingChoice && s.drill.options?.length) {
   const pick = normalizePick(text);
-  const chosen = s.drill.options.find(o => o === pick);
-  if (chosen) {
-    const repeat = `『${chosen}』だね！担当エージェントに伝えておくね。`;
+const chosen = s.drill.options.find(o => o === pick);
+if (chosen) {
+  const repeat = `『${chosen}』だね！担当エージェントに伝えておくね。`;
 
-    s.status.reason_tag = chosen;
+  s.status.reason_tag = chosen;
 
-    // 名前からID引く。見つからなければ空配列
-    const rid = reasonIdByName.get(chosen);
-    s.status.reason_ids = Array.isArray(rid) ? rid : (rid != null ? [rid] : []);
+  // 名前からID引く。見つからなければ空配列
+  const rid = reasonIdByName.get(chosen);
+  s.status.reason_ids = Array.isArray(rid) ? rid : (rid != null ? [rid] : []);
 
-    s.step = 5;
+  s.step = 5;
 
-    return res.json(withMeta({
-      response: `${repeat}\n\n${mustIntroText()}`,
-      step: 5, status: s.status, isNumberConfirmed: true, candidateNumber: s.status.number, debug: debugState(s)
-    }, 5));
-  }
+  return res.json(withMeta({
+    response: `${repeat}\n\n${mustIntroText()}`,
+    step: 5,
+    status: s.status,
+    isNumberConfirmed: true,
+    candidateNumber: s.status.number,
+    debug: debugState(s)
+  }, 5));
+}
 
   // 再提示（候補に一致しなかったときだけ）
   return res.json(withMeta({
@@ -832,8 +894,13 @@ if (forced2) {
   s.step = 5;
   return res.json(withMeta({
     response: mustIntroText(),
-    step: 5, status: s.status, isNumberConfirmed: true, candidateNumber: s.status.number, debug: debugState(s)
+    step: 5,
+    status: s.status,
+    isNumberConfirmed: true,
+    candidateNumber: s.status.number,
+    debug: debugState(s)
   }, 5));
+});
 }
 
     // ★ここから追加：1択なら即確定して Step5 へ
@@ -1222,6 +1289,16 @@ function forcePrivateOncallNight(userText = "") {
     };
   }
   return null;
+}
+
+function hasOncallNight(text = "") {
+  return /(オンコール|ｵﾝｺｰﾙ|夜勤)/i.test(String(text || ""));
+}
+function isYes(text = "") {
+  return /^(はい|うん|そう|ok|了解|そのとおり|そんな感じ|お願いします|それで|求めてる)/i.test(String(text || "").trim());
+}
+function isNo(text = "") {
+  return /^(いいえ|いや|ちが|違う|別|べつ|微妙|それではない|ノー)/i.test(String(text || "").trim());
 }
 
 // ---- ヘルパ ----
