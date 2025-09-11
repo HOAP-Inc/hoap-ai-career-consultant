@@ -581,47 +581,59 @@ if (s.step === 3) {
 if (s.step === 4) {
 
   // 0) オンコール/夜勤→ 早期確認フェーズの応答
-  if (s.drill.phase === "private-confirm" && s.drill.awaitingChoice) {
-    // はい：即タグ確定→Step5へ
-    if (isYes(text)) {
-      const tag = "家庭との両立に理解のある職場で働きたい";
-      s.status.reason_tag = tag;
-      const rid = reasonIdByName.get(tag);
-      s.status.reason_ids = Array.isArray(rid) ? rid : (rid != null ? [rid] : []);
-      s.drill = { phase: null, count: 0, category: null, awaitingChoice: false, options: [], reasonBuf: s.drill.reasonBuf, flags: s.drill.flags };
-      s.step = 5;
-      return res.json(withMeta({
-        response: `『${tag}』だね！担当エージェントに伝えておくね。\n\n${mustIntroText()}`,
-        step: 5, status: s.status, isNumberConfirmed: true, candidateNumber: s.status.number, debug: debugState(s)
-      }, 5));
-    }
+if (s.drill.phase === "private-confirm" && s.drill.awaitingChoice) {
+  // はい：即タグ確定→Step5へ（既存のまま）
+  if (isYes(text)) {
+    const tag = "家庭との両立に理解のある職場で働きたい";
+    s.status.reason_tag = tag;
+    const rid = reasonIdByName.get(tag);
+    s.status.reason_ids = Array.isArray(rid) ? rid : (rid != null ? [rid] : []);
+    s.drill = { phase: null, count: 0, category: null, awaitingChoice: false, options: [], reasonBuf: s.drill.reasonBuf, flags: s.drill.flags };
+    s.step = 5;
+    return res.json(withMeta({
+      response: `『${tag}』だね！担当エージェントに伝えておくね。\n\n${mustIntroText()}`,
+      step: 5, status: s.status, isNumberConfirmed: true, candidateNumber: s.status.number, debug: debugState(s)
+    }, 5));
+  }
 
-        // いいえ or 別意見：Noを記録し、深掘り1回目へ
-    if (isNo(text)) {
-      s.drill.flags.privateDeclined = true;   // 以後の強制固定をOFFにする
-      s.drill.count = 1;                       // 深掘り1回目へ
-      s.drill.phase = "reason";
-      s.drill.awaitingChoice = false;
+  // いいえ：固定文だけ出して、理由は未マッチのままStep5へ
+  if (isNo(text)) {
+    s.drill.flags.privateDeclined = true;             // 以後の強制固定OFF
+    s.drill = { phase: null, count: 0, category: null, awaitingChoice: false, options: [], reasonBuf: s.drill.reasonBuf, flags: s.drill.flags };
+    s.status.reason_tag = "";                          // ← 未マッチのまま
+    s.status.reason_ids = [];                          // ← 未マッチのまま
+    s.step = 5;
 
-      const emp0 = await generateEmpathy(text, s);
+    const emp0 = await generateEmpathy(text, s);
+    const fixed = "オンコールがない職場を考えていこうね。";
 
-      // ★追加：オンコール文脈でプライベート否定になったら固定文を必ず挟む
-      // （reason_tag / reason_ids は一切確定させず＝未マッチのまま）
-      const fixed = "オンコールがない職場を考えていこうね。";
+    return res.json(withMeta({
+      response: joinEmp(emp0, `${fixed}\n\n${mustIntroText()}`),
+      step: 5, status: s.status, isNumberConfirmed: true, candidateNumber: s.status.number, debug: debugState(s)
+    }, 5));
+  }
 
-      // カテゴリ未確定で深掘り開始（前向き/通常で質問を切り替え）
-      const cls = classifyMotivation(s.drill.reasonBuf.join(" "));
-      const q = (cls === "pos" || cls === "mixed")
-        ? GENERIC_REASON_Q_POS.deep1[0]
-        : GENERIC_REASON_Q.deep1[0];
+  // （自由文などその他の返答は従来どおり深掘り1回目へ）
+  s.drill.reasonBuf.push(text || "");
+  s.drill.flags.privateDeclined = true;
+  s.drill.count = 1;
+  s.drill.phase = "reason";
+  s.drill.awaitingChoice = false;
 
-      return res.json(withMeta({
-        // 共感 → 固定文 → 深掘り質問（未マッチのまま進行）
-        response: joinEmp(emp0, `${fixed}\n\n${q}`),
-        step: 4, status: s.status, isNumberConfirmed: true, candidateNumber: s.status.number, debug: debugState(s)
-      }, 4));
-    }
+  const emp0 = await generateEmpathy(text, s);
+  const { best, hits } = scoreCategories(s.drill.reasonBuf.join(" "));
+  if (best && hits > 0 && !noOptionCategory(best)) s.drill.category = best;
 
+  const cls = classifyMotivation(s.drill.reasonBuf.join(" "));
+  const q = !s.drill.category
+    ? ((cls === "pos" || cls === "mixed") ? GENERIC_REASON_Q_POS.deep1[0] : GENERIC_REASON_Q.deep1[0])
+    : pickDeepQuestion(s.drill.category, "deep1", s.drill.reasonBuf.join(" "));
+
+  return res.json(withMeta({
+    response: joinEmp(emp0, q),
+    step: 4, status: s.status, isNumberConfirmed: true, candidateNumber: s.status.number, debug: debugState(s)
+  }, 4));
+}
     // 別意見（自由文）：理由バッファに追記して深掘り1回目へ
     s.drill.reasonBuf.push(text || "");
     s.drill.flags.privateDeclined = true;
