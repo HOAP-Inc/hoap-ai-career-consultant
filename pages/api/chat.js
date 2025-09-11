@@ -649,7 +649,7 @@ if (s.drill.phase === "reason" && s.drill.awaitingChoice && s.drill.options?.len
 if (detectBossRelationIssue(text)) {
   s.drill.category = "働く仲間に関すること";
   s.drill.count = 1;
-  const q = transferReasonFlow["働く仲間に関すること"].deep1[0] || GENERIC_REASON_Q.deep1[0];
+  const q = pickDeepQuestion("働く仲間に関すること", "deep1", text);
   const emp0 = await generateEmpathy(text, s);
   return res.json(withMeta({
     response: `${emp0}\n${q}`,
@@ -681,7 +681,7 @@ if (!best || hits === 0 || noOptionCategory(best)) {
     // 推定できたらカテゴリ深掘りへ
     s.drill.category = best;
     s.drill.count = 1;
-    const q = transferReasonFlow[best].deep1[0] || "それについて、もう少し詳しく教えて！";
+    const q = pickDeepQuestion(best, "deep1", s.status.reason || text || "");
     const emp0 = await generateEmpathy(s.status.reason || text || "", s);
     return res.json(withMeta({
       response: `${emp0}\n${q}`,
@@ -721,7 +721,7 @@ if (!cat) {
   q = "どんな役割で力を発揮したい？身につけたいスキルや専門領域があれば教えて！";
 } else {
   // 従来どおりカテゴリ固有の深掘り
-  q = transferReasonFlow[cat].deep2[0] || "なるほど。他に具体例があれば教えて！";
+  q = pickDeepQuestion(cat, "deep2", joined);
 }
 
   const emp1 = await generateEmpathy(text || "", s);
@@ -1047,6 +1047,56 @@ function scoreSimilarity(a, b){
   for (const x of A) if (B.has(x)) inter++;
   const union = A.size + B.size - inter;
   return union ? inter / union : 0;
+}
+
+// ==== deep質問セレクタ ====
+// 文脈に合わせて deep1 / deep2 の中からもっとも合いそうな質問を1つ選ぶ
+function pickDeepQuestion(cat, stage /* "deep1" | "deep2" */, userText = "") {
+  const qs = (transferReasonFlow?.[cat]?.[stage] || []).slice();
+  if (!qs.length) {
+    return (stage === "deep1")
+      ? (GENERIC_REASON_Q.deep1[0] || "もう少し詳しく教えて！")
+      : (GENERIC_REASON_Q.deep2[0] || "もう少し詳しく教えて！");
+  }
+
+  const t = String(userText).toLowerCase();
+
+  // 簡易ヒューリスティック（痛み / 前向き）
+  const painRe = /(きつい|辛い|しんどい|大変|消耗|重い|疲|負担|件数|ノルマ|介助|入浴)/;
+  const upRe   = /(昇進|昇格|資格|スキル|学び|挑戦|成長|キャリア)/;
+
+  if (cat === "仕事内容・キャリアに関すること") {
+    if (painRe.test(t)) {
+      const hit = qs.find(q => q.includes("やりがい"));
+      if (hit) return hit;
+    }
+    if (upRe.test(t)) {
+      const hit = qs.find(q => q.includes("キャリアアップ"));
+      if (hit) return hit;
+    }
+  }
+
+  if (cat === "働く仲間に関すること") {
+    if (/(見下|高圧|上司|師長|医師|先生|ヘルパー|介護職)/.test(t)) {
+      const hit = qs.find(q => /どんな人間関係|上司|同僚|雰囲気/.test(q));
+      if (hit) return hit;
+    }
+  }
+
+  if (cat === "労働条件に関すること") {
+    if (/(夜勤|残業|シフト|休|有給|オンコール|呼び出し|移動|自転車)/.test(t)) {
+      const hit = qs.find(q => /一番きつい|勤務条件/.test(q));
+      if (hit) return hit;
+    }
+  }
+
+  // ルールで決まらなければ、発話との類似度で選ぶ
+  let best = qs[0], bestScore = -1;
+  for (const q of qs) {
+    const s = scoreSimilarity(q, userText);
+    if (s > bestScore) { best = q; bestScore = s; }
+  }
+  return best || qs[0];
 }
 
 // internal_options をユーザ発話との類似度で降順ソートして上位k件を返す
