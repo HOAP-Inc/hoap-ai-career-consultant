@@ -167,6 +167,25 @@ function isPositiveMotivation(text = "") {
   return false;
 }
 
+// === 追加：発話のポジ/ネガ/中立分類 ===
+const POS_TERMS = /(挑戦|やりたい|なりたい|目指(す|して)|スキルアップ|学びたい|成長|キャリア|経験を積みたい|責任|役職|昇進|昇格|資格(を取りたい)?|新しいこと|幅を広げたい)/i;
+const NEG_TERMS = /(嫌い|無理|合わない|しんどい|辛い|やめたい|辞めたい|不満|怒|ストレス|いじめ|ハラスメント|パワハラ|セクハラ|理不尽|圧|支配)/i;
+const MGMT_POS  = /(管理(者|職)).*(なりたい|目指|挑戦)/i; // 「管理者になりたい」等を確実にポジ扱い
+
+function isNegativeMotivation(text=""){ 
+  return NEG_TERMS.test(String(text)); 
+}
+
+function classifyMotivation(text=""){
+  const t = String(text);
+  const pos = (MGMT_POS.test(t) || POS_TERMS.test(t)) ? 1 : 0;
+  const neg = NEG_TERMS.test(t) ? 1 : 0;
+  if (pos && !neg) return "pos";
+  if (!pos && neg) return "neg";
+  if (pos && neg)  return "mixed";
+  return "neutral";
+}
+
 // 追加：上司/管理者×ネガの早期カテゴリ確定
 function detectBossRelationIssue(text = "") {
   const t = String(text).toLowerCase();
@@ -184,16 +203,33 @@ const GENERIC_REASON_Q_POS = {
 // テキスト全体からカテゴリごとのヒット数を採点
 function scoreCategories(text) {
   const t = (text || "").toLowerCase();
+
+  // 「上司/管理者」系キーワードは、ネガ語が同時に出ていない限りスコアに入れない
+  const BOSS_KEYWORDS = /(管理者|管理職|上司|師長|看護師長|部長|課長|マネージャ|マネージャー|上層部|リーダー|院長|園長)/i;
+
   const ranking = [];
   let best = null, hits = 0;
+
   for (const [cat, def] of Object.entries(transferReasonFlow)) {
-    const h = (def.keywords || []).reduce(
-      (acc, kw) => acc + (t.includes(String(kw).toLowerCase()) ? 1 : 0), 0
-    );
+    const h = (def.keywords || []).reduce((acc, kw) => {
+      const k = String(kw).toLowerCase();
+      const hit = t.includes(k);
+
+      // boss系はネガ同伴でのみ加点
+      const isBossKw = BOSS_KEYWORDS.test(String(kw));
+      const allow = !isBossKw || NEG_TERMS.test(t);
+
+      return acc + (hit && allow ? 1 : 0);
+    }, 0);
+
     ranking.push({ cat, hits: h });
-    if (h > hits) { hits = h; best = cat; }
+    if (h > hits) {
+      hits = h;
+      best = cat;
+    }
   }
-  ranking.sort((a,b)=> b.hits - a.hits);
+
+  ranking.sort((a, b) => b.hits - a.hits);
   return { best, hits, ranking };
 }
 
@@ -593,15 +629,18 @@ if (detectBossRelationIssue(text)) {
 }
 
     const { best, hits } = scoreCategories(s.drill.reasonBuf.join(" "));
-    if (!best || hits === 0 || noOptionCategory(best)) {
-  const positive = isPositiveMotivation(s.status.reason || text || "");
-  // ポジなら流れを自然にするためカテゴリをキャリア寄りに暫定セット
-  s.drill.category = positive ? "仕事内容・キャリアに関すること" : null;
+if (!best || hits === 0 || noOptionCategory(best)) {
+  const cls = classifyMotivation(s.status.reason || text || "");
+  // pos/mixed はキャリア寄せ。neg/neutral は未確定のまま汎用Qへ。
+  s.drill.category = (cls === "pos" || cls === "mixed")
+    ? "仕事内容・キャリアに関すること"
+    : null;
   s.drill.count = 1;
 
-  const q = positive
-    ? GENERIC_REASON_Q_POS.deep1[0]
-    : GENERIC_REASON_Q.deep1[0];
+  const q =
+    (cls === "pos" || cls === "mixed")
+      ? GENERIC_REASON_Q_POS.deep1[0]
+      : GENERIC_REASON_Q.deep1[0];
 
   const emp0 = await generateEmpathy(s.status.reason || text || "", s);
   return res.json(withMeta({
@@ -640,19 +679,21 @@ if (!s.drill.category && detectBossRelationIssue(joined)) {
     }
 
     s.drill.count = 2;
-    const cat = s.drill.category;
-   const positive = isPositiveMotivation(joined);
-  let q;
-  if (!cat) {
-    // カテゴリ未確定：ポジ/ネガで汎用質問を出し分け
-    q = positive ? GENERIC_REASON_Q_POS.deep2[0] : GENERIC_REASON_Q.deep2[0];
-  } else if (cat === "仕事内容・キャリアに関すること" && positive) {
-    // キャリア系かつ前向きなら、前向きの聞き方に
-    q = "どんな役割で力を発揮したい？身につけたいスキルや専門領域があれば教えて！";
-  } else {
-    // 従来どおりカテゴリ固有の深掘り
-    q = transferReasonFlow[cat].deep2[0] || "なるほど。他に具体例があれば教えて！";
-  }
+const cat = s.drill.category;
+const cls = classifyMotivation(joined);
+let q;
+if (!cat) {
+  // カテゴリ未確定：pos/mixed→前向き、neg/neutral→通常
+  q = (cls === "pos" || cls === "mixed")
+    ? GENERIC_REASON_Q_POS.deep2[0]
+    : GENERIC_REASON_Q.deep2[0];
+} else if (cat === "仕事内容・キャリアに関すること" && (cls === "pos" || cls === "mixed")) {
+  // キャリア系かつ前向きなら、前向きの聞き方に
+  q = "どんな役割で力を発揮したい？身につけたいスキルや専門領域があれば教えて！";
+} else {
+  // 従来どおりカテゴリ固有の深掘り
+  q = transferReasonFlow[cat].deep2[0] || "なるほど。他に具体例があれば教えて！";
+}
 
   const emp1 = await generateEmpathy(text || "", s);
   return res.json(withMeta({
