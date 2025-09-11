@@ -648,7 +648,7 @@ if (s.step === 4) {
       const joinedUser = s.drill.reasonBuf.join(" ");
 
       // オンコール/夜勤なら強制でプライベート × 候補固定
-const forced1 = forcePrivateOncallNight(joinedUser);
+const forced1 = shouldForcePrivate(s) ? forcePrivateOncallNight(joinedUser) : null;
 if (forced1) {
   s.drill.category = forced1.category;
 
@@ -729,7 +729,7 @@ if (s.drill.count === 0) {
   s.status.memo.reason_raw = text || "";
   s.drill.reasonBuf = [text || ""];
 
-  const forced0 = forcePrivateOncallNight(text);
+  const forced0 = shouldForcePrivate(s) ? forcePrivateOncallNight(text) : null;
   if (forced0) {
     // 深掘りには進まず、まずは1回でキャッチアップ → 確認だけする
     s.drill.category = forced0.category;              // "プライベートに関すること"
@@ -861,7 +861,7 @@ if (!cat) {
     const joinedUser = s.drill.reasonBuf.join(" "); // ここまでのユーザー発話
     
     // オンコール/夜勤なら強制でプライベート × 候補固定
-const forced2 = forcePrivateOncallNight(joinedUser);
+const forced2 = shouldForcePrivate(s) ? forcePrivateOncallNight(joinedUser) : null;
 if (forced2) {
   s.drill.category = forced2.category;
 
@@ -1291,6 +1291,11 @@ function forcePrivateOncallNight(userText = "") {
     };
   }
   return null;
+}
+
+function shouldForcePrivate(s){
+  // 「プライベート(両立)ではない」と否定されたら、以後は強制をかけない
+  return !(s && s.drill && s.drill.flags && s.drill.flags.privateDeclined);
 }
 
 function hasOncallNight(text = "") {
