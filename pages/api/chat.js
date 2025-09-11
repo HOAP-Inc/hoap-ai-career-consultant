@@ -940,7 +940,7 @@ if (s.step === 6) {
   s.status.memo.want_raw.push(text);
   const empW2 = await generateEmpathy(text || "", s);
   return res.json(withMeta({
-    rresponse: joinEmp(empW2, "他にもあったらいいなっていうのはある？（なければ「ない」って返してね）"),
+    response: joinEmp(empW2, "他にもあったらいいなっていうのはある？（なければ「ない」って返してね）"),
     step: 6, status: s.status, isNumberConfirmed: true, candidateNumber: s.status.number, debug: debugState(s)
   }, 6));
 }
