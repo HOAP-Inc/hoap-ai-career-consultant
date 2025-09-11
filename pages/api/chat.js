@@ -169,7 +169,7 @@ function isPositiveMotivation(text = "") {
 
 // === 追加：発話のポジ/ネガ/中立分類 ===
 const POS_TERMS = /(挑戦|やりたい|なりたい|目指(す|して)|スキルアップ|学びたい|成長|キャリア|経験を積みたい|責任|役職|昇進|昇格|資格(を取りたい)?|新しいこと|幅を広げたい)/i;
-const NEG_TERMS = /(嫌い|無理|合わない|しんどい|辛い|やめたい|辞めたい|不満|怒|ストレス|いじめ|ハラスメント|パワハラ|セクハラ|理不尽|圧|支配)/i;
+const NEG_TERMS = /(嫌い|嫌だ|無理|合わない|しんどい|辛い|きつい|やめたい|辞めたい|不満|怒|ストレス|いじめ|ハラスメント|パワハラ|セクハラ|理不尽|圧|支配)/i;
 const MGMT_POS  = /(管理(者|職)).*(なりたい|目指|挑戦)/i; // 「管理者になりたい」等を確実にポジ扱い
 
 function isNegativeMotivation(text=""){ 
@@ -189,8 +189,8 @@ function classifyMotivation(text=""){
 // 追加：上司/管理者×ネガの早期カテゴリ確定
 function detectBossRelationIssue(text = "") {
   const t = String(text).toLowerCase();
-  const boss = /(管理者|管理職|上司|師長|看護師長|部長|課長|マネージャ|ﾏﾈｰｼﾞｬ|リーダー|院長|園長)/;
-  const neg  = /(嫌い|無理|合わない|苦手|不満|理不尽|ストレス|パワハラ|セクハラ|陰口|圧|支配)/;
+  const boss = /(管理者|管理職|上司|師長|看護師長|部長|課長|マネージャ|ﾏﾈｰｼﾞｬ|リーダー|院長|園長|同僚|先輩|後輩|スタッフ|看護師(さん)?)/;
+const neg  = /(嫌い|嫌だ|無理|合わない|苦手|不満|理不尽|ストレス|パワハラ|セクハラ|陰口|圧|支配|きつい|性格がきつい|高圧)/;
   return boss.test(t) && neg.test(t);
 }
 
@@ -440,8 +440,9 @@ if (method !== "POST") {
   const { message = "" } = req.body || {};
   const text = String(message || "").trim();
 
-  // IDフォーマット判定（4〜8桁の数字）
-  const looksId = /^\s*\d{4,8}\s*$/.test(text);
+  // IDフォーマット判定（10〜20桁の数字を許容。ハイフン/空白など混在OK）
+const idDigits = String(text || "").replace(/\D/g, ""); // 数字だけ抽出
+const looksId = idDigits.length >= 10 && idDigits.length <= 20;
 
   // 既にID確認済みで、さらにIDっぽい入力が来たら「次へ進む」案内を返す
   if (s.isNumberConfirmed && looksId) {
@@ -466,7 +467,7 @@ if (method !== "POST") {
         step: 1, status: s.status, isNumberConfirmed: false, candidateNumber: "", debug: debugState(s)
       }, 1));
     }
-    s.status.number = text.replace(/\s+/g, "");
+    s.status.number = idDigits;
     s.isNumberConfirmed = true;
     s.step = 2;
     return res.json(withMeta({
