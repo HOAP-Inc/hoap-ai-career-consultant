@@ -565,13 +565,12 @@ if (s.step === 4) {
         }, 4));
       }
 
-      // 候補が出せない場合：共感を返して Must へ
-      const empathy = await generateEmpathy(joinedUser || s.status.reason || "", s);
-      s.step = 5;
-      return res.json(withMeta({
-        response: `${empathy}\n\n${mustIntroText()}`,
-        step: 5, status: s.status, isNumberConfirmed: true, candidateNumber: s.status.number, debug: debugState(s)
-      }, 5));
+      // 候補が出せない場合：共感を返さずに Must へ
+s.step = 5;
+return res.json(withMeta({
+  response: mustIntroText(),
+  step: 5, status: s.status, isNumberConfirmed: true, candidateNumber: s.status.number, debug: debugState(s)
+}, 5));
     }
     // 再提示
     return res.json(withMeta({
@@ -585,8 +584,6 @@ if (s.drill.phase === "reason" && s.drill.awaitingChoice && s.drill.options?.len
   const pick = normalizePick(text);
   const chosen = s.drill.options.find(o => o === pick);
   if (chosen) {
-    const joinedUser = s.drill.reasonBuf.join(" ");
-    const empathy = await generateEmpathy(joinedUser || s.status.reason || "", s);
     const repeat = `『${chosen}』だね！担当エージェントに伝えておくね。`;
 
     s.status.reason_tag = chosen;
@@ -598,7 +595,7 @@ if (s.drill.phase === "reason" && s.drill.awaitingChoice && s.drill.options?.len
     s.step = 5;
 
     return res.json(withMeta({
-      response: `${empathy}\n${repeat}\n\n${mustIntroText()}`,
+      response: `${repeat}\n\n${mustIntroText()}`,
       step: 5, status: s.status, isNumberConfirmed: true, candidateNumber: s.status.number, debug: debugState(s)
     }, 5));
   }
@@ -609,7 +606,7 @@ if (s.drill.phase === "reason" && s.drill.awaitingChoice && s.drill.options?.len
     step: 4, status: s.status, isNumberConfirmed: true, candidateNumber: s.status.number, debug: debugState(s)
   }, 4));
 }
-
+  
   // 3) 1回目の入力を受信 → 推定 or 汎用深掘りへ
   if (s.drill.count === 0) {
     s.status.reason = text || "";
@@ -732,13 +729,13 @@ if (!cat) {
     const options = rankReasonOptions(allOptions, joinedUser, 3);
 
     if (!options.length) {
-      const empathy = await generateEmpathy(joinedUser || s.status.reason || "", s);
-      s.step = 5;
-      return res.json(withMeta({
-        response: `${empathy}\n\n${mustIntroText()}`,
-        step: 5, status: s.status, isNumberConfirmed: true, candidateNumber: s.status.number, debug: debugState(s)
-      }, 5));
-    }
+  // options.length === 0 のとき：共感なしで Must へ
+  s.step = 5;
+  return res.json(withMeta({
+    response: mustIntroText(),
+    step: 5, status: s.status, isNumberConfirmed: true, candidateNumber: s.status.number, debug: debugState(s)
+  }, 5));
+}
 
     s.drill.phase = "reason";
     s.drill.awaitingChoice = true;
