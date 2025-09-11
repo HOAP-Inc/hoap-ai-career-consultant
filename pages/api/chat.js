@@ -149,10 +149,30 @@ const GENERIC_REASON_Q = {
   ],
 };
 
-// ポジティブ動機の簡易判定
+// 置き換え：isPositiveMotivation
 function isPositiveMotivation(text = "") {
-  const t = String(text);
-  return /(挑戦|やりたい|なりたい|目指(す|して)|スキルアップ|学びたい|成長|キャリア|経験を積みたい|管理者|リーダー|責任|役職|昇進|昇格|資格(を取りたい)?|新しいこと|幅を広げたい)/.test(t);
+  const t = String(text).toLowerCase();
+
+  // 強いネガ語があればポジ扱いしない
+  const neg = /(嫌い|無理|合わない|しんどい|辛い|やめたい|辞めたい|不満|怒|ストレス|いじめ|ハラスメント|パワハラ|セクハラ)/;
+  if (neg.test(t)) return false;
+
+  // 前向きワード
+  const pos = /(挑戦|やりたい|なりたい|目指(す|して)|スキルアップ|学びたい|成長|キャリア|経験を積みたい|責任|役職|昇進|昇格|資格(を取りたい)?|新しいこと|幅を広げたい)/;
+  if (pos.test(t)) return true;
+
+  // 明示的に「管理職になりたい」などはポジ
+  if (/(管理(者|職)).*(なりたい|目指|挑戦)/.test(t)) return true;
+
+  return false;
+}
+
+// 追加：上司/管理者×ネガの早期カテゴリ確定
+function detectBossRelationIssue(text = "") {
+  const t = String(text).toLowerCase();
+  const boss = /(管理者|管理職|上司|師長|看護師長|部長|課長|マネージャ|ﾏﾈｰｼﾞｬ|リーダー|院長|園長)/;
+  const neg  = /(嫌い|無理|合わない|苦手|不満|理不尽|ストレス|パワハラ|セクハラ|陰口|圧|支配)/;
+  return boss.test(t) && neg.test(t);
 }
 
 // ポジティブ用の汎用深掘り
@@ -193,8 +213,8 @@ const transferReasonFlow = {
     deep2: ["それって改善されそうにない感じ？","他のスタッフも同じように感じてる？","具体的にはどんな場面で一番感じる？"],
   },
   "働く仲間に関すること": {
-    keywords: ["人間関係","人","仲間","職場の雰囲気","上司","先輩","看護師長","師長","同僚","チームワーク","いじめ","パワハラ","セクハラ","陰口","愚痴","文句","派閥","お局","理不尽","相談できない","孤立","コミュニケーション","ロールモデル","尊敬","憧れ","見習いたい","価値観","温度感","やる気","信頼","品格","一貫性","目標","手本","職種","連携","助け合い","壁","分断","古株","権力","圧","支配"],
-    internal_options: [
+    keywords: ["人間関係","人","仲間","職場の雰囲気","上司","先輩","看護師長","師長","同僚","チームワーク","いじめ","パワハラ","セクハラ","陰口","愚痴","文句","派閥","お局","理不尽","相談できない","孤立","コミュニケーション","ロールモデル","尊敬","憧れ","見習いたい","価値観","温度感","やる気","信頼","品格","一貫性","目標","手本","職種","連携","助け合い","壁","分断","古株","権力","圧","支配","管理者","管理職","マネージャ","マネージャー","上層部","部長","課長","リーダー","院長","園長"],
+    internal_options: 
       "人間関係のトラブルが少ない職場で働きたい",
       "同じ価値観を持つ仲間と働きたい",
       "尊敬できる上司・経営者と働きたい",
@@ -496,7 +516,7 @@ if (s.step === 4) {
 
       // カテゴリ内の候補を「もっとも合いそうな3つ」に絞る
       const allOptions = (transferReasonFlow[chosenCat]?.internal_options || []);
-      const topOptions = pickTopKOptions(allOptions, joinedUser, 3);
+      const topOptions = rankReasonOptions(allOptions, joinedUser, 3);
 
       // 候補が出せる場合：選択肢提示
       if (topOptions.length) {
@@ -560,6 +580,18 @@ if (s.drill.phase === "reason" && s.drill.awaitingChoice && s.drill.options?.len
     s.status.memo.reason_raw = text || "";
     s.drill.reasonBuf = [text || ""];
 
+    // 先行判定：管理者/上司 × ネガ → 「働く仲間に関すること」へ寄せる
+if (detectBossRelationIssue(text)) {
+  s.drill.category = "働く仲間に関すること";
+  s.drill.count = 1;
+  const q = transferReasonFlow["働く仲間に関すること"].deep1[0] || GENERIC_REASON_Q.deep1[0];
+  const emp0 = await generateEmpathy(text, s);
+  return res.json(withMeta({
+    response: `${emp0}\n${q}`,
+    step: 4, status: s.status, isNumberConfirmed: true, candidateNumber: s.status.number, debug: debugState(s)
+  }, 4));
+}
+
     const { best, hits } = scoreCategories(s.drill.reasonBuf.join(" "));
     if (!best || hits === 0 || noOptionCategory(best)) {
   const positive = isPositiveMotivation(s.status.reason || text || "");
@@ -593,6 +625,11 @@ if (s.drill.phase === "reason" && s.drill.awaitingChoice && s.drill.options?.len
   if (s.drill.count === 1) {
     s.drill.reasonBuf.push(text || "");
     const joined = s.drill.reasonBuf.join(" ");
+
+    // 先行補強：1発目で未確定でも、通算文脈で「上司問題」なら寄せる
+if (!s.drill.category && detectBossRelationIssue(joined)) {
+  s.drill.category = "働く仲間に関すること";
+}
 
     // 未確定なら再推定
     if (!s.drill.category) {
@@ -651,7 +688,7 @@ if (s.drill.phase === "reason" && s.drill.awaitingChoice && s.drill.options?.len
     const cat = s.drill.category;
     const allOptions = (transferReasonFlow[cat].internal_options || []);
     const joinedUser = s.drill.reasonBuf.join(" "); // ここまでのユーザー発話
-    const options = pickTopKOptions(allOptions, joinedUser, 3);
+    const options = rankReasonOptions(allOptions, joinedUser, 3);
 
     if (!options.length) {
       const empathy = await generateEmpathy(joinedUser || s.status.reason || "", s);
@@ -950,6 +987,25 @@ function pickTopKOptions(options = [], userText = "", k = 3){
   // スコアが全て0なら、従来どおり先頭k件（念のためのフォールバック）
   const anyHit = scored.some(s => s.score > 0);
   return (anyHit ? scored : options.map(o=>({opt:o,score:0})))
+    .slice(0, k)
+    .map(s => s.opt);
+}
+
+// 追加：候補ランク付け（3件）
+function rankReasonOptions(options = [], userText = "", k = 3) {
+  const t = String(userText).toLowerCase();
+  const boss = /(管理者|管理職|上司|師長|看護師長|部長|課長|マネージャ|ﾏﾈｰｼﾞｬ|リーダー|院長|園長)/;
+
+  return options
+    .map(opt => {
+      let score = scoreSimilarity(opt, userText);
+      // 上司/管理者の文脈なら、人間関係/上司/経営者/ロールモデル系を微ブースト
+      if (boss.test(t) && /(人間関係|上司|経営者|ロールモデル|一体感|価値観)/.test(opt)) {
+        score += 0.15;
+      }
+      return { opt, score };
+    })
+    .sort((a,b)=> b.score - a.score)
     .slice(0, k)
     .map(s => s.opt);
 }
