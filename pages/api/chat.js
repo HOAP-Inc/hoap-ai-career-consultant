@@ -402,11 +402,16 @@ export default async function handler(req, res) {
 
   // セッションIDを GET/POST どちらでも拾う
   const method = (req.method || "GET").toUpperCase();
-  const sessionId =
-    method === "GET"
-      ? String(req.query?.sessionId || "default")
-      : String((req.body && req.body.sessionId) || "default");
-
+  // セッションIDを統一的に拾う（ヘッダ > クエリ > ボディ の順）＋trim
+const headerSid = String(req.headers["x-session-id"] || "").trim();
+const querySid  = String(req.query?.sessionId || "").trim();
+const bodySid   = String((req.body && req.body.sessionId) || "").trim();
+const sessionId = headerSid || querySid || bodySid || "default";
+  // クライアントからスナップショットが来ていて、サーバ側にセッションがなければ復元
+if (!sessions[sessionId] && req.body?.snapshot && method === "POST") {
+  sessions[sessionId] = req.body.snapshot;
+}
+  
   // セッション確保
   const s = sessions[sessionId] ?? (sessions[sessionId] = initSession());
 
