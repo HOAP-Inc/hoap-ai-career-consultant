@@ -900,7 +900,6 @@ if (forced2) {
     candidateNumber: s.status.number,
     debug: debugState(s)
   }, 5));
-});
 }
 
     // ★ここから追加：1択なら即確定して Step5 へ
