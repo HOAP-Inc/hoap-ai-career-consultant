@@ -593,30 +593,31 @@ if (s.step === 4) {
 const forced1 = forcePrivateOncallNight(joinedUser);
 if (forced1) {
   s.drill.category = forced1.category;
+
+  // 1択なら即確定して Step5 へ
+  const sole = forced1.options && forced1.options.length === 1 ? forced1.options[0] : null;
+  if (sole) {
+    s.status.reason_tag = sole;
+    const rid = reasonIdByName.get(sole);
+    s.status.reason_ids = Array.isArray(rid) ? rid : (rid != null ? [rid] : []);
+    s.step = 5;
+    return res.json(withMeta({
+      response: `『${sole}』だね！担当エージェントに伝えておくね。\n\n${mustIntroText()}`,
+      step: 5, status: s.status, isNumberConfirmed: true,
+      candidateNumber: s.status.number, debug: debugState(s)
+    }, 5));
+  }
+
+  // 通常（複数候補）なら選択肢提示
   s.drill.phase = "reason";
   s.drill.awaitingChoice = true;
-  s.drill.options = forced1.options; // ← 「家庭との両立に理解のある職場で働きたい」だけ
+  s.drill.options = forced1.options;
   return res.json(withMeta({
     response: `この中だとどれが一番近い？『${s.drill.options.map(x=>`［${x}］`).join("／")}』`,
     step: 4, status: s.status, isNumberConfirmed: true,
     candidateNumber: s.status.number, debug: debugState(s)
   }, 4));
 }
-
-      // カテゴリ内の候補を「もっとも合いそうな3つ」に絞る
-      const allOptions = (transferReasonFlow[chosenCat]?.internal_options || []);
-      const topOptions = rankReasonOptions(allOptions, joinedUser, 3);
-
-      // 候補が出せる場合：選択肢提示
-      if (topOptions.length) {
-        s.drill.phase = "reason";
-        s.drill.awaitingChoice = true;
-        s.drill.options = topOptions;
-        return res.json(withMeta({
-          response: `この中だとどれが一番近い？『${topOptions.map(x=>`［${x}］`).join("／")}』`,
-          step: 4, status: s.status, isNumberConfirmed: true, candidateNumber: s.status.number, debug: debugState(s)
-        }, 4));
-      }
 
       // 候補が出せない場合：共感を返さずに Must へ
 s.step = 5;
@@ -798,9 +799,25 @@ if (!cat) {
 const forced2 = forcePrivateOncallNight(joinedUser);
 if (forced2) {
   s.drill.category = forced2.category;
+
+  // 1択なら即確定して Step5 へ
+  const sole = forced2.options && forced2.options.length === 1 ? forced2.options[0] : null;
+  if (sole) {
+    s.status.reason_tag = sole;
+    const rid = reasonIdByName.get(sole);
+    s.status.reason_ids = Array.isArray(rid) ? rid : (rid != null ? [rid] : []);
+    s.step = 5;
+    return res.json(withMeta({
+      response: `『${sole}』だね！担当エージェントに伝えておくね。\n\n${mustIntroText()}`,
+      step: 5, status: s.status, isNumberConfirmed: true,
+      candidateNumber: s.status.number, debug: debugState(s)
+    }, 5));
+  }
+
+  // 通常（複数候補）なら選択肢提示
   s.drill.phase = "reason";
   s.drill.awaitingChoice = true;
-  s.drill.options = forced2.options; // ← 固定1択
+  s.drill.options = forced2.options;
   return res.json(withMeta({
     response: `この中だとどれが一番近い？『${s.drill.options.map(x=>`［${x}］`).join("／")}』`,
     step: 4, status: s.status, isNumberConfirmed: true,
@@ -816,6 +833,20 @@ if (forced2) {
   return res.json(withMeta({
     response: mustIntroText(),
     step: 5, status: s.status, isNumberConfirmed: true, candidateNumber: s.status.number, debug: debugState(s)
+  }, 5));
+}
+
+    // ★ここから追加：1択なら即確定して Step5 へ
+if (options.length === 1) {
+  const sole = options[0];
+  s.status.reason_tag = sole;
+  const rid = reasonIdByName.get(sole);
+  s.status.reason_ids = Array.isArray(rid) ? rid : (rid != null ? [rid] : []);
+  s.step = 5;
+  return res.json(withMeta({
+    response: `『${sole}』だね！担当エージェントに伝えておくね。\n\n${mustIntroText()}`,
+    step: 5, status: s.status, isNumberConfirmed: true,
+    candidateNumber: s.status.number, debug: debugState(s)
   }, 5));
 }
 
