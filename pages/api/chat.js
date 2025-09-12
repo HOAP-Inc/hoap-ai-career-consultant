@@ -388,7 +388,7 @@ function initSession() {
     },
   };
 }
-
+export default async function handler(req, res) {
 // ---- 入口 ----
 if (req.method === "OPTIONS" || req.method === "HEAD") {
   res.setHeader('Content-Type', 'application/json; charset=utf-8');
