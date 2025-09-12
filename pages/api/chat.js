@@ -124,7 +124,17 @@ try {
 } catch (e) {
   console.error("tagIdByName 構築失敗:", e);
 }
-
+// ★追加：ID → 正式名称
+const tagNameById = new Map();
+try {
+  for (const t of (Array.isArray(tagList) ? tagList : [])) {
+    if (t?.id == null) continue;
+    const name = String(t?.name ?? "");
+    if (name) tagNameById.set(t.id, name);
+  }
+} catch (e) {
+  console.error("tagNameById 構築失敗:", e);
+}
 // ←ここに追記
 const PLACE_ALIASES = {
   // 医療・病院
@@ -651,20 +661,129 @@ if (!s.drill.awaitingChoice) {
   
   // ---- Step3：現職 ----
 if (s.step === 3) {
-  s.status.place = text || "";
-  // 入力に含まれるタグ名を拾って tags.json のIDに変換
-  s.status.place_ids = matchTagIdsInText(text);  // ← 追加
+  // すでに選択肢提示中なら、ユーザーの選択を確定
+  if (s.drill.phase === "place" && s.drill.awaitingChoice && s.drill.options?.length) {
+    const pick = normalizePick(text);
+    // まずはそのまま一致
+    let chosen = s.drill.options.find(o => o === pick);
 
-  s.step = 4;
+    // ゆらぎ対策（全角/半角・空白除去）
+    if (!chosen) {
+      const toFW = (x) => x.replace(/\(/g,"（").replace(/\)/g,"）").replace(/~/g,"～");
+      const toHW = (x) => x.replace(/（/g,"(").replace(/）/g,")").replace(/～/g,"~");
+      const normalize = (x) => toHW(toFW(String(x||""))).replace(/[ \t\r\n\u3000]/g,"");
+      chosen = s.drill.options.find(o => normalize(o) === normalize(pick)) || null;
+    }
+
+    if (chosen) {
+      s.status.place = chosen;
+
+      // ラベル→ID（優先：厳密一致。なければファジー）
+      const id =
+          tagIdByName.get(chosen)
+       || tagIdByName.get(chosen.replace(/\(/g,"（").replace(/\)/g,"）").replace(/~/g,"～"))
+       || tagIdByName.get(chosen.replace(/（/g,"(").replace(/）/g,")").replace(/～/g,"~"));
+      if (id != null) {
+        s.status.place_ids = [id];
+      } else {
+        // 念のため
+        const ids = matchTagIdsInText(chosen);
+        s.status.place_ids = Array.isArray(ids) && ids.length ? [ids[0]] : [];
+      }
+
+      // 次ステップへ
+      s.drill = {
+        phase: "reason",
+        count: 0,
+        category: null,
+        awaitingChoice: false,
+        options: [],
+        reasonBuf: [],
+        flags: s.drill.flags || {},
+      };
+      s.step = 4;
+      return res.json(withMeta({
+        response: "はじめに、今回の転職理由を教えてほしいな。きっかけってどんなことだった？\nしんどいと思ったこと、これはもう無理って思ったこと、逆にこういうことに挑戦したい！って思ったこと、何でもOKだよ◎",
+        step: 4, status: s.status, isNumberConfirmed: true, candidateNumber: s.status.number, debug: debugState(s)
+      }, 4));
+    }
+
+    // 再提示
+    return res.json(withMeta({
+      response: `ごめん、もう一度教えて！この中だとどれが一番近い？『${s.drill.options.map(x=>`［${x}］`).join("／")}』`,
+      step: 3, status: s.status, isNumberConfirmed: true, candidateNumber: s.status.number, debug: debugState(s)
+    }, 3));
+  }
+
+  // 初回入力：候補抽出
+  const foundLabels = matchPlacesInText(text); // ラベル配列
+  const raw = String(text || "").trim();
+
+  // 完全一致を最優先で自動確定
+  const toFW = (x) => x.replace(/\(/g,"（").replace(/\)/g,"）").replace(/~/g,"～");
+  const toHW = (x) => x.replace(/（/g,"(").replace(/）/g,")").replace(/～/g,"~");
+  const normalize = (x) => toHW(toFW(String(x||""))).replace(/[ \t\r\n\u3000]/g,"");
+  const exact = foundLabels.find(l => normalize(l) === normalize(raw));
+
+  const finalize = (label) => {
+    s.status.place = label;
+    // ラベル→ID
+    const id =
+        tagIdByName.get(label)
+     || tagIdByName.get(toFW(label))
+     || tagIdByName.get(toHW(label));
+    if (id != null) s.status.place_ids = [id];
+    else            s.status.place_ids = matchTagIdsInText(label);
+
+    // 次へ
+    s.drill = {
+      phase: "reason",
+      count: 0,
+      category: null,
+      awaitingChoice: false,
+      options: [],
+      reasonBuf: [],
+      flags: s.drill.flags || {},
+    };
+    s.step = 4;
+    return res.json(withMeta({
+      response: "はじめに、今回の転職理由を教えてほしいな。きっかけってどんなことだった？\nしんどいと思ったこと、これはもう無理って思ったこと、逆にこういうことに挑戦したい！って思ったこと、何でもOKだよ◎",
+      step: 4, status: s.status, isNumberConfirmed: true, candidateNumber: s.status.number, debug: debugState(s)
+    }, 4));
+  };
+
+  if (exact) {
+    return finalize(exact);
+  }
+  if (foundLabels.length === 1) {
+    return finalize(foundLabels[0]);
+  }
+  if (foundLabels.length >= 2) {
+    // 複数候補 → 選択肢提示（最大6）
+    const options = foundLabels.slice(0, 6);
+    s.drill.phase = "place";
+    s.drill.awaitingChoice = true;
+    s.drill.options = options;
+    return res.json(withMeta({
+      response: `どれが一番近い？『${options.map(x=>`［${x}］`).join("／")}』`,
+      step: 3, status: s.status, isNumberConfirmed: true, candidateNumber: s.status.number, debug: debugState(s)
+    }, 3));
+  }
+
+  // 候補ゼロ：原文のまま保存（IDは可能な範囲で拾う）
+  s.status.place = raw;
+  s.status.place_ids = matchTagIdsInText(raw);
+
   s.drill = {
-  phase: "reason",
-  count: 0,
-  category: null,
-  awaitingChoice: false,
-  options: [],
-  reasonBuf: [],
-  flags: s.drill.flags || {},
-};
+    phase: "reason",
+    count: 0,
+    category: null,
+    awaitingChoice: false,
+    options: [],
+    reasonBuf: [],
+    flags: s.drill.flags || {},
+  };
+  s.step = 4;
   return res.json(withMeta({
     response: "はじめに、今回の転職理由を教えてほしいな。きっかけってどんなことだった？\nしんどいと思ったこと、これはもう無理って思ったこと、逆にこういうことに挑戦したい！って思ったこと、何でもOKだよ◎",
     step: 4, status: s.status, isNumberConfirmed: true, candidateNumber: s.status.number, debug: debugState(s)
@@ -1581,6 +1700,66 @@ function matchLicensesInText(text = "") {
   }
   return Array.from(out);
 }
+
+// 入力に含まれる「現職（施設/形態）」候補ラベルを返す（重複排除）
+function matchPlacesInText(text = "") {
+  const raw = String(text || "").trim();
+  if (!raw) return [];
+
+  const toFW = (s) => String(s || "").replace(/\(/g,"（").replace(/\)/g,"）").replace(/~/g,"～");
+  const toHW = (s) => String(s || "").replace(/（/g,"(").replace(/）/g,")").replace(/～/g,"~");
+  const scrub = (s) =>
+    String(s || "").toLowerCase()
+      .replace(/[ \t\r\n\u3000、。・／\/＿\-–—~～!?！？。、，．・]/g, "");
+  const norm  = (s) => scrub(toHW(toFW(s)));
+  const normText = norm(raw);
+
+  const out = new Set();
+
+  // 0) 厳密一致 → 正式ラベル
+  const byExact =
+      tagIdByName.get(raw)
+   || tagIdByName.get(toFW(raw))
+   || tagIdByName.get(toHW(raw));
+  if (byExact != null) {
+    const name = tagNameById.get(byExact);
+    if (name) out.add(name);
+  }
+
+  // 1) エイリアス命中 → 正式ラベル
+  for (const [alias, label] of Object.entries(PLACE_ALIASES || {})) {
+    if (!alias || !label) continue;
+    if (normText.includes(norm(alias))) out.add(label);
+  }
+
+  // 2) 双方向部分一致
+  const normalize = (s) => (s ? norm(s) : "");
+  for (const t of (Array.isArray(tagList) ? tagList : [])) {
+    const name = String(t?.name ?? "");
+    if (!name) continue;
+    const nTag = normalize(name);
+    if (!nTag) continue;
+    if (normText.includes(nTag) || nTag.includes(normText)) out.add(name);
+  }
+
+  // 3) ファジー補完（必要時）
+  if (out.size === 0) {
+    const pool = [];
+    for (const t of (Array.isArray(tagList) ? tagList : [])) {
+      const name = String(t?.name ?? "");
+      if (!name) continue;
+      const s = scoreSimilarity(name, raw);
+      if (s > 0) pool.push({ name, s });
+    }
+    pool.sort((a,b)=> b.s - a.s);
+    for (const { name, s } of pool.slice(0, 6)) {
+      if (s >= 0.35) out.add(name);
+    }
+  }
+
+  return Array.from(out);
+}
+
 // これで既存の matchTagIdsInText を“丸ごと置き換え”
 function matchTagIdsInText(text = "") {
   const raw = String(text || "").trim();
