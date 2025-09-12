@@ -29,6 +29,7 @@ try {
 
 // 「所有資格」名称 → ID のマップ（全角/半角ゆらぎも両方登録）
 const licenseTagIdByName = new Map();
+const licenseTagNameById = new Map(); // ★追加：id -> 正式名称
 try {
   for (const t of (Array.isArray(licenseTagList) ? licenseTagList : [])) {
     const name = String(t?.name ?? "");
@@ -38,6 +39,7 @@ try {
     licenseTagIdByName.set(name, t.id);
     licenseTagIdByName.set(fw, t.id);
     licenseTagIdByName.set(hw, t.id);
+    licenseTagNameById.set(t.id, name); // ★追加
   }
 } catch (e) {
   console.error("licenseTagIdByName 構築失敗:", e);
@@ -1637,42 +1639,62 @@ function getIdsForLicenseLabel(label = "") {
 }
 
 // === 所有資格（licenses.tags.json）用：正式ラベルからID配列を引く ===
+// 仕様：まず「ラベルそのもの」の厳密一致のみを最優先（単一IDで返す）。
+//       見つからない場合のみ、別名や部分一致にフォールバックして最も近い1件に絞る。
 function getIdsForOfficialLicense(label = "") {
   if (!label) return [];
 
-  // ゆらぎ吸収
   const toFW = (s) => String(s || "").replace(/\(/g, "（").replace(/\)/g, "）").replace(/~/g, "～");
   const toHW = (s) => String(s || "").replace(/（/g, "(").replace(/）/g, ")").replace(/～/g, "~");
   const scrub = (s) => String(s || "").trim().toLowerCase()
     .replace(/[ \t\r\n\u3000、。・／\/＿\u2013\u2014\-~～!?！？。、，．・]/g, "");
   const normalize = (s) => scrub(toHW(toFW(s)));
 
-  // ラベル自身＋別名（licenseMapから逆引き）を候補に
-  const needleSet = new Set();
-  const pushAllForms = (x) => { if (x) { needleSet.add(x); needleSet.add(toFW(x)); needleSet.add(toHW(x)); } };
-  pushAllForms(label);
+  // 1) 「ラベルそのもの」だけで厳密一致（全角/半角ゆらぎは見るが、ここではエイリアスは見ない）
+  const exactByLabel =
+      licenseTagIdByName.get(label)
+   || licenseTagIdByName.get(toFW(label))
+   || licenseTagIdByName.get(toHW(label));
+  if (exactByLabel != null) return [exactByLabel];
+
+  // 2) ここからフォールバック：ラベル＋その別名を候補語にして、最も近い1件に絞る
+  const needleSet = new Set([label, toFW(label), toHW(label)]);
   for (const [alias, labels] of licenseMap.entries()) {
-    if (Array.isArray(labels) && labels.includes(label)) pushAllForms(alias);
+    if (Array.isArray(labels) && labels.includes(label)) {
+      needleSet.add(alias);
+      needleSet.add(toFW(alias));
+      needleSet.add(toHW(alias));
+    }
   }
 
-  // ① 厳密一致
-  const exact = new Set();
+  // 2-1) 候補語での厳密一致が複数出たら、「候補名の正規名称」と元ラベルの近さで1件に絞る
+  const exactCandidates = [];
   for (const n of needleSet) {
     const id = licenseTagIdByName.get(n);
-    if (id != null) exact.add(id);
+    if (id != null) {
+      const name = licenseTagNameById.get(id) || "";
+      exactCandidates.push({ id, name });
+    }
   }
-  if (exact.size) return Array.from(exact);
+  if (exactCandidates.length) {
+    exactCandidates.sort((a, b) =>
+      scoreSimilarity(normalize(b.name), normalize(label)) -
+      scoreSimilarity(normalize(a.name), normalize(label))
+    );
+    return [exactCandidates[0].id];
+  }
 
-  // ② 双方向部分一致
+  // 2-2) それでも無ければ、licenses.tags.json 全体を双方向部分一致で探索し、最も近い1件
   const needles = Array.from(needleSet).map(normalize).filter(Boolean);
-  const out = new Set();
+  let best = null;
   for (const t of (Array.isArray(licenseTagList) ? licenseTagList : [])) {
     const name = String(t?.name ?? "");
     if (!name || t?.id == null) continue;
     const nt = normalize(name);
-    for (const nd of needles) {
-      if (nt.includes(nd) || nd.includes(nt)) { out.add(t.id); break; }
-    }
+    const hit = needles.some(nd => nt.includes(nd) || nd.includes(nt));
+    if (!hit) continue;
+    const sim = scoreSimilarity(nt, normalize(label));
+    if (!best || sim > best.sim) best = { id: t.id, sim };
   }
-  return Array.from(out);
+  return best ? [best.id] : [];
 }
