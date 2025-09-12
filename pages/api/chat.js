@@ -556,7 +556,7 @@ if (!s.drill.awaitingChoice) {
   if (exact) {
     s.status.role = exact;
     s.status.licenses = [exact];
-    ss.status.role_ids = getIdsForOfficialLicense(exact);
+    s.status.role_ids = getIdsForOfficialLicense(exact);
     s.step = 3;
     return res.json(withMeta({
       response: "受け取ったよ！次に【今どこで働いてる？】を教えてね。\n（例）急性期病棟／訪問看護ステーション",
