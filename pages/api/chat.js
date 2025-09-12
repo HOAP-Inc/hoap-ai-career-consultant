@@ -180,32 +180,39 @@ const PLACE_ALIASES = {
 };
 
 // ---- 転職理由の名称→ID マップ（job_change_purposes.json）----
-let reasonList = [];
+let reasonMaster = [];
 try {
-  const raw = require('../../job_change_purposes.json');  // tags.json と同じ階層に置いた前提
-  if (Array.isArray(raw?.items))       reasonList = raw.items;
-  else if (Array.isArray(raw?.tags))   reasonList = raw.tags;
-  else if (Array.isArray(raw))         reasonList = raw;
-  else                                 reasonList = [];
+  const raw = require("../../job_change_purposes.json");  // tags.json と同じ階層
+  if (Array.isArray(raw))              reasonMaster = raw;
+  else if (Array.isArray(raw?.items))  reasonMaster = raw.items;
+  else if (Array.isArray(raw?.tags))   reasonMaster = raw.tags;
+  else                                 reasonMaster = [];
 } catch (e) {
-  console.error('job_change_purposes.json 読み込み失敗:', e);
-  reasonList = [];
+  console.error("job_change_purposes.json 読み込み失敗:", e);
+  reasonMaster = [];
 }
 
 const reasonIdByName = new Map();
+const reasonNameById = new Map(); // 逆引きも作っておく
 try {
-  for (const t of (Array.isArray(reasonList) ? reasonList : [])) {
-    const name = String(t?.name ?? '');
-    const id   = t?.id;
-    if (!name || id == null) continue;
-    const fw = name.replace(/\(/g, '（').replace(/\)/g, '）').replace(/~/g, '～');
-    const hw = name.replace(/（/g, '(').replace(/）/g, ')').replace(/～/g, '~');
-    reasonIdByName.set(name, id);
+  for (const t of (Array.isArray(reasonMaster) ? reasonMaster : [])) {
+    // 旧name互換も見るが、基本は tag_label を使う
+    const label = String(t?.tag_label ?? t?.name ?? "");
+    const id    = t?.id;
+    if (!label || id == null) continue;
+
+    // 全角/半角ゆらぎも両方登録
+    const fw = label.replace(/\(/g, "（").replace(/\)/g, "）").replace(/~/g, "～");
+    const hw = label.replace(/（/g, "(").replace(/）/g, ")").replace(/～/g, "~");
+
+    reasonIdByName.set(label, id);
     reasonIdByName.set(fw, id);
     reasonIdByName.set(hw, id);
+
+    reasonNameById.set(id, label);
   }
 } catch (e) {
-  console.error('reasonIdByName 構築失敗:', e);
+  console.error("reasonIdByName 構築失敗:", e);
 }
 
 // ---- Step ラベル（UI用） ----
