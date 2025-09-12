@@ -389,47 +389,39 @@ function initSession() {
   };
 }
 export default async function handler(req, res) {
-  // ==== CORS（プリフライトでも必ず JSON を返す）====
+  // ==== CORS（常にJSONを返す前提で統一）====
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Vary", "Origin");
-  res.setHeader("Access-Control-Allow-Methods", "GET,POST,PUT,PATCH,HEAD,OPTIONS");
+  res.setHeader("Access-Control-Allow-Methods", "GET,POST,PUT,PATCH,DELETE,HEAD,OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type, X-Session-Id");
+  res.setHeader("Allow", "GET,POST,PUT,PATCH,DELETE,HEAD,OPTIONS");
+  res.setHeader("Content-Type", "application/json; charset=utf-8");
 
-  // OPTIONS は 200 + JSON（フロントの json() で安全）
-  if (req.method === "OPTIONS") {
-    res.setHeader("Content-Type", "application/json; charset=utf-8");
-    return res.status(200).json({ ok: true });
-  }
-
-  // HEAD は 204（ボディなし）
-  if (req.method === "HEAD") {
-    return res.status(204).end();
-  }
-
-  // ★★★ ここを必ず入れる（抜けていたため 500 の原因になっていた）★★★
+  // メソッド正規化
   const method = (req.method || "GET").toUpperCase();
+
+  // セッションIDの取り出しは先にやる（全メソッドで同じ応答が返るように）
   const headerSid = String(req.headers["x-session-id"] || "").trim();
   const querySid  = String(req.query?.sessionId || "").trim();
-  const bodySid   = String((req.body && req.body.sessionId) || "").trim();
+  // 予防：req.bodyが未パース/空でも落ちないように
+  const safeBody  = (typeof req.body === "object" && req.body) ? req.body : {};
+  const bodySid   = String(safeBody.sessionId || "").trim();
   const sessionId = headerSid || querySid || bodySid || "default";
 
-  if (!sessions[sessionId] && req.body?.snapshot && method === "POST") {
-    sessions[sessionId] = req.body.snapshot;
+  if (!sessions[sessionId] && safeBody.snapshot && method === "POST") {
+    sessions[sessionId] = safeBody.snapshot;
   }
-  
-  // セッション確保
   const s = sessions[sessionId] ?? (sessions[sessionId] = initSession());
-
-  // 念のため配列初期化
   if (!s.status.must_ids) s.status.must_ids = [];
   if (!s.status.want_ids) s.status.want_ids = [];
 
-  // ========== 初回（GET）や想定外メソッドは、セッションを尊重して返す ==========
+  // ここで、POST 以外の全メソッドは **必ず 200 + JSON** を返す
+  // （OPTIONS/HEAD/PUT/PATCH/DELETE/GET を統一挙動にする）
   if (method !== "POST") {
-    const greet =
-      s.isNumberConfirmed
-        ? nextAfterId(s)
-        : "こんにちは！私はAIキャリアエージェント『ほーぷちゃん』です🤖✨\n担当との面談の前に、あなたの希望条件や想いを整理していくね！\n\n最初に【求職者ID】を教えてね。※メールに届いているIDだよ。";
+    // OPTIONS も HEAD も 200 + JSON（空でOK）に統一し、フロントの response.json() を必ず成功させる
+    const greet = s.isNumberConfirmed
+      ? nextAfterId(s)
+      : "こんにちは！私はAIキャリアエージェント『ほーぷちゃん』です🤖✨\n担当との面談の前に、あなたの希望条件や想いを整理していくね！\n\n最初に【求職者ID】を教えてね。※メールに届いているIDだよ。";
 
     return res.status(200).json(withMeta({
       response: greet,
@@ -441,7 +433,6 @@ export default async function handler(req, res) {
     }, s.step));
   }
 
-  // ========== ここから通常の会話処理（POST） ==========
   // ========== ここから通常の会話処理（POST） ==========
   const { message = "" } = req.body || {};
   const text = String(message || "").trim();
