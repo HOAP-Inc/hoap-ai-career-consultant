@@ -17,6 +17,32 @@ try {
   licenses = {};
 }
 
+// 所有資格の ID マスタ（licenses.tags.json）を読む
+let licenseTagList = [];
+try {
+  const raw = require("../../licenses.tags.json"); // ルート直下（tags.jsonと同階層）
+  licenseTagList = Array.isArray(raw?.tags) ? raw.tags : (Array.isArray(raw) ? raw : []);
+} catch (e) {
+  console.error("licenses.tags.json 読み込み失敗:", e);
+  licenseTagList = [];
+}
+
+// 「所有資格」名称 → ID のマップ（全角/半角ゆらぎも両方登録）
+const licenseTagIdByName = new Map();
+try {
+  for (const t of (Array.isArray(licenseTagList) ? licenseTagList : [])) {
+    const name = String(t?.name ?? "");
+    if (!name || t?.id == null) continue;
+    const fw = name.replace(/\(/g, "（").replace(/\)/g, "）").replace(/~/g, "～");
+    const hw = name.replace(/（/g, "(").replace(/）/g, ")").replace(/～/g, "~");
+    licenseTagIdByName.set(name, t.id);
+    licenseTagIdByName.set(fw, t.id);
+    licenseTagIdByName.set(hw, t.id);
+  }
+} catch (e) {
+  console.error("licenseTagIdByName 構築失敗:", e);
+}
+
 // 所有資格の「別名→候補ラベル複数」マップを構築
 const licenseMap = new Map(); // Map<string, string[]>
 
@@ -475,6 +501,10 @@ const looksId = idDigits.length >= 10 && idDigits.length <= 20;
 
   // ---- Step2：職種（所有資格） ----
 if (s.step === 2) {
+  // ユーザーの元発話を保存（ID化失敗時はこの文字列をそのまま表示）
+if (!s.drill.awaitingChoice) {
+  s.status.memo.role_raw = text || "";
+}
   // すでに選択肢を出している場合の応答
   if (s.drill.phase === "license" && s.drill.awaitingChoice && s.drill.options?.length) {
     const pick = normalizePick(text);
@@ -491,6 +521,7 @@ if (s.step === 2) {
   s.status.role = chosen;
   s.status.licenses = [chosen];
   s.status.role_ids = []; // ← tags.json由来のID取得フローを廃止
+      s.status.role_ids = getIdsForOfficialLicense(chosen);
   s.drill = {
   phase: null,
   count: 0,
@@ -525,7 +556,7 @@ if (s.step === 2) {
   if (exact) {
     s.status.role = exact;
     s.status.licenses = [exact];
-    s.status.role_ids = [];
+    ss.status.role_ids = getIdsForOfficialLicense(exact);
     s.step = 3;
     return res.json(withMeta({
       response: "受け取ったよ！次に【今どこで働いてる？】を教えてね。\n（例）急性期病棟／訪問看護ステーション",
@@ -538,7 +569,7 @@ if (s.step === 2) {
   if (found.length === 1) {
     s.status.role = found[0];
     s.status.licenses = [found[0]];
-    s.status.role_ids = [];
+    s.status.role_ids = getIdsForOfficialLicense(found[0]);
     s.step = 3;
     return res.json(withMeta({
       response: "受け取ったよ！次に【今どこで働いてる？】を教えてね。\n（例）急性期病棟／訪問看護ステーション",
@@ -1366,9 +1397,15 @@ function buildStatusBar(st, currentStep = 0) {
     求職者ID: st.number || "",
 
     職種:
-      roleLabel
-        ? (roleIsConsistent ? roleLabel : "済")
-        : "",
+  (() => {
+    if (!roleLabel && !st.memo?.role_raw) return "";
+    const hasIds  = Array.isArray(st.role_ids) && st.role_ids.length > 0;
+    const roleRaw = st.memo?.role_raw || "";
+    // ID化できたら「正式ラベル（ID:...）」、できなければユーザーの元発話をそのまま
+    return hasIds
+      ? `${roleLabel}（${fmtIds(st.role_ids)}）`
+      : (roleRaw || roleLabel || "");
+  })(),
 
     現職:
       st.place
@@ -1597,4 +1634,45 @@ function getIdsForLicenseLabel(label = "") {
   }
 
   return Array.from(ids);
+}
+
+// === 所有資格（licenses.tags.json）用：正式ラベルからID配列を引く ===
+function getIdsForOfficialLicense(label = "") {
+  if (!label) return [];
+
+  // ゆらぎ吸収
+  const toFW = (s) => String(s || "").replace(/\(/g, "（").replace(/\)/g, "）").replace(/~/g, "～");
+  const toHW = (s) => String(s || "").replace(/（/g, "(").replace(/）/g, ")").replace(/～/g, "~");
+  const scrub = (s) => String(s || "").trim().toLowerCase()
+    .replace(/[ \t\r\n\u3000、。・／\/＿\u2013\u2014\-~～!?！？。、，．・]/g, "");
+  const normalize = (s) => scrub(toHW(toFW(s)));
+
+  // ラベル自身＋別名（licenseMapから逆引き）を候補に
+  const needleSet = new Set();
+  const pushAllForms = (x) => { if (x) { needleSet.add(x); needleSet.add(toFW(x)); needleSet.add(toHW(x)); } };
+  pushAllForms(label);
+  for (const [alias, labels] of licenseMap.entries()) {
+    if (Array.isArray(labels) && labels.includes(label)) pushAllForms(alias);
+  }
+
+  // ① 厳密一致
+  const exact = new Set();
+  for (const n of needleSet) {
+    const id = licenseTagIdByName.get(n);
+    if (id != null) exact.add(id);
+  }
+  if (exact.size) return Array.from(exact);
+
+  // ② 双方向部分一致
+  const needles = Array.from(needleSet).map(normalize).filter(Boolean);
+  const out = new Set();
+  for (const t of (Array.isArray(licenseTagList) ? licenseTagList : [])) {
+    const name = String(t?.name ?? "");
+    if (!name || t?.id == null) continue;
+    const nt = normalize(name);
+    for (const nd of needles) {
+      if (nt.includes(nd) || nd.includes(nt)) { out.add(t.id); break; }
+    }
+  }
+  return Array.from(out);
 }
