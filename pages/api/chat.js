@@ -425,22 +425,23 @@ export default async function handler(req, res) {
   if (!s.status.want_ids) s.status.want_ids = [];
 
   // ========== 初回（GET）や想定外メソッドは、セッションを尊重して返す ==========
-if (method !== "POST") {
-  const greet =
-    s.isNumberConfirmed
-      ? nextAfterId(s) // 既にIDが入っていれば次の案内を出す
-      : "こんにちは！私はAIキャリアエージェント『ほーぷちゃん』です🤖✨\n担当との面談の前に、あなたの希望条件や想いを整理していくね！\n\n最初に【求職者ID】を教えてね。※メールに届いているIDだよ。";
+  if (method !== "POST") {
+    const greet =
+      s.isNumberConfirmed
+        ? nextAfterId(s)
+        : "こんにちは！私はAIキャリアエージェント『ほーぷちゃん』です🤖✨\n担当との面談の前に、あなたの希望条件や想いを整理していくね！\n\n最初に【求職者ID】を教えてね。※メールに届いているIDだよ。";
 
-  return res.status(200).json(withMeta({
-    response: greet,
-    step: s.step,                               // ← ここがポイント：現セッションのstepをそのまま返す
-    status: s.status,
-    isNumberConfirmed: s.isNumberConfirmed,     // ← これも保持したまま返す
-    candidateNumber: s.status.number || "",
-    debug: debugState(s),
-  }, s.step));
-}
+    return res.status(200).json(withMeta({
+      response: greet,
+      step: s.step,
+      status: s.status,
+      isNumberConfirmed: s.isNumberConfirmed,
+      candidateNumber: s.status.number || "",
+      debug: debugState(s),
+    }, s.step));
+  }
 
+  // ========== ここから通常の会話処理（POST） ==========
   // ========== ここから通常の会話処理（POST） ==========
   const { message = "" } = req.body || {};
   const text = String(message || "").trim();
