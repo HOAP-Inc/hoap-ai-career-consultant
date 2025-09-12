@@ -389,30 +389,24 @@ function initSession() {
   };
 }
 export default async function handler(req, res) {
-    // ==== CORS 設定 ====
+  // ==== CORS（プリフライトでも必ず JSON を返す）====
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Vary", "Origin");
-  res.setHeader("Access-Control-Allow-Methods", "GET,POST,HEAD,OPTIONS");
+  // ← STEP4 で PUT/PATCH を投げるクライアントがあるため、許可メソッドを拡張
+  res.setHeader("Access-Control-Allow-Methods", "GET,POST,PUT,PATCH,HEAD,OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type, X-Session-Id");
 
+  // ここがポイント：プリフライト(OPTIONS)でも JSON を返す
   if (req.method === "OPTIONS") {
-    return res.status(204).end();  // ← プリフライトは204で即終了
-  }
-  if (req.method === "HEAD") {
-    return res.status(200).end();
+    res.setHeader("Content-Type", "application/json; charset=utf-8");
+    return res.status(200).json({ ok: true });
   }
 
-  // セッションIDを GET/POST どちらでも拾う
-  const method = (req.method || "GET").toUpperCase();
-  // セッションIDを統一的に拾う（ヘッダ > クエリ > ボディ の順）＋trim
-const headerSid = String(req.headers["x-session-id"] || "").trim();
-const querySid  = String(req.query?.sessionId || "").trim();
-const bodySid   = String((req.body && req.body.sessionId) || "").trim();
-const sessionId = headerSid || querySid || bodySid || "default";
-  // クライアントからスナップショットが来ていて、サーバ側にセッションがなければ復元
-if (!sessions[sessionId] && req.body?.snapshot && method === "POST") {
-  sessions[sessionId] = req.body.snapshot;
-}
+  // HEAD も JSON を返す（フロントが json() を呼んでも落ちないようにする）
+  if (req.method === "HEAD") {
+    res.setHeader("Content-Type", "application/json; charset=utf-8");
+    return res.status(200).json({ ok: true });
+  }
   
   // セッション確保
   const s = sessions[sessionId] ?? (sessions[sessionId] = initSession());
