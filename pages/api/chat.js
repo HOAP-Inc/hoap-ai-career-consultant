@@ -491,7 +491,15 @@ if (s.step === 2) {
   s.status.role = chosen;
   s.status.licenses = [chosen];
   s.status.role_ids = []; // ← tags.json由来のID取得フローを廃止
-  s.drill = { phase: null, count: 0, category: null, awaitingChoice: false, options: [] };
+  s.drill = {
+  phase: null,
+  count: 0,
+  category: null,
+  awaitingChoice: false,
+  options: [],
+  reasonBuf: s.drill.reasonBuf || [],
+  flags: s.drill.flags || {},
+};
   s.step = 3;
   return res.json(withMeta({
     response: "受け取ったよ！次に【今どこで働いてる？】を教えてね。\n（例）急性期病棟／訪問看護ステーション",
@@ -571,7 +579,15 @@ if (s.step === 3) {
   s.status.place_ids = matchTagIdsInText(text);  // ← 追加
 
   s.step = 4;
-  s.drill = { phase: "reason", count: 0, category: null, awaitingChoice: false, options: [], reasonBuf: [] };
+  s.drill = {
+  phase: "reason",
+  count: 0,
+  category: null,
+  awaitingChoice: false,
+  options: [],
+  reasonBuf: [],
+  flags: s.drill.flags || {},
+};
   return res.json(withMeta({
     response: "はじめに、今回の転職理由を教えてほしいな。きっかけってどんなことだった？\nしんどいと思ったこと、これはもう無理って思ったこと、逆にこういうことに挑戦したい！って思ったこと、何でもOKだよ◎",
     step: 4, status: s.status, isNumberConfirmed: true, candidateNumber: s.status.number, debug: debugState(s)
