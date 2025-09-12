@@ -630,34 +630,6 @@ if (s.step === 4) {
     candidateNumber: s.status.number, debug: debugState(s)
   }, 5));
 }
-     // 別意見（自由文）：深掘りは「初回以外」でだけ発火させる
-  // ※ private-confirm 中や、選択肢回答待ちのときは動かさない
-  if (
-    s.drill.count > 0 &&
-    s.drill.phase !== "private-confirm" &&
-    !(s.drill.awaitingChoice && s.drill.options?.length)
-  ) {
-    s.drill.reasonBuf.push(text || "");
-    // ※ ここでは privateDeclined を触らない（No 応答時のみ立てる）
-    s.drill.count = Math.min(2, s.drill.count + 1);
-    s.drill.phase = "reason";
-    s.drill.awaitingChoice = false;
-
-    const emp0 = await generateEmpathy(text, s);
-    const joined = s.drill.reasonBuf.join(" ");
-    const { best, hits } = scoreCategories(joined);
-    if (best && hits > 0 && !noOptionCategory(best)) s.drill.category = best;
-
-    const cls = classifyMotivation(joined);
-    const q = !s.drill.category
-      ? ((cls === "pos" || cls === "mixed") ? GENERIC_REASON_Q_POS.deep1[0] : GENERIC_REASON_Q.deep1[0])
-      : pickDeepQuestion(s.drill.category, "deep1", joined);
-
-    return res.json(withMeta({
-      response: joinEmp(emp0, q),
-      step: 4, status: s.status, isNumberConfirmed: true, candidateNumber: s.status.number, debug: debugState(s)
-    }, 4));
-  }
   
   // 1) カテゴリ選択待ち（最終手段）
   if (s.drill.phase === "reason-cat" && s.drill.awaitingChoice && s.drill.options?.length) {
