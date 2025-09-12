@@ -390,11 +390,10 @@ function initSession() {
 }
 
 // ---- 入口 ----
-export default async function handler(req, res) {
-  // どんなメソッドでも落とさない（preflight/誤送信対策）
-  if (req.method === "OPTIONS") {
-    return res.status(200).end();
-  }
+if (req.method === "OPTIONS" || req.method === "HEAD") {
+  res.setHeader('Content-Type', 'application/json; charset=utf-8');
+  return res.status(200).json({ ok: true });
+}
 
   // セッションIDを GET/POST どちらでも拾う
   const method = (req.method || "GET").toUpperCase();
