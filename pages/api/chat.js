@@ -125,6 +125,50 @@ try {
   console.error("tagIdByName 構築失敗:", e);
 }
 
+// ←ここに追記
+const PLACE_ALIASES = {
+  // 医療・病院
+  "急性期": "急性期病棟",
+  "回復期": "回復期病棟",
+  "療養": "療養病棟",
+  "地域包括": "地域包括ケア病棟",
+  "緩和": "緩和ケア病棟（ホスピス）",
+
+  // 介護・福祉
+  "特養": "特別養護老人ホーム",
+  "地域密着特養": "地域密着型特別養護老人ホーム（定員29名以下）",
+  "老健": "介護老人保健施設",
+  "介護付有料": "介護付き有料老人ホーム",
+  "住宅型": "住宅型有料老人ホーム",
+  "サ高住": "サービス付き高齢者向け住宅（サ高住）",
+  "小多機": "小規模多機能型居宅介護",
+  "看多機": "看護小規模多機能型居宅介護",
+  "ショート": "ショートステイ（短期入所生活介護）",
+  "デイ": "通所介護（デイサービス）",
+  "デイケア": "通所リハビリテーション（デイケア）",
+
+  // 訪問系
+  "訪看": "訪問看護ステーション",
+  "訪問看": "訪問看護ステーション",
+  "訪リハ": "訪問リハビリテーション",
+  "訪問栄養": "訪問栄養指導",
+  "訪問歯科": "訪問歯科",
+  "訪入浴": "訪問入浴",
+
+  // 児童・障害
+  "放デイ": "放課後等デイサービス",
+  "障デイ": "生活介護（障害者の日中活動）",
+
+  // 歯科
+  "歯科外来": "歯科クリニック",
+
+  // クリニック系
+  "クリニック": "クリニック",
+
+  // そのほか素朴な省略
+  "病棟": "一般病院",
+};
+
 // ---- 転職理由の名称→ID マップ（job_change_purposes.json）----
 let reasonList = [];
 try {
@@ -1537,44 +1581,67 @@ function matchLicensesInText(text = "") {
   }
   return Array.from(out);
 }
-// 入力文に含まれる tags.json 名称を検出して ID 配列で返す
+// これで既存の matchTagIdsInText を“丸ごと置き換え”
 function matchTagIdsInText(text = "") {
   const raw = String(text || "").trim();
   if (!raw) return [];
 
-  // ① まずは厳密一致（tagIdByName は全角/半角ゆらぎを両方登録済み）
-  const direct = tagIdByName.get(raw);
-  if (direct != null) return [direct];
+  const toFW = (s) => String(s || "").replace(/\(/g, "（").replace(/\)/g, "）").replace(/~/g, "～");
+  const toHW = (s) => String(s || "").replace(/（/g, "(").replace(/）/g, ")").replace(/～/g, "~");
+  const scrub = (s) =>
+    String(s || "").toLowerCase()
+      .replace(/[ \t\r\n\u3000、。・／\/＿\-–—~～!?！？。、，．・]/g, "");
+  const norm = (s) => scrub(toHW(toFW(s)));
 
-  // ② 全角↔半角ゆらぎを揃えて再度厳密一致
-  const toFW = (s) => s.replace(/\(/g, "（").replace(/\)/g, "）").replace(/~/g, "～");
-  const toHW = (s) => s.replace(/（/g, "(").replace(/）/g, ")").replace(/～/g, "~");
-  const fw = toFW(raw);
-  const hw = toHW(raw);
-  const byFW = tagIdByName.get(fw);
-  if (byFW != null) return [byFW];
-  const byHW = tagIdByName.get(hw);
-  if (byHW != null) return [byHW];
+  const normText = norm(raw);
+  const out = new Set();
 
-  // ③ サブストリング一致（文章中に含まれるパターン）
-  const normalize = (s) => {
-    const z = String(s || "");
-    const h = toHW(toFW(z));
-    // 区切り記号等を除去して比較の取りこぼしを減らす
-    return h.replace(/[ \t\r\n\u3000、。・／\/＿\-–—~～]/g, "");
-  };
-  const normText = normalize(raw);
-  const set = new Set();
+  // 0) 厳密一致（全角/半角ゆらぎも）
+  const direct =
+      tagIdByName.get(raw)
+   || tagIdByName.get(toFW(raw))
+   || tagIdByName.get(toHW(raw));
+  if (direct != null) out.add(direct);
 
-  for (const t of (Array.isArray(tagList) ? tagList : [])) {
-    const name = String(t?.name ?? "");
-    if (!name) continue;
-    const n = normalize(name);
-    if (n && normText.includes(n)) {
-      if (t.id != null) set.add(t.id);
+  // 1) エイリアス → 正式ラベル → ID
+  for (const [alias, label] of Object.entries(PLACE_ALIASES || {})) {
+    if (!alias || !label) continue;
+    if (normText.includes(norm(alias))) {
+      const id =
+          tagIdByName.get(label)
+       || tagIdByName.get(toFW(label))
+       || tagIdByName.get(toHW(label));
+      if (id != null) out.add(id);
     }
   }
-  return Array.from(set);
+
+  // 2) 双方向の部分一致（タグ名 ⊂ 入力 / 入力 ⊂ タグ名）
+  const normalize = (s) => (s ? norm(s) : "");
+  for (const t of (Array.isArray(tagList) ? tagList : [])) {
+    const name = String(t?.name ?? "");
+    const id   = t?.id;
+    if (!name || id == null) continue;
+    const nTag = normalize(name);
+    if (!nTag) continue;
+    if (normText.includes(nTag) || nTag.includes(normText)) out.add(id);
+  }
+
+  // 3) まだ空ならファジー（2-gram Jaccard）で上位を補完
+  if (out.size === 0) {
+    const scored = [];
+    for (const t of (Array.isArray(tagList) ? tagList : [])) {
+      const name = String(t?.name ?? "");
+      const id   = t?.id;
+      if (!name || id == null) continue;
+      const s = scoreSimilarity(name, raw);
+      if (s > 0) scored.push({ id, s });
+    }
+    scored.sort((a,b)=> b.s - a.s);
+    for (const { id, s } of scored.slice(0, 3)) {
+      if (s >= 0.35) out.add(id);
+    }
+  }
+  return Array.from(out);
 }
 // ラベル（正式ラベル）から、別名も含めて tags.json の ID を集める（正規化＋双方向部分一致）
 function getIdsForLicenseLabel(label = "") {
