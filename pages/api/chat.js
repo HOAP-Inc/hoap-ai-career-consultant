@@ -578,7 +578,7 @@ if (s.step === 3) {
   }, 4));
 }
 
-  // ---- Step4：転職理由（深掘り2回→候補提示） ----
+   // ---- Step4：転職理由（深掘り2回→候補提示） ----
 if (s.step === 4) {
 
   // 0) オンコール/夜勤→ 早期確認フェーズの応答
@@ -946,7 +946,7 @@ if (options.length === 1) {
       step: 4, status: s.status, isNumberConfirmed: true, candidateNumber: s.status.number, debug: debugState(s)
     }, 4));
   }
-}
+} 
   
   // ---- Step5：絶対に外せない条件（Must） ----
   if (s.step === 5) {
