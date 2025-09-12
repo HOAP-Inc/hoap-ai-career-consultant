@@ -1340,7 +1340,8 @@ function isYes(text = "") {
   return /^(はい|うん|そう|ok|了解|そのとおり|そんな感じ|お願いします|それで|求めてる)/i.test(String(text || "").trim());
 }
 function isNo(text = "") {
-  return /^(いいえ|いや|ちが|違う|別|べつ|微妙|それではない|ノー)/i.test(String(text || "").trim());
+  const t = String(text || "").trim().replace(/[。！？!？]+$/, "");
+  return /(いいえ|いえ|いや|ノー|no|違う(よ|ね|んです|です)?|違います|ちがう|別|べつ|それではない|求めていない|該当しない|困ってない|困っていない|大丈夫(です)?)/i.test(t);
 }
 
 // ---- ヘルパ ----
