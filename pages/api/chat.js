@@ -597,59 +597,38 @@ if (s.step === 3) {
    // ---- Step4：転職理由（深掘り2回→候補提示） ----
 if (s.step === 4) {
 
-  // 0) オンコール/夜勤→ 早期確認フェーズの応答
-if (s.drill.phase === "private-confirm" && s.drill.awaitingChoice) {
-  // はい：即タグ確定→Step5へ（既存のまま）
+  if (s.drill.phase === "private-confirm" && s.drill.awaitingChoice) {
   if (isYes(text)) {
     const tag = "家庭との両立に理解のある職場で働きたい";
     s.status.reason_tag = tag;
     const rid = reasonIdByName.get(tag);
     s.status.reason_ids = Array.isArray(rid) ? rid : (rid != null ? [rid] : []);
-    s.drill = { phase: null, count: 0, category: null, awaitingChoice: false, options: [], reasonBuf: s.drill.reasonBuf, flags: s.drill.flags };
+    s.drill = { phase: null, count: 0, category: null, awaitingChoice: false,
+                options: [], reasonBuf: s.drill.reasonBuf, flags: s.drill.flags };
     s.step = 5;
     return res.json(withMeta({
       response: `『${tag}』だね！担当エージェントに伝えておくね。\n\n${mustIntroText()}`,
-      step: 5, status: s.status, isNumberConfirmed: true, candidateNumber: s.status.number, debug: debugState(s)
+      step: 5, status: s.status, isNumberConfirmed: true,
+      candidateNumber: s.status.number, debug: debugState(s)
     }, 5));
   }
 
-  // いいえ：固定文だけ出して、理由は未マッチのままStep5へ
-  if (isNo(text)) {
-    s.drill.flags.privateDeclined = true;             // 以後の強制固定OFF
-    s.drill = { phase: null, count: 0, category: null, awaitingChoice: false, options: [], reasonBuf: s.drill.reasonBuf, flags: s.drill.flags };
-    s.status.reason_tag = "";                          // ← 未マッチのまま
-    s.status.reason_ids = [];                          // ← 未マッチのまま
-    s.step = 5;
-
-    const emp0 = await generateEmpathy(text, s);
-    const fixed = "オンコールがない職場を考えていこうね。";
-
-    return res.json(withMeta({
-      response: joinEmp(emp0, `${fixed}\n\n${mustIntroText()}`),
-      step: 5, status: s.status, isNumberConfirmed: true, candidateNumber: s.status.number, debug: debugState(s)
-    }, 5));
-  }
-
-  // （自由文などその他の返答は従来どおり深掘り1回目へ）
-  s.drill.reasonBuf.push(text || "");
+  // Yes 以外はすべて固定文＋未マッチ
   s.drill.flags.privateDeclined = true;
-  s.drill.count = 1;
-  s.drill.phase = "reason";
-  s.drill.awaitingChoice = false;
+  s.drill = { phase: null, count: 0, category: null, awaitingChoice: false,
+              options: [], reasonBuf: s.drill.reasonBuf, flags: s.drill.flags };
+  s.status.reason_tag = "";
+  s.status.reason_ids = [];
+  s.step = 5;
 
   const emp0 = await generateEmpathy(text, s);
-  const { best, hits } = scoreCategories(s.drill.reasonBuf.join(" "));
-  if (best && hits > 0 && !noOptionCategory(best)) s.drill.category = best;
-
-  const cls = classifyMotivation(s.drill.reasonBuf.join(" "));
-  const q = !s.drill.category
-    ? ((cls === "pos" || cls === "mixed") ? GENERIC_REASON_Q_POS.deep1[0] : GENERIC_REASON_Q.deep1[0])
-    : pickDeepQuestion(s.drill.category, "deep1", s.drill.reasonBuf.join(" "));
+  const fixed = "オンコールがない職場を考えていこうね。";
 
   return res.json(withMeta({
-    response: joinEmp(emp0, q),
-    step: 4, status: s.status, isNumberConfirmed: true, candidateNumber: s.status.number, debug: debugState(s)
-  }, 4));
+    response: joinEmp(emp0, `${fixed}\n\n${mustIntroText()}`),
+    step: 5, status: s.status, isNumberConfirmed: true,
+    candidateNumber: s.status.number, debug: debugState(s)
+  }, 5));
 }
     // 別意見（自由文）：理由バッファに追記して深掘り1回目へ
     s.drill.reasonBuf.push(text || "");
@@ -1338,10 +1317,6 @@ function hasOncallNight(text = "") {
 }
 function isYes(text = "") {
   return /^(はい|うん|そう|ok|了解|そのとおり|そんな感じ|お願いします|それで|求めてる)/i.test(String(text || "").trim());
-}
-function isNo(text = "") {
-  const t = String(text || "").trim().replace(/[。！？!？]+$/, "");
-  return /(いいえ|いえ|いや|ノー|no|違う(よ|ね|んです|です)?|違います|ちがう|別|べつ|それではない|求めていない|該当しない|困ってない|困っていない|大丈夫(です)?)/i.test(t);
 }
 
 // ---- ヘルパ ----
