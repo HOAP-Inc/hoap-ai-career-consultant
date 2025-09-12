@@ -47,16 +47,11 @@ function displayIdsOrDone(key, val) {
   if (key === '求職者ID') return val ?? '';
 
   const s = String(val ?? '');
-
-  // 例）'ラベル（ID:123,456）' から 123,456 を抜く
-  const m = s.match(/ID:([^）)]+)[）)]?/);
-  if (m && m[1]) {
-    return m[1].trim();
-  }
-
-  // 値が空 or 初期値は空表示。それ以外は 済
   if (!s || s === '未入力' || s === '0件') return '';
-  return '済';
+
+  // 「ID:…」部分を “ID:” 付きのまま取り出す
+  const m = s.match(/(ID:[^）)]+)[）)]?/);
+  return m ? m[1].trim() : '済';
 }
 
   // ★最初の挨拶をサーバーから1回だけ取得
