@@ -389,11 +389,18 @@ function initSession() {
   };
 }
 export default async function handler(req, res) {
-// ---- 入口 ----
-if (req.method === "OPTIONS" || req.method === "HEAD") {
-  res.setHeader('Content-Type', 'application/json; charset=utf-8');
-  return res.status(200).json({ ok: true });
-}
+    // ==== CORS 設定 ====
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader("Vary", "Origin");
+  res.setHeader("Access-Control-Allow-Methods", "GET,POST,HEAD,OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type, X-Session-Id");
+
+  if (req.method === "OPTIONS") {
+    return res.status(204).end();  // ← プリフライトは204で即終了
+  }
+  if (req.method === "HEAD") {
+    return res.status(200).end();
+  }
 
   // セッションIDを GET/POST どちらでも拾う
   const method = (req.method || "GET").toUpperCase();
