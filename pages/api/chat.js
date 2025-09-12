@@ -392,20 +392,29 @@ export default async function handler(req, res) {
   // ==== CORS（プリフライトでも必ず JSON を返す）====
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Vary", "Origin");
-  // ← STEP4 で PUT/PATCH を投げるクライアントがあるため、許可メソッドを拡張
   res.setHeader("Access-Control-Allow-Methods", "GET,POST,PUT,PATCH,HEAD,OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type, X-Session-Id");
 
-  // ここがポイント：プリフライト(OPTIONS)でも JSON を返す
+  // OPTIONS は 200 + JSON（フロントの json() で安全）
   if (req.method === "OPTIONS") {
     res.setHeader("Content-Type", "application/json; charset=utf-8");
     return res.status(200).json({ ok: true });
   }
 
-  // HEAD も JSON を返す（フロントが json() を呼んでも落ちないようにする）
+  // HEAD は 204（ボディなし）
   if (req.method === "HEAD") {
-    res.setHeader("Content-Type", "application/json; charset=utf-8");
-    return res.status(200).json({ ok: true });
+    return res.status(204).end();
+  }
+
+  // ★★★ ここを必ず入れる（抜けていたため 500 の原因になっていた）★★★
+  const method = (req.method || "GET").toUpperCase();
+  const headerSid = String(req.headers["x-session-id"] || "").trim();
+  const querySid  = String(req.query?.sessionId || "").trim();
+  const bodySid   = String((req.body && req.body.sessionId) || "").trim();
+  const sessionId = headerSid || querySid || bodySid || "default";
+
+  if (!sessions[sessionId] && req.body?.snapshot && method === "POST") {
+    sessions[sessionId] = req.body.snapshot;
   }
   
   // セッション確保
