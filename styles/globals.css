@@ -272,6 +272,24 @@ html, body, #__next { height: 100%; }
   filter: drop-shadow(1px 1px 0 rgba(243,232,255,1));
 }
 
+/* --- typing dots: 「・・・」そのものを点滅させる --- */
+.dots{
+  display: inline-flex;
+  gap: .08em;
+  align-items: center;
+}
+.dots > span{
+  opacity: .25;
+  animation: dotBlink 1.2s infinite;
+}
+.dots > span:nth-child(2){ animation-delay: .2s; }
+.dots > span:nth-child(3){ animation-delay: .4s; }
+
+@keyframes dotBlink{
+  0%, 80%, 100% { opacity: .25; }
+  40%           { opacity: 1; }
+}
+
 /* 2) 入力欄直上のユーザー吹き出し（書き換え式） */
 .user-echo{
   position: sticky;    /* 入力欄の直上に追従 */
@@ -407,25 +425,3 @@ html, body, #__next { height: 100%; }
     max-width: calc(100vw - 104px);
     padding: 10px 12px;
   }
-  /* --- typing dots (AIが考え中のとき) --- */
-.duo-stage__bubble.typing {
-  letter-spacing: .02em;
-}
-
-.duo-stage__bubble.typing::after {
-  content: "…";
-  margin-left: .2em;
-  display: inline-block;
-  width: 1.2em;
-  overflow: hidden;
-  animation: hoapTyping 1s steps(3, end) infinite;
-}
-
-/* contentの増減っぽく見せる：幅を段階的に変えるだけ（安全） */
-@keyframes hoapTyping {
-  0%   { width: 0;   }
-  33%  { width: 0.4em; }
-  66%  { width: 0.8em; }
-  100% { width: 1.2em; }
-}
-}
