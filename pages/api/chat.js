@@ -275,6 +275,19 @@ function classifyMotivation(text=""){
   return "neutral";
 }
 
+// >>> SALARY: helpers (after classifyMotivation)
+// --- STEP4用：給与ワード検知ヘルパー ---
+function detectSalaryIssue(text=""){
+  return /(給料|給与|年収|月収|手取り|ボーナス|賞与|昇給|お金|安い|低い|上がらない)/i.test(String(text||""));
+}
+function isPeerComparisonSalary(text=""){
+  return /(周り|同僚|友達|同年代|先輩|他(社|院|施設)|相場|平均|求人|市場|みんな|世間|一般)/i.test(String(text||""));
+}
+function isValueMismatchSalary(text=""){
+  return /(見合わない|割に合わない|評価|人事考課|等級|査定|フィードバック|昇給|昇格|不公平|公平|基準|成果|反映)/i.test(String(text||""));
+}
+// <<< SALARY: helpers
+
 // 追加：上司/管理者×ネガの早期カテゴリ確定
 function detectBossRelationIssue(text = "") {
   const t = String(text).toLowerCase();
@@ -1003,6 +1016,58 @@ if (s.step === 3) {
    // ---- Step4：転職理由（深掘り2回→候補提示） ----
 if (s.step === 4) {
 
+   // >>> SALARY: triage handler (top of Step4)
+  // --- 給与トリアージの回答処理 ---
+  if (s.drill.phase === "salary-triage" && s.drill.awaitingChoice) {
+    s.drill.reasonBuf.push(text || "");
+
+    if (isPeerComparisonSalary(text)) {
+      // 純粋に年収アップ目的 → 未マッチ（金額はMust/Wantで具体化）
+      s.status.reason_tag = "";
+      s.status.reason_ids = [];
+      resetDrill(s);
+      s.step = 5;
+
+      const emp = await generateEmpathy(text, s);
+      const msg = "収入アップが主目的ってこと、把握したよ。金額レンジはこの後の条件で具体化していこう。";
+      return res.json(withMeta({
+        response: joinEmp(emp, `${msg}\n\n${mustIntroText()}`),
+        step: 5, status: s.status, isNumberConfirmed: true,
+        candidateNumber: s.status.number, debug: debugState(s)
+      }, 5));
+    }
+
+    if (isValueMismatchSalary(text)) {
+      // 「働きに見合ってない」→ 評価の文脈（仕事内容・キャリア）に寄せる
+      s.drill.category = "仕事内容・キャリアに関すること";
+      s.drill.awaitingChoice = false;
+      s.drill.count = 1;
+
+      const q = "評価や昇給の基準が不透明？成果が給与に反映されてない感じ？";
+      const emp = await generateEmpathy(text, s);
+      return res.json(withMeta({
+        response: joinEmp(emp, q),
+        step: 4, status: s.status, isNumberConfirmed: true,
+        candidateNumber: s.status.number, debug: debugState(s)
+      }, 4));
+    }
+
+    // 判定つかないときは従来ロジックへ（やわらかい深掘りに合流）
+    s.drill.awaitingChoice = false;
+    s.drill.count = 1;
+    const cls = classifyMotivation(s.drill.reasonBuf.join(" "));
+    const q = (cls === "pos" || cls === "mixed")
+      ? GENERIC_REASON_Q_POS.deep1[0]
+      : "一番のひっかかりはどこ？（仕事内容/人間関係/労働時間のどれに近い？）";
+    const emp = await generateEmpathy(text, s);
+    return res.json(withMeta({
+      response: joinEmp(emp, q),
+      step: 4, status: s.status, isNumberConfirmed: true,
+      candidateNumber: s.status.number, debug: debugState(s)
+    }, 4));
+  }
+  // <<< SALARY: triage handler
+
   if (s.drill.phase === "private-confirm" && s.drill.awaitingChoice) {
   if (isYes(text)) {
     const tag = "家庭との両立に理解のある職場で働きたい";
@@ -1126,6 +1191,28 @@ if (chosen) {
   
   // 3) 1回目の入力を受信 → まずはオンコール/夜勤の早期確認へ
 if (s.drill.count === 0) {
+
+  // >>> SALARY: triage entry (top of count===0)
+  // --- 給与トリアージを最優先で実行 ---
+  if (detectSalaryIssue(text)) {
+    s.status.reason = text || "";
+    s.status.memo.reason_raw = text || "";
+    s.drill.reasonBuf = [text || ""];
+
+    s.drill.phase = "salary-triage";
+    s.drill.awaitingChoice = true;
+    s.drill.count = 0;
+
+    const emp0 = await generateEmpathy(text, s);
+    const triage = "どうしてそう思う？周りの相場と比べて？それとも自分の働きに見合ってない感じ？";
+    return res.json(withMeta({
+      response: joinEmp(emp0, triage),
+      step: 4, status: s.status, isNumberConfirmed: true,
+      candidateNumber: s.status.number, debug: debugState(s)
+    }, 4));
+  }
+  // <<< SALARY: triage entry
+  
   s.status.reason = text || "";
   s.status.memo.reason_raw = text || "";
   s.drill.reasonBuf = [text || ""];
