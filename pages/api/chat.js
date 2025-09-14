@@ -1783,13 +1783,19 @@ function buildStatusBar(st, currentStep = 0) {
         ? (placeIsConsistent ? `${st.place}（${fmtIds(st.place_ids)}）` : "済")
         : "",
 
-    転職目的:
-      reasonIsConsistent
-        ? (st.reason_ids?.length
-            ? `${st.reason_tag}（${fmtIds(st.reason_ids)}）`
-            : (st.reason_tag || ""))
-        : (st.reason_tag ? st.reason_tag : ""),
+    転職目的: (() => {
+  // IDが取れていればラベル＋ID
+  if (reasonIsConsistent) {
+    return st.reason_ids?.length
+      ? `${st.reason_tag}（${fmtIds(st.reason_ids)}）`
+      : (st.reason_tag || "済"); // 念のため
+  }
+  // ★未マッチでも入力（tag / 自由記述 / raw）があれば「済」
+  if (st.reason_tag || st.reason || (st.memo?.reason_raw)) return "済";
 
+  // 何も入力がなければ空
+  return "";
+})(),
     // ←ここがポイント：Step5の最中は「済」を出さない
     Must:
       (() => {
