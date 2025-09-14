@@ -159,9 +159,9 @@ useLayoutEffect(() => {
     setUserEcho(userText);
     setInput("");
 
-    // ここで「・・・」を即表示
-    setIsTyping(true);
-    setAiText("・・・");
+    // ここでタイピング表示をオン（本文は空でOK）
+setIsTyping(true);
+setAiText("");
 
     try {
       const res = await fetch("/api/chat", {
@@ -250,8 +250,10 @@ if (data.meta?.step != null) setStep(data.meta.step);
   <div className="duo-stage__wrap">
     <img className="duo-stage__hoap" src={hoapSrc} alt="ほーぷちゃん" />
     <div className={`duo-stage__bubble ${isTyping ? "typing" : ""}`} aria-live="polite">
-      {aiText || "…"}
-    </div>
+  {isTyping ? (
+    <span className="dots"><span>・</span><span>・</span><span>・</span></span>
+  ) : (aiText || "…")}
+</div>
   </div>
 </section>
 
