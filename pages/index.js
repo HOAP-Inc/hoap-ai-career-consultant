@@ -46,10 +46,9 @@ function extractChoices(text) {
     const s = mm[1].trim();
     if (s) picks.push(s);
   }
-  if (picks.length > 0) return picks;
 
-  // 2) ［］が無い場合はスラッシュで分割しない（全文で1件）
-  return [inner];
+  // 2) ［］が無ければ「選択肢なし」とみなす（←ここを変更）
+  return picks;
 }
 
   // 表記ゆれ正規化（() を全角に、空白を圧縮）
@@ -262,8 +261,8 @@ useLayoutEffect(() => {
       if (data.meta?.statusBar) setStatus(data.meta.statusBar);
       setStep(nextStep);
 
-      // STEP2〜6の時だけ選択肢抽出、それ以外は必ず空
-      {
+      // STEP2〜6の時だけ選択肢抽出（STEP4はインライン固定ボタンも考慮）
+{
   const inline = getInlineChoices(nextStep, data.response, data.meta);
   setChoices(
     isChoiceStep(nextStep)
