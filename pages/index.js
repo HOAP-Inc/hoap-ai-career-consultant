@@ -24,6 +24,25 @@ const [aiText, setAiText] = useState("");      // ほーぷちゃんの吹き出
 const [isTyping, setIsTyping] = useState(false); // 返答待ちのタイピング表示
 const [userEcho, setUserEcho] = useState("");  // 入力欄上のユーザー吹き出し用 文言
 
+  // STEP2〜6の選択肢ボタン用
+const [choices, setChoices] = useState([]);
+
+// 対象ステップかを判定
+function isChoiceStep(n){
+  return n >= 2 && n <= 6;
+}
+
+// 『［A］／［B］／［C］』形式から配列を作る
+function extractChoices(text) {
+  if (!text) return [];
+  const m = text.match(/『([^』]+)』/);
+  if (!m) return [];
+  return m[1]
+    .split("／")
+    .map((s) => s.replace(/^[［\[]|[］\]]$/g, "").trim())
+    .filter(Boolean);
+}
+
 const listRef = useRef(null);
 const taRef = useRef(null);
 const bottomRef = useRef(null);
@@ -67,6 +86,8 @@ function displayIdsOrDone(key, val) {
       if (data.meta) {
         setStep(data.meta.step ?? 0);
         setStatus(data.meta.statusBar ?? statusInit);
+        const initialStep = data.meta.step ?? 0;
+setChoices(isChoiceStep(initialStep) ? extractChoices(data.response) : []);
       }
     } catch (e) {
       setMessages([{ type: "ai", content: "初期メッセージの取得に失敗したよ🙏" }]);
@@ -150,18 +171,23 @@ useLayoutEffect(() => {
   if (el) el.scrollIntoView({ behavior: "smooth", block: "end" });
 }, [messages.length, step]);
   // 送信処理
-  async function onSend() {
-    if (!input.trim() || sending) return;
+  
+  // 送信処理（選択肢ボタンからも呼べるように修正）
+  async function onSend(forcedText) {
+    if (sending) return;
+    const text = forcedText != null ? String(forcedText) : input.trim();
+    if (!text) return;
+
     setSending(true);
 
-    // ユーザー入力を即時反映（入力欄上のユーザー吹き出しに“上書き”）
-    const userText = input;
+    // ユーザー入力を即時反映
+    const userText = text;
     setUserEcho(userText);
-    setInput("");
+    if (forcedText == null) setInput("");
 
-    // ここでタイピング表示をオン（本文は空でOK）
-setIsTyping(true);
-setAiText("");
+    // タイピング開始
+    setIsTyping(true);
+    setAiText("");
 
     try {
       const res = await fetch("/api/chat", {
@@ -171,22 +197,28 @@ setAiText("");
       });
       const data = await res.json();
 
-      // AI応答は“上書き”で表示（単一吹き出し）
+      // 本文反映
       setAiText(data.response);
       setIsTyping(false);
 
-      // ステータス・ステップ更新（meta.statusBar を使う）
-if (data.meta?.statusBar) setStatus(data.meta.statusBar);
-if (data.meta?.step != null) setStep(data.meta.step);
+      // 次ステップを決定
+      const nextStep = data.meta?.step != null ? data.meta.step : step;
+
+      // ステータス・ステップ更新
+      if (data.meta?.statusBar) setStatus(data.meta.statusBar);
+      setStep(nextStep);
+
+      // STEP2〜6の時だけ選択肢抽出、それ以外は必ず空
+      setChoices(isChoiceStep(nextStep) ? extractChoices(data.response) : []);
     } catch (err) {
       console.error(err);
-     setAiText("通信エラーが発生したよ🙏");
-     setIsTyping(false);
+      setAiText("通信エラーが発生したよ🙏");
+      setIsTyping(false);
     } finally {
       setSending(false);
     }
   }
-
+  
   function onKeyDown(e) {
     if (e.key === "Enter" && !isComposing && !e.shiftKey) {
       e.preventDefault();
@@ -256,6 +288,24 @@ if (data.meta?.step != null) setStep(data.meta.step);
 </div>
   </div>
 </section>
+
+{isChoiceStep(step) && choices.length > 0 && !isTyping && (
+  <div className="choice-wrap">
+    {choices.map((c) => (
+      <button
+        key={c}
+        type="button"
+        className="choice-btn"
+        onClick={() => {
+          onSend(c);      // タップした文言で即送信
+          setChoices([]); // 二重送信防止で即非表示
+        }}
+      >
+        {c}
+      </button>
+    ))}
+  </div>
+)}
 
     {/* ステータスバッジ */}
     <div className="status-row">
