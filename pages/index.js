@@ -52,6 +52,25 @@ function extractChoices(text) {
   return [inner];
 }
 
+  // 表記ゆれ正規化（() を全角に、空白を圧縮）
+function normalizeChoiceKey(s) {
+  return String(s || "")
+    .replace(/\(/g, "（")
+    .replace(/\)/g, "）")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+// 正規化キーで一意化
+function uniqueByNormalized(arr) {
+  const map = new Map();
+  for (const item of arr || []) {
+    const k = normalizeChoiceKey(item);
+    if (!map.has(k)) map.set(k, item); // 先勝ち
+  }
+  return Array.from(map.values());
+}
+
 const listRef = useRef(null);
 const taRef = useRef(null);
 const bottomRef = useRef(null);
@@ -96,7 +115,11 @@ function displayIdsOrDone(key, val) {
         setStep(data.meta.step ?? 0);
         setStatus(data.meta.statusBar ?? statusInit);
         const initialStep = data.meta.step ?? 0;
-setChoices(isChoiceStep(initialStep) ? extractChoices(data.response) : []);
+setChoices(
+  isChoiceStep(initialStep)
+    ? uniqueByNormalized(extractChoices(data.response))
+    : []
+);
       }
     } catch (e) {
       setMessages([{ type: "ai", content: "初期メッセージの取得に失敗したよ🙏" }]);
@@ -224,7 +247,11 @@ useLayoutEffect(() => {
       setStep(nextStep);
 
       // STEP2〜6の時だけ選択肢抽出、それ以外は必ず空
-      setChoices(isChoiceStep(nextStep) ? extractChoices(data.response) : []);
+      setChoices(
+  isChoiceStep(nextStep)
+    ? uniqueByNormalized(extractChoices(data.response))
+    : []
+);
     } catch (err) {
       console.error(err);
       setAiText("通信エラーが発生したよ🙏");
