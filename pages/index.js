@@ -129,15 +129,14 @@ function displayIdsOrDone(key, val) {
         setStatus(data.meta.statusBar ?? statusInit);
         const initialStep = data.meta.step ?? 0;
 {
-  const inline = getInlineChoices(nextStep, data.response, data.meta);
+  const inline = getInlineChoices(initialStep, data.response, data.meta);
   setChoices(
-    isChoiceStep(nextStep)
+    isChoiceStep(initialStep)
       ? uniqueByNormalized(inline.length ? inline : extractChoices(data.response))
       : []
   );
 }
-}
-      }
+        }
     } catch (e) {
       setMessages([{ type: "ai", content: "初期メッセージの取得に失敗したよ🙏" }]);
     }
@@ -264,11 +263,14 @@ useLayoutEffect(() => {
       setStep(nextStep);
 
       // STEP2〜6の時だけ選択肢抽出、それ以外は必ず空
-      setChoices(
-  isChoiceStep(nextStep)
-    ? uniqueByNormalized(extractChoices(data.response))
-    : []
-);
+      {
+  const inline = getInlineChoices(nextStep, data.response, data.meta);
+  setChoices(
+    isChoiceStep(nextStep)
+      ? uniqueByNormalized(inline.length ? inline : extractChoices(data.response))
+      : []
+  );
+}
     } catch (err) {
       console.error(err);
       setAiText("通信エラーが発生したよ🙏");
