@@ -174,6 +174,12 @@ useLayoutEffect(() => {
   
   // 送信処理（選択肢ボタンからも呼べるように修正）
   async function onSend(forcedText) {
+        // クリック時などに渡ってくる MouseEvent を無効化
+    if (forcedText && typeof forcedText === "object" && (
+      "nativeEvent" in forcedText || "preventDefault" in forcedText || "type" in forcedText
+    )) {
+      forcedText = undefined;
+    }
     if (sending) return;
     const text = forcedText != null ? String(forcedText) : input.trim();
     if (!text) return;
@@ -366,7 +372,7 @@ useLayoutEffect(() => {
         <button
           type="button"
           className="send"
-          onClick={onSend}
+          onClick={() => onSend()}
           disabled={sending}
         >
           ➤
