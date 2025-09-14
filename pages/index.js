@@ -24,23 +24,26 @@ const [aiText, setAiText] = useState("");      // ほーぷちゃんの吹き出
 const [isTyping, setIsTyping] = useState(false); // 返答待ちのタイピング表示
 const [userEcho, setUserEcho] = useState("");  // 入力欄上のユーザー吹き出し用 文言
 
-  // STEP2〜6の選択肢ボタン用
-const [choices, setChoices] = useState([]);
-
-// 対象ステップかを判定
-function isChoiceStep(n){
-  return n >= 2 && n <= 6;
-}
-
-// 『［A］／［B］／［C］』形式から配列を作る
+  // 『［A］／［B］／［C］』形式から配列を作る
 function extractChoices(text) {
   if (!text) return [];
   const m = text.match(/『([^』]+)』/);
   if (!m) return [];
-  return m[1]
-    .split("／")
-    .map((s) => s.replace(/^[［\[]|[］\]]$/g, "").trim())
-    .filter(Boolean);
+
+  const inner = m[1].trim();
+
+  // 1) ［...］や[...] があれば、それぞれを選択肢として抜き出す
+  const bracketRe = /[［\[]([^］\]]+)[］\]]/g;
+  const picks = [];
+  let mm;
+  while ((mm = bracketRe.exec(inner)) !== null) {
+    const s = mm[1].trim();
+    if (s) picks.push(s);
+  }
+  if (picks.length > 0) return picks;
+
+  // 2) ［］が無い場合はスラッシュで分割しない（全文で1件）
+  return [inner];
 }
 
 const listRef = useRef(null);
