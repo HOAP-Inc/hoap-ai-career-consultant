@@ -449,6 +449,78 @@ const mustWantItems = [
   "マニュアル完備","動画マニュアルあり","評価制度あり","メンター制度あり","独立・開業支援あり",
   "院長・分院長候補","担当制"
 ];
+
+// === Must/Want 抽出の制御パラメータ（STEP4流の中核） ===
+// しきい値：弱いファジー一致は候補にしない
+const MW_SIM_THRESHOLD = 0.40;
+
+// ラベルごとの「実体アンカー」（この語が発話に含まれない限り候補化しない）
+// ※必要に応じて追加でOK（オンコール限定ではなく全体適用）
+const MW_ANCHORS = {
+  "駅近（5分以内）": /(駅近|駅ﾁｶ|駅チカ|駅から近)/i,
+  "直行直帰OK": /(直行直帰)/i,
+  "時短勤務相談可": /(時短|短時間勤務)/i,
+  "オンコールなし・免除可": /(オンコール|ｵﾝｺｰﾙ|呼び出し)/i,
+  "緊急訪問なし": /(緊急訪問)/i,
+  "残業ほぼなし": /(残業|定時|サービス残業)/i,
+  "土日祝休み": /(土日祝.*休|週末.*休|土日.*休)/i,
+  "有給消化率ほぼ100%": /(有給|有休).*(取|申請|消化)/i,
+  "育児支援あり": /(育児|保育|託児)/i,
+  "車通勤可": /(車通勤)/i,
+  "バイク通勤可": /(バイク通勤)/i,
+  "自転車通勤可": /(自転車通勤|チャリ通)/i,
+  "年収300万以上": /(300\s*万)/i,
+  "年収350万以上": /(350\s*万)/i,
+  "年収400万以上": /(400\s*万)/i,
+  "年収450万以上": /(450\s*万)/i,
+  "年収500万以上": /(500\s*万)/i,
+  "年収550万以上": /(550\s*万)/i,
+  "年収600万以上": /(600\s*万)/i,
+  "年収650万以上": /(650\s*万)/i,
+  "年収700万以上": /(700\s*万)/i,
+};
+
+// 排他ロック：同じ系列が複数確定しないよう「グループ内は最高スコア1件だけ」残す
+// ※必要に応じてグルーピングを増やせます
+const MW_LOCK_GROUPS = [
+  // オンコール系
+  ["オンコールなし・免除可", "緊急訪問なし"],
+  // 残業系
+  ["残業ほぼなし", "残業月20時間以内"],
+  // 通勤系（例）
+  ["車通勤可", "バイク通勤可", "自転車通勤可"],
+];
+
+// アンカー/ゆらぎ用の正規化ヘルパ（既存の _norm_mw と同じ流儀でOK）
+function _norm_anchor(s){
+  return String(s||"").toLowerCase()
+    .replace(/\(/g,"（").replace(/\)/g,"）").replace(/~/g,"～")
+    .replace(/（/g,"(").replace(/）/g,")").replace(/～/g,"~")
+    .replace(/[ \t\r\n\u3000、。・／\/＿\-–—~～!?！？。、，．・]/g,"");
+}
+
+// LOCK適用：同一グループ内でスコア最大の1件だけ残す
+function reduceByLocks(scored /* [{label, sc}] */){
+  if (!Array.isArray(scored) || !scored.length) return [];
+  const out = [];
+  const handled = new Set();
+  for (const group of MW_LOCK_GROUPS) {
+    const present = scored.filter(x => group.includes(x.label));
+    if (present.length) {
+      present.sort((a,b)=> b.sc - a.sc);
+      out.push(present[0]);             // トップだけ残す
+      for (const p of present) handled.add(p.label);
+    }
+  }
+  // どのグループにも属さない項目はそのまま
+  for (const row of scored) {
+    if (!handled.has(row.label)) out.push(row);
+  }
+  // 重複排除して返す
+  const seen = new Set();
+  return out.filter(r => !seen.has(r.label) && seen.add(r.label));
+}
+
 // === Must/Want 自由入力 → 抽出・ランク・強度判定（STEP4準拠） ===
 const MUST_STRONG = /(絶対|必ず|マスト|NG|ダメ|無理|できない|不可|禁止|外せない|いらない|したくない|行けない|受けられない|困る)/i;
 const WANT_SOFT  = /(あったら|できれば|希望|できると|望ましい|嬉しい|優先|できたら|あると良い|あれば)/i;
@@ -493,31 +565,48 @@ function collectMustWantCandidates(text = "", k = 6){
   const raw = String(text||"");
   const ntext = _norm_mw(raw);
 
-  const scored = [];
+  // 1) まずは厳密寄り（正規化した相互包含）でスコア
+  const prelim = [];
   for (const label of mustWantItems) {
-    let sc = scoreSimilarity(label, raw); // ← 既存のSTEP4系スコアラ（上で定義済）
+    let sc = 0;
 
     const nl = _norm_mw(label);
-    if (ntext.includes(nl) || nl.includes(ntext)) sc += 0.25;
+    if (ntext && (ntext.includes(nl) || nl.includes(ntext))) sc += 0.45;
 
-    for (const [alias, canon] of Object.entries(MUSTWANT_ALIASES||{})) {
-      if (canon === label && _norm_mw(raw).includes(_norm_mw(alias))) sc += 0.3;
-    }
+    // 2) 鍵語（アンカー）で明確に上げる（重複発火しないよう label ごとに固有化）
+    const anc = MW_ANCHORS[label];
+    if (anc && anc.test(raw)) sc += 0.60;
+
+    // 3) 既存ヒント（寛め）には上限を設ける
     for (const h of MW_HINTS) {
-      if (h.label === label && h.kw.test(raw)) sc += 0.35;
+      if (h.label === label && h.kw.test(raw)) { sc += 0.30; break; }
     }
 
-    if (sc > 0) scored.push({ label, sc });
+    // 4) 類似度は弱め（誤爆の主因なので係数を小さく）
+    sc += scoreSimilarity(label, raw) * 0.25;
+
+    if (sc > 0) prelim.push({ label, sc });
   }
 
+  // 5) 収入系の明示
   for (const lb of parseIncomeLabels(raw)) {
-    const i = scored.findIndex(x=>x.label===lb);
-    if (i>=0) scored[i].sc += 0.5; else scored.push({ label: lb, sc: 0.6 });
+    const i = prelim.findIndex(x=>x.label===lb);
+    if (i>=0) prelim[i].sc += 0.5; else prelim.push({ label: lb, sc: 0.6 });
   }
 
+  // 6) 最低スコア閾値（これで「オンコールなし」発話で他が通らない）
+  let scored = prelim.filter(x => x.sc >= MW_SIM_THRESHOLD);
+
+  // 7) 衝突抑制（同時に立ちやすい近縁ラベルを排他）
+  scored = reduceByLocks(scored);
+
+  // 8) 上位k件
   scored.sort((a,b)=> b.sc - a.sc);
   const out = [];
-  for (const {label} of scored) { if (!out.includes(label)) out.push(label); if (out.length >= k) break; }
+  for (const {label} of scored) {
+    if (!out.includes(label)) out.push(label);
+    if (out.length >= k) break;
+  }
   return out;
 }
 
