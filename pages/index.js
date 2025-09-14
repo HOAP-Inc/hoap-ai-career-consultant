@@ -71,6 +71,19 @@ function uniqueByNormalized(arr) {
   return Array.from(map.values());
 }
 
+  // Step4 の特定質問タイミングでは固定ボタンを出す
+function getInlineChoices(step, responseText, meta) {
+  if (step === 4) {
+    const t = String(responseText || "");
+    // サーバの定型質問フレーズを検出（文言は現行そのまま）
+    const hit = t.includes("一番ストレスだったのは、仕事内容・人間関係・労働時間のどれに近い？");
+    if (hit) {
+      return ["仕事内容", "人間関係", "労働時間"];
+    }
+  }
+  return [];
+}
+
 const listRef = useRef(null);
 const taRef = useRef(null);
 const bottomRef = useRef(null);
@@ -115,11 +128,15 @@ function displayIdsOrDone(key, val) {
         setStep(data.meta.step ?? 0);
         setStatus(data.meta.statusBar ?? statusInit);
         const initialStep = data.meta.step ?? 0;
-setChoices(
-  isChoiceStep(initialStep)
-    ? uniqueByNormalized(extractChoices(data.response))
-    : []
-);
+{
+  const inline = getInlineChoices(nextStep, data.response, data.meta);
+  setChoices(
+    isChoiceStep(nextStep)
+      ? uniqueByNormalized(inline.length ? inline : extractChoices(data.response))
+      : []
+  );
+}
+}
       }
     } catch (e) {
       setMessages([{ type: "ai", content: "初期メッセージの取得に失敗したよ🙏" }]);
