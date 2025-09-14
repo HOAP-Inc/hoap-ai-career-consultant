@@ -23,6 +23,7 @@ const [isComposing, setIsComposing] = useState(false);
 const [aiText, setAiText] = useState("");      // ほーぷちゃんの吹き出し用 文言
 const [isTyping, setIsTyping] = useState(false); // 返答待ちのタイピング表示
 const [userEcho, setUserEcho] = useState("");  // 入力欄上のユーザー吹き出し用 文言
+const [choices, setChoices] = useState([]);
 
   // 対象ステップかを判定（STEP2〜6）
 function isChoiceStep(n) {
