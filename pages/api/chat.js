@@ -449,6 +449,106 @@ const mustWantItems = [
   "マニュアル完備","動画マニュアルあり","評価制度あり","メンター制度あり","独立・開業支援あり",
   "院長・分院長候補","担当制"
 ];
+// === Must/Want 自由入力 → 抽出・ランク・強度判定（STEP4準拠） ===
+const MUST_STRONG = /(絶対|必ず|マスト|NG|ダメ|無理|できない|不可|禁止|外せない|いらない|したくない|行けない|受けられない|困る)/i;
+const WANT_SOFT  = /(あったら|できれば|希望|できると|望ましい|嬉しい|優先|できたら|あると良い|あれば)/i;
+
+// 例：自由に増やせる。左=別名、右=mustWantItemsの正式ラベル
+const MUSTWANT_ALIASES = {
+  // "駅チカ": "駅近（5分以内）",
+};
+
+const MW_HINTS = [
+  { kw: /(駅近|駅チカ|駅から近い)/i, label: "駅近（5分以内）" },
+  { kw: /(直行直帰)/i,               label: "直行直帰OK" },
+  { kw: /(時短)/i,                   label: "時短勤務相談可" },
+  { kw: /(オンコール.*(無|なし|免除)|呼び出し.*(無|なし))/i, label: "オンコールなし・免除可" },
+  { kw: /(残業.*(無|なし|ほぼなし)|定時)/i, label: "残業ほぼなし" },
+  { kw: /(土日祝.*休)/i,             label: "土日祝休み" },
+  { kw: /(有給|有休).*取(り|れ)やす/i, label: "有給消化率ほぼ100%" },
+  { kw: /(育児|保育|託児)/i,         label: "育児支援あり" },
+  { kw: /(車通勤)/i,                 label: "車通勤可" },
+  { kw: /(バイク通勤)/i,             label: "バイク通勤可" },
+  { kw: /(自転車通勤)/i,             label: "自転車通勤可" },
+];
+
+function parseIncomeLabels(text=""){
+  const outs = [];
+  const m = String(text).match(/([3-9]00|3[50]|4[50]|5[50]|6[50]|700)\s*万/);
+  if (m) {
+    const n = Number(m[1]);
+    const label = `年収${n}万以上`;
+    if (mustWantItems.includes(label)) outs.push(label);
+  }
+  return outs;
+}
+
+function _norm_mw(s){
+  const toFW = (x)=>String(x||"").replace(/\(/g,"（").replace(/\)/g,"）").replace(/~/g,"～");
+  const toHW = (x)=>String(x||"").replace(/（/g,"(").replace(/）/g,")").replace(/～/g,"~");
+  return toHW(toFW(String(s||""))).toLowerCase().replace(/[ \t\r\n\u3000、。・／\/＿\-–—~～!?！？。、，．・]/g,"");
+}
+
+function collectMustWantCandidates(text = "", k = 6){
+  const raw = String(text||"");
+  const ntext = _norm_mw(raw);
+
+  const scored = [];
+  for (const label of mustWantItems) {
+    let sc = scoreSimilarity(label, raw); // ← 既存のSTEP4系スコアラ（上で定義済）
+
+    const nl = _norm_mw(label);
+    if (ntext.includes(nl) || nl.includes(ntext)) sc += 0.25;
+
+    for (const [alias, canon] of Object.entries(MUSTWANT_ALIASES||{})) {
+      if (canon === label && _norm_mw(raw).includes(_norm_mw(alias))) sc += 0.3;
+    }
+    for (const h of MW_HINTS) {
+      if (h.label === label && h.kw.test(raw)) sc += 0.35;
+    }
+
+    if (sc > 0) scored.push({ label, sc });
+  }
+
+  for (const lb of parseIncomeLabels(raw)) {
+    const i = scored.findIndex(x=>x.label===lb);
+    if (i>=0) scored[i].sc += 0.5; else scored.push({ label: lb, sc: 0.6 });
+  }
+
+  scored.sort((a,b)=> b.sc - a.sc);
+  const out = [];
+  for (const {label} of scored) { if (!out.includes(label)) out.push(label); if (out.length >= k) break; }
+  return out;
+}
+
+function decideStrength(text=""){
+  const t = String(text||"");
+  const must = MUST_STRONG.test(t);
+  const want = WANT_SOFT.test(t);
+  if (must && !want) return "must";
+  if (!must && want) return "want";
+  if (must && want)  return "must";
+  if (/(できない|無理|なし|不要|やらない|行けない|持てない|対応不可)/i.test(t)) return "must";
+  return "want";
+}
+
+function extractMustWantFromText(text = "", topK = 6){
+  const labels = collectMustWantCandidates(text, topK);
+  const strength = decideStrength(text);
+  const out = { must: [], want: [] };
+  if (!labels.length) return out;
+  if (strength === "must") out.must = labels; else out.want = labels;
+  return out;
+}
+
+// ID解決ヘルパ（tags.json由来のidに寄せる）
+function resolveTagId(label=""){
+  return tagIdByName.get(label)
+      || tagIdByName.get(label.replace(/\(/g,"（").replace(/\)/g,"）").replace(/~/g,"～"))
+      || tagIdByName.get(label.replace(/（/g,"(").replace(/）/g,")").replace(/～/g,"~"))
+      || (matchTagIdsInText(label)[0] ?? null);
+}
+
 
 // ---- セッション ----
 const sessions = Object.create(null);
@@ -1127,90 +1227,84 @@ if (options.length === 1) {
 } 
   
   // ---- Step5：絶対に外せない条件（Must） ----
-  if (s.step === 5) {
+if (s.step === 5) {
   if (isNone(text)) {
     s.step = 6;
     return res.json(withMeta({
       response: "ありがとう！それじゃあ次は【あったらいいな（希望条件）】を教えてね。",
-      step: 6,
-      status: s.status,
-      isNumberConfirmed: true,
-      candidateNumber: s.status.number,
-      debug: debugState(s),
+      step: 6, status: s.status, isNumberConfirmed: true,
+      candidateNumber: s.status.number, debug: debugState(s),
     }, 6));
   }
-    
-    const tags = matchTags(text, mustWantItems);
-    if (tags.length) {
-      const added = [];
-      for (const t of tags.slice(0, 3)) {
-        if (!s.status.must.includes(t)) { s.status.must.push(t); added.push(t); }
-      }
-      for (const label of added) {
-        const id = tagIdByName.get(label);
-        if (id && !s.status.must_ids.includes(id)) s.status.must_ids.push(id);
-      }
-      const line = added.map(t => `『${t}』だね！これも記憶したよ！`).join("\n");
-const empM1 = await generateEmpathy(text || "", s);
-return res.json(withMeta({
-  response: joinEmp(empM1, `${line}\n他にも絶対条件はある？（なければ「ない」って返してね）`),
-  step: 5,
-  status: s.status,
-  isNumberConfirmed: true,
-  candidateNumber: s.status.number,
-  debug: debugState(s),
-}, 5));
-}
+
+  const picked = extractMustWantFromText(text, 6); // ← ①で追加したコア
+  const addedMsgs = [];
+
+  // MUST 側に寄ったラベルを優先的に反映
+  const labels = picked.must.length ? picked.must : picked.want;
+  if (labels.length) {
+    const uniq = [];
+    for (const lb of labels) if (!uniq.includes(lb)) uniq.push(lb);
+
+    for (const lb of uniq) {
+      if (!s.status.must.includes(lb)) s.status.must.push(lb);
+      const id = resolveTagId(lb);
+      if (id != null && !s.status.must_ids.includes(id)) s.status.must_ids.push(id);
+      addedMsgs.push(`『${lb}』を絶対条件として記録したよ！`);
+    }
+  } else {
+    // 辞書ヒットなし→生テキストをメモに積む
     s.status.memo.must_raw ??= [];
-s.status.memo.must_raw.push(text);
-const empM2 = await generateEmpathy(text || "", s);
-return res.json(withMeta({
-  response: joinEmp(empM2, "他にも絶対条件はある？（なければ「ない」って返してね）"),
-  step: 5,
-  status: s.status,
-  isNumberConfirmed: true,
-  candidateNumber: s.status.number,
-  debug: debugState(s),
-}, 5));
+    s.status.memo.must_raw.push(text);
   }
 
+  const emp = await generateEmpathy(text || "", s);
+  const tail = "他にも絶対条件はある？（なければ「ない」って返してね）";
+  return res.json(withMeta({
+    response: joinEmp(emp, (addedMsgs.length ? addedMsgs.join("\n")+"\n" : "") + tail),
+    step: 5, status: s.status, isNumberConfirmed: true,
+    candidateNumber: s.status.number, debug: debugState(s)
+  }, 5));
+}
   // ---- Step6：あったらいいな（Want） ----
 if (s.step === 6) {
   if (isNone(text)) {
     s.step = 7;
     return res.json(withMeta({
       response: "質問は残り2つ！\nまずは【いま出来ること・得意なこと（Can）】を教えてね。自由に書いてOKだよ。",
-      step: 7, status: s.status, isNumberConfirmed: true, candidateNumber: s.status.number, debug: debugState(s)
+      step: 7, status: s.status, isNumberConfirmed: true,
+      candidateNumber: s.status.number, debug: debugState(s)
     }, 7));
   }
 
-  const tags = matchTags(text, mustWantItems);
-  if (tags.length) {
-    const added = [];
-    for (const t of tags.slice(0, 3)) {
-      if (!s.status.want.includes(t)) { s.status.want.push(t); added.push(t); }
+  const picked = extractMustWantFromText(text, 6); // ← ①で追加したコア
+  const addedMsgs = [];
+
+  // WANT 側に寄ったラベルを優先
+  const labels = picked.want.length ? picked.want : picked.must;
+  if (labels.length) {
+    const uniq = [];
+    for (const lb of labels) if (!uniq.includes(lb)) uniq.push(lb);
+
+    for (const lb of uniq) {
+      if (!s.status.want.includes(lb)) s.status.want.push(lb);
+      const id = resolveTagId(lb);
+      if (id != null && !s.status.want_ids.includes(id)) s.status.want_ids.push(id);
+      addedMsgs.push(`『${lb}』だと嬉しいってことだね！`);
     }
-    for (const label of added) {
-      const id = tagIdByName.get(label);
-      if (id && !s.status.want_ids.includes(id)) s.status.want_ids.push(id);
-    }
-    const line = added.map(t => `『${t}』だと嬉しいってことだね！`).join("\n");
-    const empW1 = await generateEmpathy(text || "", s);
-    return res.json(withMeta({
-      response: joinEmp(empW1, `${line}\n他にもあったらいいなっていうのはある？（なければ「ない」って返してね）`),
-      step: 6, status: s.status, isNumberConfirmed: true, candidateNumber: s.status.number, debug: debugState(s)
-    }, 6));
+  } else {
+    s.status.memo.want_raw ??= [];
+    s.status.memo.want_raw.push(text);
   }
 
-  s.status.memo.want_raw ??= [];
-  s.status.memo.want_raw.push(text);
-  const empW2 = await generateEmpathy(text || "", s);
+  const emp = await generateEmpathy(text || "", s);
+  const tail = "他にもあったらいいなっていうのはある？（なければ「ない」って返してね）";
   return res.json(withMeta({
-    response: joinEmp(empW2, "他にもあったらいいなっていうのはある？（なければ「ない」って返してね）"),
-    step: 6, status: s.status, isNumberConfirmed: true, candidateNumber: s.status.number, debug: debugState(s)
+    response: joinEmp(emp, (addedMsgs.length ? addedMsgs.join("\n")+"\n" : "") + tail),
+    step: 6, status: s.status, isNumberConfirmed: true,
+    candidateNumber: s.status.number, debug: debugState(s)
   }, 6));
 }
-
 
   // ---- Step7：Can ----
 if (s.step === 7) {
