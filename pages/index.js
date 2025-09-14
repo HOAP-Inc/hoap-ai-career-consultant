@@ -278,6 +278,8 @@ useLayoutEffect(() => {
     };
   }, []);
 
+  const showChoices = isChoiceStep(step) && choices.length > 0 && !isTyping;
+
   return (
   <div className="container">
 
@@ -296,10 +298,14 @@ useLayoutEffect(() => {
   <div className="duo-stage__bg" />
   <div className="duo-stage__wrap">
     <img className="duo-stage__hoap" src={hoapSrc} alt="ほーぷちゃん" />
-    <div className={`duo-stage__bubble ${isTyping ? "typing" : ""}`} aria-live="polite">
+   <div className={`duo-stage__bubble ${isTyping ? "typing" : ""}`} aria-live="polite">
   {isTyping ? (
     <span className="dots"><span>・</span><span>・</span><span>・</span></span>
-  ) : (aiText || "…")}
+  ) : (
+    showChoices
+      ? "どれが一番近い？下のボタンから選んでね！"
+      : (aiText || "…")
+  )}
 </div>
   </div>
 </section>
