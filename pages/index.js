@@ -24,6 +24,11 @@ const [aiText, setAiText] = useState("");      // ほーぷちゃんの吹き出
 const [isTyping, setIsTyping] = useState(false); // 返答待ちのタイピング表示
 const [userEcho, setUserEcho] = useState("");  // 入力欄上のユーザー吹き出し用 文言
 
+  // 対象ステップかを判定（STEP2〜6）
+function isChoiceStep(n) {
+  return n >= 2 && n <= 6;
+}
+  
   // 『［A］／［B］／［C］』形式から配列を作る
 function extractChoices(text) {
   if (!text) return [];
