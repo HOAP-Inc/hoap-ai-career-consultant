@@ -666,6 +666,20 @@ function initSession() {
     },
   };
 }
+
+// ★追加：Step4の選択状態を完全に終了させる
+function resetDrill(s) {
+  s.drill = {
+    phase: null,
+    count: 0,
+    category: null,
+    awaitingChoice: false,
+    options: [],
+    reasonBuf: s.drill?.reasonBuf || [],
+    flags: s.drill?.flags || {},
+  };
+}
+
 export default async function handler(req, res) {
   // ==== CORS（常にJSONを返す前提で統一）====
   res.setHeader("Access-Control-Allow-Origin", "*");
@@ -1045,6 +1059,7 @@ if (forced1) {
     const rid = reasonIdByName.get(sole);
     s.status.reason_ids = Array.isArray(rid) ? rid : (rid != null ? [rid] : []);
     s.step = 5;
+    resetDrill(s);
     return res.json(withMeta({
       response: `『${sole}』だね！担当エージェントに伝えておくね。\n\n${mustIntroText()}`,
       step: 5, status: s.status, isNumberConfirmed: true,
@@ -1091,7 +1106,7 @@ if (chosen) {
   s.status.reason_ids = Array.isArray(rid) ? rid : (rid != null ? [rid] : []);
 
   s.step = 5;
-
+  resetDrill(s);
   return res.json(withMeta({
     response: `${repeat}\n\n${mustIntroText()}`,
     step: 5,
@@ -1258,6 +1273,7 @@ if (forced2) {
     const rid = reasonIdByName.get(sole);
     s.status.reason_ids = Array.isArray(rid) ? rid : (rid != null ? [rid] : []);
     s.step = 5;
+    resetDrill(s);
     return res.json(withMeta({
       response: `『${sole}』だね！担当エージェントに伝えておくね。\n\n${mustIntroText()}`,
       step: 5, status: s.status, isNumberConfirmed: true,
