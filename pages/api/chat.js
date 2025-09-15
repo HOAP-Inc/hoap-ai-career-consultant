@@ -158,6 +158,139 @@ try {
 } catch (e) {
   console.error("serviceTag maps 構築失敗:", e);
 }
+
+// === サービス形態 専用マッチャ（ラベル候補 / ID候補）===
+// 依存: serviceFormTagList, serviceTagIdByName, serviceTagNameById, PLACE_ALIASES
+function matchServicePlacesInText(text = '') {
+  const raw = String(text || '').trim();
+  if (!raw) return [];
+
+  const toFW = s => String(s || '').replace(/\(/g,'（').replace(/\)/g,'）').replace(/~/g,'～');
+  const toHW = s => String(s || '').replace(/（/g,'(').replace(/）/g,')').replace(/～/g,'~');
+  const scrub = s =>
+    String(s || '').toLowerCase()
+      .replace(/[ \t\r\n\u3000、。・／\/＿\-–—~～!?！？。、，．・]/g,'');
+  const norm  = s => scrub(toHW(toFW(s)));
+  const normText = norm(raw);
+
+  const out = new Set();
+
+  // 0) 厳密一致 → 正式ラベル
+  const byExact =
+        serviceTagIdByName.get(raw)
+     || serviceTagIdByName.get(toFW(raw))
+     || serviceTagIdByName.get(toHW(raw));
+  if (byExact != null) {
+    const name = serviceTagNameById.get(byExact);
+    if (name) out.add(name);
+  }
+
+  // 1) エイリアス命中 → 正式ラベル
+  for (const [alias, label] of Object.entries(PLACE_ALIASES || {})) {
+    if (!alias || !label) continue;
+    if (normText.includes(norm(alias))) {
+      const id =
+            serviceTagIdByName.get(label)
+         || serviceTagIdByName.get(toFW(label))
+         || serviceTagIdByName.get(toHW(label));
+      if (id != null) {
+        const official = serviceTagNameById.get(id);
+        if (official) out.add(official);
+      }
+    }
+  }
+
+  // 2) 双方向部分一致
+  const normalize = s => (s ? norm(s) : '');
+  for (const t of (Array.isArray(serviceFormTagList) ? serviceFormTagList : [])) {
+    const name = String(t?.name ?? '');
+    if (!name) continue;
+    const nTag = normalize(name);
+    if (!nTag) continue;
+    if (normText.includes(nTag) || nTag.includes(normText)) out.add(name);
+  }
+
+  // 3) ファジー補完
+  if (out.size === 0) {
+    const pool = [];
+    for (const t of (Array.isArray(serviceFormTagList) ? serviceFormTagList : [])) {
+      const name = String(t?.name ?? '');
+      if (!name) continue;
+      const s = scoreSimilarity(name, raw);
+      if (s > 0) pool.push({ name, s });
+    }
+    pool.sort((a,b)=> b.s - a.s);
+    for (const { name, s } of pool.slice(0, 6)) {
+      if (s >= 0.35) out.add(name);
+    }
+  }
+
+  return Array.from(out);
+}
+
+function matchServiceTagIdsInText(text = '') {
+  const raw = String(text || '').trim();
+  if (!raw) return [];
+
+  const toFW = s => String(s || '').replace(/\(/g,'（').replace(/\)/g,'）').replace(/~/g,'～');
+  const toHW = s => String(s || '').replace(/（/g,'(').replace(/）/g,')').replace(/～/g,'~');
+  const scrub = s =>
+    String(s || '').toLowerCase()
+      .replace(/[ \t\r\n\u3000、。・／\/＿\-–—~～!?！？。、，．・]/g,'');
+  const norm = s => scrub(toHW(toFW(s)));
+  const normText = norm(raw);
+
+  const out = new Set();
+
+  // 0) 厳密一致
+  const direct =
+        serviceTagIdByName.get(raw)
+     || serviceTagIdByName.get(toFW(raw))
+     || serviceTagIdByName.get(toHW(raw));
+  if (direct != null) out.add(direct);
+
+  // 1) エイリアス → 正式ラベル → ID
+  for (const [alias, label] of Object.entries(PLACE_ALIASES || {})) {
+    if (!alias || !label) continue;
+    if (normText.includes(norm(alias))) {
+      const id =
+            serviceTagIdByName.get(label)
+         || serviceTagIdByName.get(toFW(label))
+         || serviceTagIdByName.get(toHW(label));
+      if (id != null) out.add(id);
+    }
+  }
+
+  // 2) 双方向部分一致
+  const normalize = s => (s ? norm(s) : '');
+  for (const t of (Array.isArray(serviceFormTagList) ? serviceFormTagList : [])) {
+    const name = String(t?.name ?? '');
+    const id   = t?.id;
+    if (!name || id == null) continue;
+    const nTag = normalize(name);
+    if (!nTag) continue;
+    if (normText.includes(nTag) || nTag.includes(normText)) out.add(id);
+  }
+
+  // 3) ファジー補完
+  if (out.size === 0) {
+    const scored = [];
+    for (const t of (Array.isArray(serviceFormTagList) ? serviceFormTagList : [])) {
+      const name = String(t?.name ?? '');
+      const id   = t?.id;
+      if (!name || id == null) continue;
+      const s = scoreSimilarity(name, raw);
+      if (s > 0) scored.push({ id, s });
+    }
+    scored.sort((a,b)=> b.s - a.s);
+    for (const { id, s } of scored.slice(0, 3)) {
+      if (s >= 0.35) out.add(id);
+    }
+  }
+
+  return Array.from(out);
+}
+
 const PLACE_ALIASES = {
   // 医療・病院
   "急性期": "急性期病棟",
@@ -923,28 +1056,28 @@ if (s.step === 3) {
     if (chosen) {
       s.status.place = chosen;
 
-      // ラベル→ID（優先：厳密一致。なければファジー）＋ 正式名称へ正規化
-const id =
-    tagIdByName.get(chosen)
- || tagIdByName.get(chosen.replace(/\(/g,"（").replace(/\)/g,"）").replace(/~/g,"～"))
- || tagIdByName.get(chosen.replace(/（/g,"(").replace(/）/g,")").replace(/～/g,"~"));
+            // ラベル→ID（サービス形態限定：厳密一致→限定ファジー）＋ 正式名称へ正規化
+      const id =
+            serviceTagIdByName.get(chosen)
+         || serviceTagIdByName.get(chosen.replace(/\(/g,'（').replace(/\)/g,'）').replace(/~/g,'～'))
+         || serviceTagIdByName.get(chosen.replace(/（/g,'(').replace(/）/g,')').replace(/～/g,'~'));
 
-if (id != null) {
-  s.status.place_ids = [id];
-  // 公式ラベルで上書き
-  const official = tagNameById.get(id);
-  if (official) s.status.place = official;
-} else {
-  // 念のため（ファジー）
-  const ids = matchTagIdsInText(chosen);
-  if (Array.isArray(ids) && ids.length) {
-    s.status.place_ids = [ids[0]];
-    const official = tagNameById.get(ids[0]);
-    if (official) s.status.place = official;
-  } else {
-    s.status.place_ids = [];
-  }
-}
+      if (id != null) {
+        s.status.place_ids = [id];
+        const official = serviceTagNameById.get(id);
+        if (official) s.status.place = official;
+      } else {
+        // サービス形態限定のフォールバック
+        const ids = matchServiceTagIdsInText(chosen);
+        if (Array.isArray(ids) && ids.length) {
+          s.status.place_ids = [ids[0]];
+          const official = serviceTagNameById.get(ids[0]);
+          if (official) s.status.place = official;
+        } else {
+          // サービス形態外はIDを付与しない（placeは保持、place_idsは空）
+          s.status.place_ids = [];
+        }
+      }
 
       // 次ステップへ
       s.drill = {
@@ -969,78 +1102,42 @@ if (id != null) {
       step: 3, status: s.status, isNumberConfirmed: true, candidateNumber: s.status.number, debug: debugState(s)
     }, 3));
   }
+// 初回入力：候補抽出
+const foundLabels = matchServicePlacesInText(text); // サービス形態限定のラベル配列
+const raw = String(text || "").trim();
 
-  // 初回入力：候補抽出
-  const foundLabels = matchPlacesInText(text); // ラベル配列
-  const raw = String(text || "").trim();
+// 完全一致を最優先で自動確定
+const toFW = (x) => x.replace(/\(/g,'（').replace(/\)/g,'）').replace(/~/g,'～');
+const toHW = (x) => x.replace(/（/g,'(').replace(/）/g,')').replace(/～/g,'~');
+const normalize = (x) => toHW(toFW(String(x||""))).replace(/[ \t\r\n\u3000]/g,"");
+const exact = foundLabels.find(l => normalize(l) === normalize(raw));
 
-  // 完全一致を最優先で自動確定
-  const toFW = (x) => x.replace(/\(/g,"（").replace(/\)/g,"）").replace(/~/g,"～");
-  const toHW = (x) => x.replace(/（/g,"(").replace(/）/g,")").replace(/～/g,"~");
-  const normalize = (x) => toHW(toFW(String(x||""))).replace(/[ \t\r\n\u3000]/g,"");
-  const exact = foundLabels.find(l => normalize(l) === normalize(raw));
+// サービス形態のみ：ラベル→ID 解決（厳密一致→サービス形態限定フォールバック）
+const finalize = (label) => {
+  s.status.place = label;
 
-  const finalize = (label) => {
-    s.status.place = label;
-    // ラベル→ID（優先：厳密一致。なければファジー）＋ 正式名称へ正規化
-const id =
-    tagIdByName.get(label)
- || tagIdByName.get(toFW(label))
- || tagIdByName.get(toHW(label));
+  const id =
+        serviceTagIdByName.get(label)
+     || serviceTagIdByName.get(toFW(label))
+     || serviceTagIdByName.get(toHW(label));
 
-if (id != null) {
-  s.status.place_ids = [id];
-  const official = tagNameById.get(id);
-  if (official) s.status.place = official;
-} else {
-  const ids = matchTagIdsInText(label);
-  if (Array.isArray(ids) && ids.length) {
-    s.status.place_ids = [ids[0]];
-    const official = tagNameById.get(ids[0]);
-    if (official) s.status.place = official;
+  if (id != null) {
+    s.status.place_ids = [id];
+    const official = serviceTagNameById.get(id);
+    if (official) s.status.place = official; // 正式名称で上書き
   } else {
-    s.status.place_ids = [];
-  }
-}
-    // 次へ
-    s.drill = {
-      phase: "reason",
-      count: 0,
-      category: null,
-      awaitingChoice: false,
-      options: [],
-      reasonBuf: [],
-      flags: s.drill.flags || {},
-    };
-    s.step = 4;
-    return res.json(withMeta({
-      response: "はじめに、今回の転職理由を教えてほしいな。きっかけってどんなことだった？\nしんどいと思ったこと、これはもう無理って思ったこと、逆にこういうことに挑戦したい！って思ったこと、何でもOKだよ◎",
-      step: 4, status: s.status, isNumberConfirmed: true, candidateNumber: s.status.number, debug: debugState(s)
-    }, 4));
-  };
-
-  if (exact) {
-    return finalize(exact);
-  }
-  if (foundLabels.length === 1) {
-    return finalize(foundLabels[0]);
-  }
-  if (foundLabels.length >= 2) {
-    // 複数候補 → 選択肢提示（最大6）
-    const options = foundLabels.slice(0, 6);
-    s.drill.phase = "place";
-    s.drill.awaitingChoice = true;
-    s.drill.options = options;
-    return res.json(withMeta({
-      response: `どれが一番近い？『${options.map(x=>`［${x}］`).join("／")}』`,
-      step: 3, status: s.status, isNumberConfirmed: true, candidateNumber: s.status.number, debug: debugState(s)
-    }, 3));
+    const ids = matchServiceTagIdsInText(label); // サービス形態限定フォールバック
+    if (Array.isArray(ids) && ids.length) {
+      s.status.place_ids = [ids[0]];
+      const official = serviceTagNameById.get(ids[0]);
+      if (official) s.status.place = official;
+    } else {
+      // サービス形態外はIDを付与しない（placeは保持、place_idsは空）
+      s.status.place_ids = [];
+    }
   }
 
-  // 候補ゼロ：原文のまま保存（IDは可能な範囲で拾う）
-  s.status.place = raw;
-  s.status.place_ids = matchTagIdsInText(raw);
-
+  // 次へ（Step4）
   s.drill = {
     phase: "reason",
     count: 0,
@@ -1051,10 +1148,53 @@ if (id != null) {
     flags: s.drill.flags || {},
   };
   s.step = 4;
+
   return res.json(withMeta({
     response: "はじめに、今回の転職理由を教えてほしいな。きっかけってどんなことだった？\nしんどいと思ったこと、これはもう無理って思ったこと、逆にこういうことに挑戦したい！って思ったこと、何でもOKだよ◎",
     step: 4, status: s.status, isNumberConfirmed: true, candidateNumber: s.status.number, debug: debugState(s)
   }, 4));
+};
+
+if (exact) {
+  // ① 入力と完全一致があれば即確定
+  return finalize(exact);
+}
+if (foundLabels.length === 1) {
+  // ② 候補が1つなら自動確定
+  return finalize(foundLabels[0]);
+}
+if (foundLabels.length >= 2) {
+  // ③ 複数候補 → 選択肢提示（最大6）
+  const options = foundLabels.slice(0, 6);
+  s.drill.phase = "place";
+  s.drill.awaitingChoice = true;
+  s.drill.options = options;
+  return res.json(withMeta({
+    response: `どれが一番近い？『${options.map(x=>`［${x}］`).join("／")}』`,
+    step: 3, status: s.status, isNumberConfirmed: true, candidateNumber: s.status.number, debug: debugState(s)
+  }, 3));
+}
+
+// ④ 候補ゼロ：ユーザーの文字列をそのまま保持し、IDは付与しない
+s.status.place = raw;
+s.status.place_ids = []; // サービス形態以外のIDは絶対に入れない（= 空）
+
+// 次へ（Step4）
+s.drill = {
+  phase: "reason",
+  count: 0,
+  category: null,
+  awaitingChoice: false,
+  options: [],
+  reasonBuf: [],
+  flags: s.drill.flags || {},
+};
+s.step = 4;
+return res.json(withMeta({
+  response: "はじめに、今回の転職理由を教えてほしいな。きっかけってどんなことだった？\nしんどいと思ったこと、これはもう無理って思ったこと、逆にこういうことに挑戦したい！って思ったこと、何でもOKだよ◎",
+  step: 4, status: s.status, isNumberConfirmed: true, candidateNumber: s.status.number, debug: debugState(s)
+}, 4));
+  
 }
 
    // ---- Step4：転職理由（深掘り2回→候補提示） ----
