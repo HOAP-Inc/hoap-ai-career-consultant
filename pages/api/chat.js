@@ -136,6 +136,28 @@ try {
   console.error("tagNameById 構築失敗:", e);
 }
 // ←ここに追記
+// === STEP3専用：tags.jsonから「サービス形態」だけを使うためのサブセット ===
+const serviceFormTagList = (Array.isArray(tagList) ? tagList : []).filter(
+  t => t?.category === "サービス形態"
+);
+
+// 「サービス形態」専用：名称→ID / ID→名称
+const serviceTagIdByName = new Map();
+const serviceTagNameById = new Map();
+try {
+  for (const t of serviceFormTagList) {
+    const name = String(t?.name ?? "");
+    if (!name || t?.id == null) continue;
+    const fw = name.replace(/\(/g, "（").replace(/\)/g, "）").replace(/~/g, "～");
+    const hw = name.replace(/（/g, "(").replace(/）/g, ")").replace(/～/g, "~");
+    serviceTagIdByName.set(name, t.id);
+    serviceTagIdByName.set(fw, t.id);
+    serviceTagIdByName.set(hw, t.id);
+    serviceTagNameById.set(t.id, name);
+  }
+} catch (e) {
+  console.error("serviceTag maps 構築失敗:", e);
+}
 const PLACE_ALIASES = {
   // 医療・病院
   "急性期": "急性期病棟",
@@ -901,18 +923,28 @@ if (s.step === 3) {
     if (chosen) {
       s.status.place = chosen;
 
-      // ラベル→ID（優先：厳密一致。なければファジー）
-      const id =
-          tagIdByName.get(chosen)
-       || tagIdByName.get(chosen.replace(/\(/g,"（").replace(/\)/g,"）").replace(/~/g,"～"))
-       || tagIdByName.get(chosen.replace(/（/g,"(").replace(/）/g,")").replace(/～/g,"~"));
-      if (id != null) {
-        s.status.place_ids = [id];
-      } else {
-        // 念のため
-        const ids = matchTagIdsInText(chosen);
-        s.status.place_ids = Array.isArray(ids) && ids.length ? [ids[0]] : [];
-      }
+      // ラベル→ID（優先：厳密一致。なければファジー）＋ 正式名称へ正規化
+const id =
+    tagIdByName.get(chosen)
+ || tagIdByName.get(chosen.replace(/\(/g,"（").replace(/\)/g,"）").replace(/~/g,"～"))
+ || tagIdByName.get(chosen.replace(/（/g,"(").replace(/）/g,")").replace(/～/g,"~"));
+
+if (id != null) {
+  s.status.place_ids = [id];
+  // 公式ラベルで上書き
+  const official = tagNameById.get(id);
+  if (official) s.status.place = official;
+} else {
+  // 念のため（ファジー）
+  const ids = matchTagIdsInText(chosen);
+  if (Array.isArray(ids) && ids.length) {
+    s.status.place_ids = [ids[0]];
+    const official = tagNameById.get(ids[0]);
+    if (official) s.status.place = official;
+  } else {
+    s.status.place_ids = [];
+  }
+}
 
       // 次ステップへ
       s.drill = {
@@ -950,14 +982,26 @@ if (s.step === 3) {
 
   const finalize = (label) => {
     s.status.place = label;
-    // ラベル→ID
-    const id =
-        tagIdByName.get(label)
-     || tagIdByName.get(toFW(label))
-     || tagIdByName.get(toHW(label));
-    if (id != null) s.status.place_ids = [id];
-    else            s.status.place_ids = matchTagIdsInText(label);
+    // ラベル→ID（優先：厳密一致。なければファジー）＋ 正式名称へ正規化
+const id =
+    tagIdByName.get(label)
+ || tagIdByName.get(toFW(label))
+ || tagIdByName.get(toHW(label));
 
+if (id != null) {
+  s.status.place_ids = [id];
+  const official = tagNameById.get(id);
+  if (official) s.status.place = official;
+} else {
+  const ids = matchTagIdsInText(label);
+  if (Array.isArray(ids) && ids.length) {
+    s.status.place_ids = [ids[0]];
+    const official = tagNameById.get(ids[0]);
+    if (official) s.status.place = official;
+  } else {
+    s.status.place_ids = [];
+  }
+}
     // 次へ
     s.drill = {
       phase: "reason",
