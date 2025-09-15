@@ -1137,7 +1137,7 @@ if (s.step === 4) {
   s.step = 5;
 
   const emp0 = await generateEmpathy(text, s);
-  const fixed = "オンコールがない職場を考えていこうね。";
+  const fixed = "無理なく働ける職場を考えていこうね。";
 
   return res.json(withMeta({
     response: joinEmp(emp0, `${fixed}\n\n${mustIntroText()}`),
