@@ -2076,7 +2076,7 @@ function debugState(s) {
     mustCount: (s.status.must_ng || []).length,     // 修正：must_ng配列を使用
     wantCount: (s.status.want_text || "").length,   // 修正：want_textの文字数
   };
-
+} 
 
 // 0.5 を使わない進行に合わせた文言
 function nextAfterId(s) {
@@ -2403,5 +2403,6 @@ function getIdsForOfficialLicense(label = "") {
     if (!best || sim > best.sim) best = { id: t.id, sim };
   }
   return best ? [best.id] : [];
+}
 }
 }
