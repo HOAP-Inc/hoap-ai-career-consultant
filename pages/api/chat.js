@@ -2404,3 +2404,4 @@ function getIdsForOfficialLicense(label = "") {
   }
   return best ? [best.id] : [];
 }
+}
