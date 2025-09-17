@@ -372,16 +372,18 @@ try {
 
 // ---- Step ラベル（UI用） ----
 const STEP_LABELS = {
-   1: "求職者ID",
-    2: "職種",
-    3: "現職",
-    4: "転職理由",
-    5: "絶対条件（Must）",
-    6: "希望条件（Want）",
-    7: "これまで（Can）",
-    8: "これから（Will）",
-    9: "完了",
+  1: "求職者ID",
+  2: "職種",
+  3: "現職",
+  4: "転職理由",
+  5: "絶対NG（Must NG）",
+  6: "絶対欲しい（Must Have）",
+  7: "あったら嬉しい（Want）",
+  8: "これまで（Can）",
+  9: "これから（Will）",
+  10: "完了",
 };
+
 
 // ---- 深掘りの汎用質問（カテゴリ推定が弱い場合の保険） ----
 const GENERIC_REASON_Q = {
@@ -813,27 +815,41 @@ function initSession() {
   return {
     step: 1,
     isNumberConfirmed: false,
-    drill: { phase: null, count: 0, category: null, awaitingChoice: false, options: [], reasonBuf: [],flags: {} },
+    drill: { phase: null, count: 0, category: null, awaitingChoice: false, options: [], reasonBuf: [], flags: {} },
     status: {
       number: "",
       role: "",
-      role_ids: [],     // ← 追加：職種（資格）の tags.json ID
+      role_ids: [],        // 職種（資格）の tags.json ID
       place: "",
-      place_ids: [],    // ← 追加：現職（施設/形態など）の tags.json ID
+      place_ids: [],       // 現職（施設/形態など）の tags.json ID
       reason: "",
       reason_tag: "",
       reason_ids: [],
-      must: [],
-      want: [],
-      must_ids: [],
-      want_ids: [],
+
+      // ▼ Must を2系統に分離
+      must_ng: [],         // 絶対NG（Must NG）…ラベル配列
+      must_have: [],       // 絶対欲しい（Must Have）…ラベル配列
+      must_ng_ids: [],     // tags.json ID 配列
+      must_have_ids: [],   // tags.json ID 配列
+
+      // ▼ Want/Can/Will はテキスト保持
+      want_text: "",
       can: "",
       will: "",
+
       licenses: [],
-      memo: { reason_raw: "", must_raw: [], want_raw: [] },
+
+      // ▼ メモ（未ヒット語句の保持先を分離）
+      memo: {
+        role_raw: "",
+        reason_raw: "",
+        must_ng_raw: [],      // STEP5の未ヒット自由記述
+        must_have_raw: [],    // STEP6の未ヒット自由記述
+      },
     },
   };
 }
+
 
 // ★追加：Step4の選択状態を完全に終了させる
 function resetDrill(s) {
@@ -872,8 +888,17 @@ export default async function handler(req, res) {
     sessions[sessionId] = safeBody.snapshot;
   }
   const s = sessions[sessionId] ?? (sessions[sessionId] = initSession());
-  if (!s.status.must_ids) s.status.must_ids = [];
-  if (!s.status.want_ids) s.status.want_ids = [];
+
+// 旧プロパティが残っていても落ちないように最低限の互換初期化
+s.status.must_ng       ||= [];
+s.status.must_have     ||= [];
+s.status.must_ng_ids   ||= [];
+s.status.must_have_ids ||= [];
+s.status.want_text     ||= "";
+s.status.memo          ||= {};
+s.status.memo.must_ng_raw   ||= [];
+s.status.memo.must_have_raw ||= [];
+
 
   // ここで、POST 以外の全メソッドは **必ず 200 + JSON** を返す
   // （OPTIONS/HEAD/PUT/PATCH/DELETE/GET を統一挙動にする）
@@ -1602,79 +1627,78 @@ if (options.length === 1) {
   }
 } 
   
-  // ---- Step5：絶対に外せない条件（Must） ----
+  // ---- Step5：絶対NG（Must NG） ----
 if (s.step === 5) {
+  // なし宣言 → 次へ
   if (isNone(text)) {
     s.step = 6;
     return res.json(withMeta({
-      response: "ありがとう！それじゃあ次は【あったらいいな（希望条件）】を教えてね。",
+      response: "了解！次は【これだけは絶対あってほしい（Must Have）】を教えてね。",
       step: 6, status: s.status, isNumberConfirmed: true,
       candidateNumber: s.status.number, debug: debugState(s),
     }, 6));
   }
 
-  const picked = extractMustWantFromText(text, 6); // ← ①で追加したコア
+  const picked = extractMustWantFromText(text, 6); // 既存抽出ロジックを流用
   const addedMsgs = [];
-
-  // MUST 側に寄ったラベルを優先的に反映
   const labels = picked.must.length ? picked.must : picked.want;
+
   if (labels.length) {
     const uniq = [];
     for (const lb of labels) if (!uniq.includes(lb)) uniq.push(lb);
 
     for (const lb of uniq) {
-      if (!s.status.must.includes(lb)) s.status.must.push(lb);
+      if (!s.status.must_ng.includes(lb)) s.status.must_ng.push(lb);
       const id = resolveTagId(lb);
-      if (id != null && !s.status.must_ids.includes(id)) s.status.must_ids.push(id);
-      addedMsgs.push(`『${lb}』を絶対条件として記録したよ！`);
+      if (id != null && !s.status.must_ng_ids.includes(id)) s.status.must_ng_ids.push(id);
+      addedMsgs.push(`『${lb}』は絶対NGとして記録したよ！`);
     }
   } else {
-    // 辞書ヒットなし→生テキストをメモに積む
-    s.status.memo.must_raw ??= [];
-    s.status.memo.must_raw.push(text);
+    s.status.memo.must_ng_raw ??= [];
+    s.status.memo.must_ng_raw.push(text);
   }
 
   const emp = await generateEmpathy(text || "", s);
-  const tail = "他にも絶対条件はある？（なければ「ない」って返してね）";
+  const tail = "他にも『これはダメ！』はある？（なければ「ない」って返してね）";
   return res.json(withMeta({
     response: joinEmp(emp, (addedMsgs.length ? addedMsgs.join("\n")+"\n" : "") + tail),
     step: 5, status: s.status, isNumberConfirmed: true,
     candidateNumber: s.status.number, debug: debugState(s)
   }, 5));
 }
-  // ---- Step6：あったらいいな（Want） ----
+
+  // ---- Step6：絶対欲しい（Must Have） ----
 if (s.step === 6) {
   if (isNone(text)) {
     s.step = 7;
     return res.json(withMeta({
-      response: "質問は残り2つ！\nまずは【いま出来ること・得意なこと（Can）】を教えてね。自由に書いてOKだよ。",
+      response: "ここからは自由入力だよ！\nまずは【あったら嬉しい（Want）】を教えてね。短くてもOK。",
       step: 7, status: s.status, isNumberConfirmed: true,
       candidateNumber: s.status.number, debug: debugState(s)
     }, 7));
   }
 
-  const picked = extractMustWantFromText(text, 6); // ← ①で追加したコア
+  const picked = extractMustWantFromText(text, 6);
   const addedMsgs = [];
 
-  // WANT 側に寄ったラベルを優先
   const labels = picked.want.length ? picked.want : picked.must;
   if (labels.length) {
     const uniq = [];
     for (const lb of labels) if (!uniq.includes(lb)) uniq.push(lb);
 
     for (const lb of uniq) {
-      if (!s.status.want.includes(lb)) s.status.want.push(lb);
+      if (!s.status.must_have.includes(lb)) s.status.must_have.push(lb);
       const id = resolveTagId(lb);
-      if (id != null && !s.status.want_ids.includes(id)) s.status.want_ids.push(id);
-      addedMsgs.push(`『${lb}』だと嬉しいってことだね！`);
+      if (id != null && !s.status.must_have_ids.includes(id)) s.status.must_have_ids.push(id);
+      addedMsgs.push(`『${lb}』は絶対ほしい条件として記録したよ！`);
     }
   } else {
-    s.status.memo.want_raw ??= [];
-    s.status.memo.want_raw.push(text);
+    s.status.memo.must_have_raw ??= [];
+    s.status.memo.must_have_raw.push(text);
   }
 
   const emp = await generateEmpathy(text || "", s);
-  const tail = "他にもあったらいいなっていうのはある？（なければ「ない」って返してね）";
+  const tail = "他にも『これは必須でほしい！』はある？（なければ「ない」って返してね）";
   return res.json(withMeta({
     response: joinEmp(emp, (addedMsgs.length ? addedMsgs.join("\n")+"\n" : "") + tail),
     step: 6, status: s.status, isNumberConfirmed: true,
@@ -1682,44 +1706,55 @@ if (s.step === 6) {
   }, 6));
 }
 
-  // ---- Step7：Can ----
+  // ---- Step7：あったら嬉しい（Want / 自由記述）----
 if (s.step === 7) {
-  s.status.can = text || "";
+  s.status.want_text = text || "";
   s.step = 8;
-  const empCan = await generateEmpathy(text || "", s);
+  const emp = await generateEmpathy(text || "", s);
   return res.json(withMeta({
-    response: joinEmp(empCan, "これが最後の質問👏\n【これから挑戦したいこと（Will）】を教えてね。自由に書いてOKだよ。"),
-    step: 8,
-    status: s.status,
-    isNumberConfirmed: true,
-    candidateNumber: s.status.number,
-    debug: debugState(s)
+    response: joinEmp(emp, "次は【これまで（Can）】を教えてね。できること・得意なことを自由にどうぞ。"),
+    step: 8, status: s.status, isNumberConfirmed: true,
+    candidateNumber: s.status.number, debug: debugState(s)
   }, 8));
 }
 
-// ---- Step8：Will ----
+// ---- Step8：Can ----
 if (s.step === 8) {
-  s.status.will = text || "";
+  s.status.can = text || "";
   s.step = 9;
-  const empWill = await generateEmpathy(text || "", s);
+  const empCan = await generateEmpathy(text || "", s);
   return res.json(withMeta({
-    response: joinEmp(empWill, "今日はたくさん話してくれてありがとう！\n整理した内容は担当エージェントにしっかり共有するね。面談でさらに具体化していこう！"),
-    step: 9, status: s.status, isNumberConfirmed: true, candidateNumber: s.status.number, debug: debugState(s)
+    response: joinEmp(empCan, "最後！【これから（Will）】を教えてね。挑戦したいことをそのまま書いてね。"),
+    step: 9, status: s.status, isNumberConfirmed: true,
+    candidateNumber: s.status.number, debug: debugState(s)
   }, 9));
 }
 
-// ---- Step9：完了後の追加発話 ----
+// ---- Step9：Will ----
 if (s.step === 9) {
+  s.status.will = text || "";
+  s.step = 10;
+  const empWill = await generateEmpathy(text || "", s);
+  return res.json(withMeta({
+    response: joinEmp(empWill, "今日はたくさん話してくれて助かった！\n整理した内容は担当エージェントに共有するね。"),
+    step: 10, status: s.status, isNumberConfirmed: true,
+    candidateNumber: s.status.number, debug: debugState(s)
+  }, 10));
+}
+
+// ---- Step10：完了後の追加発話 ----
+if (s.step === 10) {
   const empDone = await generateEmpathy(text || "", s);
   return res.json(withMeta({
-    response: joinEmp(empDone, "長い時間付き合ってくれてありがとう！続きは担当エージェントと話そうね！"),
-    step: 9,
+    response: joinEmp(empDone, "ここまでで入力はOK！続きは担当エージェントと詰めていこう。"),
+    step: 10,
     status: s.status,
     isNumberConfirmed: true,
     candidateNumber: s.status.number,
     debug: debugState(s),
-  }, 9));
+  }, 10));
 }
+
 
   // 想定外フォールバック
   return res.json(withMeta({
@@ -1994,6 +2029,30 @@ function joinEmp(a, b) {
   return `${left}\n\n${right}`;                      // 空行1つでつなぐ
 }
 
+// ▼▼ buildStatusBar（置換 or 追加） ▼▼
+function buildStatusBar(st = {}, currentStep = 0) {
+  const maxStep = 10;
+  const steps = [];
+  for (let i = 1; i <= maxStep; i++) {
+    steps.push({
+      id: i,
+      label: STEP_LABELS[i] || `STEP ${i}`,
+      done: i < currentStep,
+      active: i === currentStep,
+      todo: i > currentStep,
+    });
+  }
+
+  const progress =
+    currentStep <= 1 ? 0 :
+    currentStep >= maxStep ? 1 :
+    (currentStep - 1) / (maxStep - 1);
+
+  return { current: currentStep, progress, steps };
+}
+// ▲▲ ここまで ▲▲
+
+
 function withMeta(payload, step) {
   const statusBar = buildStatusBar(payload.status, step);
   return {
@@ -2018,92 +2077,45 @@ function debugState(s) {
     wantCount: s.status.want.length,
   };
 }
-function buildStatusBar(st, currentStep = 0) {
-  const fmtIds = (arr = []) => (arr || []).map(id => `ID:${id}`).join(",");
-
-  // ====== 整合チェック（簡潔版）======
-  const lic = Array.isArray(st.licenses) ? st.licenses[0] : "";
-  const roleLabel = lic || st.role || "";
-  const roleIsConsistent = roleLabel ? OFFICIAL_LICENSES.has(roleLabel) : false;
-
-  const placeIsConsistent  = Array.isArray(st.place_ids)  && st.place_ids.length  > 0;
-  const reasonIsConsistent = Array.isArray(st.reason_ids) && st.reason_ids.length > 0;
-  const mustIsConsistent   = Array.isArray(st.must_ids)   && st.must_ids.length   > 0;
-  const wantIsConsistent   = Array.isArray(st.want_ids)   && st.want_ids.length   > 0;
-
-  // 受付中フラグ（この間は「済」を出さない）
-  const inMustPhase = currentStep === 5;
-  const inWantPhase = currentStep === 6;
-
+function initSession() {
   return {
-    求職者ID: st.number || "",
+    step: 1,
+    isNumberConfirmed: false,
+    drill: { phase: null, count: 0, category: null, awaitingChoice: false, options: [], reasonBuf: [], flags: {} },
+    status: {
+      number: "",
+      role: "",
+      role_ids: [],        // 職種（資格）の tags.json ID
+      place: "",
+      place_ids: [],       // 現職（施設/形態など）の tags.json ID
+      reason: "",
+      reason_tag: "",
+      reason_ids: [],
 
-    職種:
-  (() => {
-    if (!roleLabel && !st.memo?.role_raw) return "";
-    const hasIds  = Array.isArray(st.role_ids) && st.role_ids.length > 0;
-    const roleRaw = st.memo?.role_raw || "";
-    // ID化できたら「正式ラベル（ID:...）」、できなければユーザーの元発話をそのまま
-    return hasIds
-      ? `${roleLabel}（${fmtIds(st.role_ids)}）`
-      : (roleRaw || roleLabel || "");
-  })(),
+      // ▼ Must を2系統に分離
+      must_ng: [],         // 絶対NG（Must NG）…ラベル配列
+      must_have: [],       // 絶対欲しい（Must Have）…ラベル配列
+      must_ng_ids: [],     // tags.json ID 配列
+      must_have_ids: [],   // tags.json ID 配列
 
-    現職:
-      st.place
-        ? (placeIsConsistent ? `${st.place}（${fmtIds(st.place_ids)}）` : "済")
-        : "",
+      // ▼ Want/Can/Will はテキスト保持
+      want_text: "",
+      can: "",
+      will: "",
 
-    転職目的: (() => {
-  // IDが取れていればラベル＋ID
-  if (reasonIsConsistent) {
-    return st.reason_ids?.length
-      ? `${st.reason_tag}（${fmtIds(st.reason_ids)}）`
-      : (st.reason_tag || "済"); // 念のため
-  }
-  // ★未マッチでも入力（tag / 自由記述 / raw）があれば「済」
-  if (st.reason_tag || st.reason || (st.memo?.reason_raw)) return "済";
+      licenses: [],
 
-  // 何も入力がなければ空
-  return "";
-})(),
-    // ←ここがポイント：Step5の最中は「済」を出さない
-    Must:
-      (() => {
-        if (Array.isArray(st.must) && st.must.length > 0) {
-          // 入力済みなら、IDの有無に関わらずラベルをそのまま表示（受付中はこれが自然）
-          return mustIsConsistent
-            ? (st.must_ids?.length ? `${st.must.join("／")}（${fmtIds(st.must_ids)}）` : st.must.join("／"))
-            : st.must.join("／");
-        }
-        // テキストだけ（辞書非ヒット）を memo に溜めているケース
-        const hasRaw = Array.isArray(st.memo?.must_raw) && st.memo.must_raw.length > 0;
-        if (hasRaw) {
-          // 受付中なら空欄（未完了）。受付終了後（Stepを越えたら）だけ「済」を出す
-          return inMustPhase ? "" : (mustIsConsistent ? st.must.join("／") : "済");
-        }
-        return "";
-      })(),
-
-    // Want も同様に受付中は「済」を出さない
-    Want:
-      (() => {
-        if (Array.isArray(st.want) && st.want.length > 0) {
-          return wantIsConsistent
-            ? (st.want_ids?.length ? `${st.want.join("／")}（${fmtIds(st.want_ids)}）` : st.want.join("／"))
-            : st.want.join("／");
-        }
-        const hasRaw = Array.isArray(st.memo?.want_raw) && st.memo.want_raw.length > 0;
-        if (hasRaw) {
-          return inWantPhase ? "" : (wantIsConsistent ? st.want.join("／") : "済");
-        }
-        return "";
-      })(),
-
-    Can: st.can ? "済" : "",
-    Will: st.will ? "済" : "",
+      // ▼ メモ（未ヒット語句の保持先を分離）
+      memo: {
+        role_raw: "",
+        reason_raw: "",
+        must_ng_raw: [],      // STEP5の未ヒット自由記述
+        must_have_raw: [],    // STEP6の未ヒット自由記述
+      },
+    },
   };
 }
+
 
 // 0.5 を使わない進行に合わせた文言
 function nextAfterId(s) {
@@ -2120,13 +2132,17 @@ function nextAfterId(s) {
 }
 
 function mustIntroText() {
-  return "ありがとう！それじゃあ【絶対に外せない条件】を教えてね。\n\n" +
-         "仕事内容でも、制度でも、条件でもOK◎\n\n" +
+  // STEP5の導入は Must NG 用に変更
+  return "OK！ここから条件の整理に入るね。\n\n" +
+         "まずは【絶対NG（Must NG）】を教えてほしい。\n" +
+         "仕事内容でも制度でもOKで、これは無理！ってやつ。\n\n" +
          "例えば・・・\n" +
-         "「絶対土日休みじゃないと困る！」\n" +
-         "「絶対オンコールはできない！」\n\n" +
-         "後から『あるといいな』『ないといいな』についても聞くから、今は『絶対！』というものだけ教えてね。";
+         "「夜勤は絶対できない！」\n" +
+         "「オンコールは無理！」\n" +
+         "「長時間の残業は嫌だ！」\n\n" +
+         "次に『絶対ほしい（Must Have）』を聞くから、今は“NG”だけ教えてね。";
 }
+
 
 function noOptionCategory(cat) {
   return cat === "職場環境・設備" || cat === "職場の安定性" || cat === "給与・待遇";
