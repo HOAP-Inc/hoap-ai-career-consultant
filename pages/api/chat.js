@@ -2077,44 +2077,6 @@ function debugState(s) {
     wantCount: s.status.want.length,
   };
 }
-function initSession() {
-  return {
-    step: 1,
-    isNumberConfirmed: false,
-    drill: { phase: null, count: 0, category: null, awaitingChoice: false, options: [], reasonBuf: [], flags: {} },
-    status: {
-      number: "",
-      role: "",
-      role_ids: [],        // 職種（資格）の tags.json ID
-      place: "",
-      place_ids: [],       // 現職（施設/形態など）の tags.json ID
-      reason: "",
-      reason_tag: "",
-      reason_ids: [],
-
-      // ▼ Must を2系統に分離
-      must_ng: [],         // 絶対NG（Must NG）…ラベル配列
-      must_have: [],       // 絶対欲しい（Must Have）…ラベル配列
-      must_ng_ids: [],     // tags.json ID 配列
-      must_have_ids: [],   // tags.json ID 配列
-
-      // ▼ Want/Can/Will はテキスト保持
-      want_text: "",
-      can: "",
-      will: "",
-
-      licenses: [],
-
-      // ▼ メモ（未ヒット語句の保持先を分離）
-      memo: {
-        role_raw: "",
-        reason_raw: "",
-        must_ng_raw: [],      // STEP5の未ヒット自由記述
-        must_have_raw: [],    // STEP6の未ヒット自由記述
-      },
-    },
-  };
-}
 
 
 // 0.5 を使わない進行に合わせた文言
