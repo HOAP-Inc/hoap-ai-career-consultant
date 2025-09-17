@@ -2073,10 +2073,9 @@ function debugState(s) {
     reasonCategory: s.drill.category,
     awaitingChoice: s.drill.awaitingChoice,
     reasonTag: s.status.reason_tag,
-    mustCount: s.status.must.length,
-    wantCount: s.status.want.length,
+    mustCount: (s.status.must_ng || []).length,     // 修正：must_ng配列を使用
+    wantCount: (s.status.want_text || "").length,   // 修正：want_textの文字数
   };
-}
 
 
 // 0.5 を使わない進行に合わせた文言
