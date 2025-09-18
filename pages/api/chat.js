@@ -1251,7 +1251,7 @@ if (s.step === 4) {
       s.step = 5;
 
       const emp = await generateEmpathy(text, s);
-      const msg = "収入アップが主目的ってこと、把握したよ。金額レンジはこの後の条件で具体化していこう。";
+      const msg = "収入アップが主目的ってこと、把握したよ。担当エージェントに共有するね。";
       return res.json(withMeta({
         response: joinEmp(emp, `${msg}\n\n${mustIntroText()}`),
         step: 5, status: s.status, isNumberConfirmed: true,
@@ -2136,13 +2136,13 @@ function nextAfterId(s) {
 function mustIntroText() {
   // STEP5の導入は Must NG 用に変更
   return "OK！ここから条件の整理に入るね。\n\n" +
-         "まずは【絶対NG（Must NG）】を教えてほしい。\n" +
+         "まずは【絶対NG】の条件を教えてほしい。\n" +
          "仕事内容でも制度でもOKで、これは無理！ってやつ。\n\n" +
          "例えば・・・\n" +
          "「夜勤は絶対できない！」\n" +
          "「オンコールは無理！」\n" +
          "「長時間の残業は嫌だ！」\n\n" +
-         "次に『絶対ほしい（Must Have）』を聞くから、今は“NG”だけ教えてね。";
+         "次に『絶対ないと困るもの』を聞くから、今は“NG”だけ教えてね。";
 }
 
 
