@@ -195,13 +195,15 @@ html, body, #__next { height: 100%; }
 
 .status-progress {
   position: sticky;
-   top: 96px;   /* header(約56px) + status-row(約40px) */
-   z-index: 18;
-   background: #e5e7eb;
-   height: 6px;
-   border-radius: 999px;
-   overflow: hidden;
+  top: 96px;
+  z-index: 18;
+  background: #e5e7eb;
+  height: 6px;
+  border-radius: 999px;
+  overflow: hidden;
+  margin-bottom: 28px;  /* ← 18px じゃ足りないので拡張 */
 }
+
 /* ===== Duolingo風 単一吹き出しUI ===== */
 
 /* 1) ほーぷちゃんステージ（ヘッダ直下の帯） */
@@ -341,12 +343,12 @@ html, body, #__next { height: 100%; }
     gap: 6px;
   }
   .status-progress{
-    position: sticky;
-    top: 64px;              /* ステータス直下 */
-    z-index: 18;
-    height: 4px;
-    margin: -1px 0 11px;
-  }
+  position: sticky;
+  top: 64px;
+  z-index: 18;
+  height: 4px;
+  margin: 4px 0 20px;  /* ← 上下とも調整 */
+}
 
   /* ほーぷちゃんエリア */
   .duo-stage{
