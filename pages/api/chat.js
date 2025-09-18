@@ -1672,7 +1672,7 @@ if (s.step === 6) {
   if (isNone(text)) {
     s.step = 7;
     return res.json(withMeta({
-      response: "ここからは自由入力だよ！\nまずは【あったら嬉しい（Want）】を教えてね。短くてもOK。",
+      response: "それじゃあ次は【あったら嬉しい（Want）】ことを教えてね。短くてもOK。",
       step: 7, status: s.status, isNumberConfirmed: true,
       candidateNumber: s.status.number, debug: debugState(s)
     }, 7));
