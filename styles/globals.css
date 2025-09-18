@@ -338,21 +338,37 @@ html, body, #__next { height: 100%; }
     margin-bottom: 0;
   }
   .badge{
-  padding: 4px 8px;
-  font-size: 11px;
-  line-height: 1.3;
-  min-width: 0;           /* grid内でのはみ出し防止 */
-  white-space: normal;    /* 1行固定を解除して折り返し */
-  word-break: break-word; /* 長い語でも折り返す */
-}
+    display: flex;
+    align-items: center;
+    height: 28px;           /* 各行の高さを固定 */
+    padding: 0 8px;         /* 高さ固定に合わせて上下は0 */
+    font-size: 11px;
+    line-height: 1;
+    min-width: 0;
+    white-space: nowrap;    /* 1行で省略表示 */
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
 
- .status-row{
-  position: sticky;
-  top: 36px;              /* ヘッダ直下 */
-  z-index: 19;
-  margin: -1px 0 5px;
-  gap: 6px;
-}
+   .status-row{
+    position: sticky;
+    top: 36px;
+    z-index: 19;
+    display: grid;                                /* 2列固定 */
+    grid-template-columns: repeat(2, minmax(0,1fr));
+    grid-auto-rows: 28px;                         /* 行の高さを .badge と一致 */
+    gap: 6px;
+    margin: -1px 0 5px;
+    padding: 4px 0;
+    background: linear-gradient(180deg, var(--bg-via) 0%, transparent 100%);
+
+    /* 可視域は常に2行。超えた分は内部スクロール */
+    max-height: calc(28px * 2 + 6px);            /* 2行 + 行間1つ */
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain;
+  }
+
   .status-progress{
   position: sticky;
   top: 64px;
