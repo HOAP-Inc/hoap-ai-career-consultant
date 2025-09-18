@@ -416,52 +416,47 @@ export default function Home() {
         />
       </div>
 
-      {/* 入力欄の直上に移動 */}
-<footer className="input-bar">
-  {userEcho && (
-    <div className="user-echo">
-      <div className="user-echo__bubble">{userEcho}</div>
-    </div>
-  )}
-  <div className="input-inner">
-    ...
-  </div>
-</footer>
-
       {/* チャット画面 */}
       <main className="chat" ref={listRef} />
       <div ref={bottomRef} />   {/* ← これを追加 */}
 
-      {/* 入力欄 */}
-      <footer className="input-bar">
-        <div className="input-inner">
-          <textarea
-            ref={taRef}
-            className="textarea"
-            placeholder={
-              step === 1
-                ? "求職者IDを入力してください（メールに届いているID）…"
-                : "メッセージを入力…"
-            }
-            value={input}
-            onChange={(e) => { setInput(e.target.value); }}
-            onKeyDown={onKeyDown}
-            onCompositionStart={() => setIsComposing(true)}
-            onCompositionEnd={() => setIsComposing(false)}
-            onBlur={() => { setIsComposing(false); onFocusUnlock(); }}  // ← 追加
-            onFocus={onFocusLock}                                       // ← 追加
-            autoComplete="off"
-          />
-          <button
-            type="button"
-            className="send"
-            onClick={() => onSend()}
-            disabled={sending}
-          >
-            ➤
-          </button>
-        </div>
-      </footer>
+     {/* 入力欄 */}
+<footer className="input-bar">
+  {/* 入力欄の“直上”に固定表示（横並びに巻き込まれない位置） */}
+  {userEcho && (
+    <div className="user-echo" aria-live="polite">
+      <div className="user-echo__bubble">{userEcho}</div>
+    </div>
+  )}
+
+  <div className="input-inner">
+    <textarea
+      ref={taRef}
+      className="textarea"
+      placeholder={
+        step === 1
+          ? "求職者IDを入力してください（メールに届いているID）…"
+          : "メッセージを入力…"
+      }
+      value={input}
+      onChange={(e) => { setInput(e.target.value); }}
+      onKeyDown={onKeyDown}
+      onCompositionStart={() => setIsComposing(true)}
+      onCompositionEnd={() => setIsComposing(false)}
+      onBlur={() => { setIsComposing(false); onFocusUnlock(); }}
+      onFocus={onFocusLock}
+      autoComplete="off"
+    />
+    <button
+      type="button"
+      className="send"
+      onClick={() => onSend()}
+      disabled={sending}
+    >
+      ➤
+    </button>
+  </div>
+</footer>
     </div>
   );
 }
