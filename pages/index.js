@@ -35,8 +35,8 @@ export default function Home() {
 
     return {
       求職者ID: st?.number ? `ID:${st.number}` : "未入力",
-      職種: st?.role || "未入力",
-      現職: st?.place || "未入力",
+      職種: joinIds(st?.role_ids),
+      現職: joinIds(st?.place_ids),
 
       転職目的: joinIds(st?.reason_ids),
       Must_NG: joinIds(st?.must_ng_ids),
