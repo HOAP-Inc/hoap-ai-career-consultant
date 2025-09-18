@@ -416,11 +416,17 @@ export default function Home() {
         />
       </div>
 
-      {userEcho && (
-        <div className="user-echo">
-          <div className="user-echo__bubble">{userEcho}</div>
-        </div>
-      )}
+      {/* 入力欄の直上に移動 */}
+<footer className="input-bar">
+  {userEcho && (
+    <div className="user-echo">
+      <div className="user-echo__bubble">{userEcho}</div>
+    </div>
+  )}
+  <div className="input-inner">
+    ...
+  </div>
+</footer>
 
       {/* チャット画面 */}
       <main className="chat" ref={listRef} />
