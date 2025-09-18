@@ -1646,7 +1646,7 @@ if (s.step === 5) {
   if (isNone(text)) {
     s.step = 6;
     return res.json(withMeta({
-      response: "次は【これだけは絶対ないと困る！】という条件を教えてね。\n「賞与がないと困る！」「絶対土日休みがいい！」って感じ。\n1個じゃなくてもOKだよ！",
+      response: "次は【これだけは絶対ないと困る！】という条件を教えてね。\n「賞与がないと困る！」\n「絶対土日休みがいい！」\nって感じ。\n1個じゃなくてもOKだよ！",
       step: 6, status: s.status, isNumberConfirmed: true,
       candidateNumber: s.status.number, debug: debugState(s),
     }, 6));
@@ -1696,7 +1696,7 @@ if (s.step === 6) {
   if (isNone(text)) {
     s.step = 7;
     return res.json(withMeta({
-      response: "次は【これがあったら（なかったら）嬉しいな】という条件を教えてね。\n「多職種連携しやすい職場がいいな」「子育てに理解があるといいな」って感じ。\n自由に回答してね！",
+      response: "次は【これがあったら（なかったら）嬉しいな】という条件を教えてね。\n「多職種連携しやすい職場がいいな」\n「子育てに理解があるといいな」\nって感じ。\n自由に回答してね！",
       step: 7, status: s.status, isNumberConfirmed: true,
       candidateNumber: s.status.number, debug: debugState(s)
     }, 7));
@@ -1746,7 +1746,7 @@ if (s.step === 7) {
   s.step = 8;
   const emp = await generateEmpathy(text || "", s);
   return res.json(withMeta({
-    response: joinEmp(emp, "次は【これまでやってきたこと／自分が得意なこと】を教えてね。\n「急性期病棟で3年勤務した」「採血が得意で周りから褒められる」みたいな感じ！"),
+    response: joinEmp(emp, "次は【これまでやってきたこと／自分が得意なこと】を教えてね。\n「急性期病棟で3年勤務した」\n「採血が得意で周りから褒められる」\nみたいな感じ！"),
     step: 8, status: s.status, isNumberConfirmed: true,
     candidateNumber: s.status.number, debug: debugState(s)
   }, 8));
@@ -1758,7 +1758,7 @@ if (s.step === 8) {
   s.step = 9;
   const empCan = await generateEmpathy(text || "", s);
   return res.json(withMeta({
-    response: joinEmp(empCan, "最後！【これから挑戦したいこと】を教えてね。\n「未経験だけど在宅の分野に挑戦したい」「プライベートと両立しながら看護師のキャリアを継続したい」想いを自由に書いてね！"),
+    response: joinEmp(empCan, "最後！【これから挑戦したいこと】を教えてね。\n「未経験だけど在宅の分野に挑戦したい」\n「プライベートと両立しながら看護師のキャリアを継続したい」\nあなたの想いを自由に書いてね！"),
     step: 9, status: s.status, isNumberConfirmed: true,
     candidateNumber: s.status.number, debug: debugState(s)
   }, 9));
