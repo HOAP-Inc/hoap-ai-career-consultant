@@ -127,7 +127,7 @@ export default function Home() {
   const revertTimerRef = useRef(null);
 
   // 進捗バー
-  const MAX_STEP = 9;
+  const MAX_STEP = 10;
   const progress = Math.min(100, Math.max(0, Math.round((step / MAX_STEP) * 100)));
 
   // ★最初の挨拶をサーバーから1回だけ取得
@@ -160,7 +160,7 @@ export default function Home() {
     return () => { aborted = true; };
   }, [sessionId]);
 
-  // step変化でトリガー：ID取得後(2以上に到達)／完了(9)で一度だけバンザイ
+  // step変化でトリガー：ID取得後(2以上に到達)／完了(10)で一度だけバンザイ
   useEffect(() => {
     // タイマー整理
     if (revertTimerRef.current) {
@@ -179,8 +179,8 @@ export default function Home() {
       return;
     }
 
-    // 最後の回答が終わったあと（完了：step=9 の最初のタイミング）
-    if (step >= 9 && !cheeredDoneRef.current) {
+    // 最後の回答が終わったあと（完了：step=10 の最初のタイミング）
+    if (step >= 10 && !cheeredDoneRef.current) {
       cheeredDoneRef.current = true;
       setHoapSrc("/hoap-up.png");
       revertTimerRef.current = setTimeout(() => {
