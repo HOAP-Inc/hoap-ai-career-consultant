@@ -340,12 +340,24 @@ html, body, #__next { height: 100%; }
   .badge{ padding:4px 8px; font-size:11px; }
 
   .status-row{
-    position: sticky;
-    top: 36px;              /* ヘッダ直下 */
-    z-index: 19;
-    margin: -1px 0 5px;
-    gap: 6px;
-  }
+  position: sticky;
+  top: 36px;                 /* ← そのまま（下げない） */
+  z-index: 19;
+
+  /* 2列固定＋中だけスクロール */
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  max-height: 92px;          /* 余白次第で 100〜120px に調整OK */
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+
+  /* 既存の見た目を維持 */
+  margin: -1px 0 5px;
+  padding: 6px 0;
+  background: linear-gradient(180deg, var(--bg-via) 0%, transparent 100%);
+}
   .status-progress{
   position: sticky;
   top: 64px;
