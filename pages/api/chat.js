@@ -822,6 +822,7 @@ function initSession() {
       role_ids: [],        // 職種（資格）の tags.json ID
       place: "",
       place_ids: [],       // 現職（施設/形態など）の tags.json ID
+      place_id: null,       // ★互換用（単一ID）。STEP3で常に同期させる
       reason: "",
       reason_tag: "",
       reason_ids: [],
@@ -1089,6 +1090,7 @@ if (s.step === 3) {
 
       if (id != null) {
         s.status.place_ids = [id];
+        s.status.place_id  = id; // 追加
         const official = serviceTagNameById.get(id);
         if (official) s.status.place = official;
       } else {
@@ -1096,11 +1098,13 @@ if (s.step === 3) {
         const ids = matchServiceTagIdsInText(chosen);
         if (Array.isArray(ids) && ids.length) {
           s.status.place_ids = [ids[0]];
+          s.status.place_id  = ids[0]; // 追加
           const official = serviceTagNameById.get(ids[0]);
           if (official) s.status.place = official;
         } else {
           // サービス形態外はIDを付与しない（placeは保持、place_idsは空）
           s.status.place_ids = [];
+          s.status.place_id  = null;   // 追加
         }
       }
 
@@ -1147,18 +1151,21 @@ const finalize = (label) => {
      || serviceTagIdByName.get(toHW(label));
 
   if (id != null) {
-    s.status.place_ids = [id];
+    s.status.place_ids = [id
+    s.status.place_id  = id; // 追加                    
     const official = serviceTagNameById.get(id);
     if (official) s.status.place = official; // 正式名称で上書き
   } else {
     const ids = matchServiceTagIdsInText(label); // サービス形態限定フォールバック
     if (Array.isArray(ids) && ids.length) {
       s.status.place_ids = [ids[0]];
+      s.status.place_id  = ids[0]; // 追加
       const official = serviceTagNameById.get(ids[0]);
       if (official) s.status.place = official;
     } else {
       // サービス形態外はIDを付与しない（placeは保持、place_idsは空）
       s.status.place_ids = [];
+      s.status.place_id  = null;   // 追加
     }
   }
 
@@ -1202,7 +1209,8 @@ if (foundLabels.length >= 2) {
 
 // ④ 候補ゼロ：ユーザーの文字列をそのまま保持し、IDは付与しない
 s.status.place = raw;
-s.status.place_ids = []; // サービス形態以外のIDは絶対に入れない（= 空）
+s.status.place_ids = [済]; // サービス形態以外のIDは絶対に入れない（= 済）
+s.status.place_id  = null; // 追加
 
 // 次へ（Step4）
 s.drill = {
