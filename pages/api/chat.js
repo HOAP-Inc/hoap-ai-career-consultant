@@ -2048,7 +2048,14 @@ function buildStatusBar(st = {}, currentStep = 0) {
     currentStep >= maxStep ? 1 :
     (currentStep - 1) / (maxStep - 1);
 
-  return { current: currentStep, progress, steps };
+  // ←ここで candidateNumber / number を追加（どちらのキーでも拾えるように）
+  return {
+    current: currentStep,
+    progress,
+    steps,
+    candidateNumber: String(st?.number || ""),
+    number: String(st?.number || ""),
+  };
 }
 // ▲▲ ここまで ▲▲
 
