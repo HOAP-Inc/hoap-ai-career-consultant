@@ -1151,7 +1151,7 @@ const finalize = (label) => {
      || serviceTagIdByName.get(toHW(label));
 
   if (id != null) {
-    s.status.place_ids = [id
+    s.status.place_ids = [id];
     s.status.place_id  = id; // 追加                    
     const official = serviceTagNameById.get(id);
     if (official) s.status.place = official; // 正式名称で上書き
