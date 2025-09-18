@@ -704,6 +704,10 @@ const MW_HINTS = [
   { kw: /(駅近|駅チカ|駅から近い)/i, label: "駅近（5分以内）" },
   { kw: /(直行直帰)/i,               label: "直行直帰OK" },
   { kw: /(時短)/i,                   label: "時短勤務相談可" },
+
+  // ★追加：夜勤NG → 「日勤のみ可」にブリッジ
+  { kw: /(夜勤(は)?(無理|できない|不可|なし)|夜勤.*(無|なし|不可))/i, label: "日勤のみ可" },
+
   { kw: /(オンコール.*(無|なし|免除)|呼び出し.*(無|なし))/i, label: "オンコールなし・免除可" },
   { kw: /(残業.*(無|なし|ほぼなし)|定時)/i, label: "残業ほぼなし" },
   { kw: /(土日祝.*休)/i,             label: "土日祝休み" },
@@ -713,6 +717,7 @@ const MW_HINTS = [
   { kw: /(バイク通勤)/i,             label: "バイク通勤可" },
   { kw: /(自転車通勤)/i,             label: "自転車通勤可" },
 ];
+
 
 function parseIncomeLabels(text=""){
   const outs = [];
@@ -1641,7 +1646,7 @@ if (s.step === 5) {
   if (isNone(text)) {
     s.step = 6;
     return res.json(withMeta({
-      response: "了解！次は【これだけは絶対あってほしい（Must Have）】を教えてね。",
+      response: "次は【これだけは絶対ないと困る！】という条件を教えてね。\n「賞与がないと困る！」「絶対土日休みがいい！」って感じ。\n1個じゃなくてもOKだよ！",
       step: 6, status: s.status, isNumberConfirmed: true,
       candidateNumber: s.status.number, debug: debugState(s),
     }, 6));
@@ -1659,15 +1664,25 @@ if (s.step === 5) {
       if (!s.status.must_ng.includes(lb)) s.status.must_ng.push(lb);
       const id = resolveTagId(lb);
       if (id != null && !s.status.must_ng_ids.includes(id)) s.status.must_ng_ids.push(id);
-      addedMsgs.push(`『${lb}』は絶対NGとして記録したよ！`);
+      addedMsgs.push(`OK！『${lb}』だね。担当エージェントに共有するね。`);
     }
   } else {
     s.status.memo.must_ng_raw ??= [];
     s.status.memo.must_ng_raw.push(text);
   }
 
+  // ★追加：原文からも tags.json の ID を抽出してマージ（取りこぼし防止）
+  try {
+    const rawIdsNg = matchTagIdsInText(text);
+    for (const rid of rawIdsNg) {
+      if (rid != null && !s.status.must_ng_ids.includes(rid)) {
+        s.status.must_ng_ids.push(rid);
+      }
+    }
+  } catch {}
+
   const emp = await generateEmpathy(text || "", s);
-  const tail = "他にも『これはダメ！』はある？（なければ「ない」って返してね）";
+  const tail = "他にも『これは絶対ダメ！』はある？（なければ「ない」って返してね）";
   return res.json(withMeta({
     response: joinEmp(emp, (addedMsgs.length ? addedMsgs.join("\n")+"\n" : "") + tail),
     step: 5, status: s.status, isNumberConfirmed: true,
@@ -1675,12 +1690,13 @@ if (s.step === 5) {
   }, 5));
 }
 
-  // ---- Step6：絶対欲しい（Must Have） ----
+
+ // ---- Step6：絶対欲しい（Must Have） ----
 if (s.step === 6) {
   if (isNone(text)) {
     s.step = 7;
     return res.json(withMeta({
-      response: "それじゃあ次は【あったら嬉しい（Want）】ことを教えてね。短くてもOK。",
+      response: "次は【これがあったら（なかったら）嬉しいな】という条件を教えてね。\n「多職種連携しやすい職場がいいな」「子育てに理解があるといいな」って感じ。\n自由に回答してね！",
       step: 7, status: s.status, isNumberConfirmed: true,
       candidateNumber: s.status.number, debug: debugState(s)
     }, 7));
@@ -1698,12 +1714,22 @@ if (s.step === 6) {
       if (!s.status.must_have.includes(lb)) s.status.must_have.push(lb);
       const id = resolveTagId(lb);
       if (id != null && !s.status.must_have_ids.includes(id)) s.status.must_have_ids.push(id);
-      addedMsgs.push(`『${lb}』は絶対ほしい条件として記録したよ！`);
+      addedMsgs.push(`『${lb}』も担当エージェントに共有するね！`);
     }
   } else {
     s.status.memo.must_have_raw ??= [];
     s.status.memo.must_have_raw.push(text);
   }
+
+  // ★追加：原文からも tags.json の ID を抽出してマージ（取りこぼし防止）
+  try {
+    const rawIdsHave = matchTagIdsInText(text);
+    for (const rid of rawIdsHave) {
+      if (rid != null && !s.status.must_have_ids.includes(rid)) {
+        s.status.must_have_ids.push(rid);
+      }
+    }
+  } catch {}
 
   const emp = await generateEmpathy(text || "", s);
   const tail = "他にも『これは必須でほしい！』はある？（なければ「ない」って返してね）";
@@ -1720,7 +1746,7 @@ if (s.step === 7) {
   s.step = 8;
   const emp = await generateEmpathy(text || "", s);
   return res.json(withMeta({
-    response: joinEmp(emp, "次は【これまで（Can）】を教えてね。できること・得意なことを自由にどうぞ。"),
+    response: joinEmp(emp, "次は【これまでやってきたこと／自分が得意なこと】を教えてね。\n「急性期病棟で3年勤務した」「採血が得意で周りから褒められる」みたいな感じ！"),
     step: 8, status: s.status, isNumberConfirmed: true,
     candidateNumber: s.status.number, debug: debugState(s)
   }, 8));
@@ -1732,7 +1758,7 @@ if (s.step === 8) {
   s.step = 9;
   const empCan = await generateEmpathy(text || "", s);
   return res.json(withMeta({
-    response: joinEmp(empCan, "最後！【これから（Will）】を教えてね。挑戦したいことをそのまま書いてね。"),
+    response: joinEmp(empCan, "最後！【これから挑戦したいこと】を教えてね。\n「未経験だけど在宅の分野に挑戦したい」「プライベートと両立しながら看護師のキャリアを継続したい」想いを自由に書いてね！"),
     step: 9, status: s.status, isNumberConfirmed: true,
     candidateNumber: s.status.number, debug: debugState(s)
   }, 9));
