@@ -102,6 +102,7 @@ body{
   left: 0;
   right: 0;
   bottom: 0;
+  z-index: 30;
 
   /* ← 背景を透明にして色ムラをなくす */
   background: transparent;
@@ -294,21 +295,22 @@ html, body, #__next { height: 100%; }
 
 /* 2) 入力欄直上のユーザー吹き出し（書き換え式） */
 .user-echo{
-  position: absolute;     /* ← fixedやstickyじゃなくabsolute */
-  bottom: 100%;           /* ← input-barの直上に配置 */
-  right: 16px;
-  z-index: 5;
-  display:flex;
-  justify-content: flex-end;
-  margin-bottom: 8px;     /* 入力欄と少し距離を空ける */
-  pointer-events: none;
+  position: absolute;              /* 入力バー(fixed)を基準に配置 */
+  left: 0;
+  right: 0;
+  bottom: calc(100% + 8px);        /* 入力欄の“直上”に8pxあけて固定 */
+  z-index: 40;                     /* 前面に出す（進捗/チャットより上） */
+  display: flex;
+  justify-content: flex-end;       /* 右寄せ（UI踏襲） */
+  padding: 0 16px;                 /* .input-inner と左右を揃える */
+  pointer-events: none;            /* クリックはバブル側のみ通す */
 }
 
 .user-echo__bubble{
   pointer-events: auto;
-  max-width: 70%;
+  max-width: min(70%, 720px);      /* 長文でも横に伸びすぎない */
   background: linear-gradient(135deg, var(--user-grad-from), var(--user-grad-via) 50%, var(--user-grad-to));
-  border:1px solid #e9d5ff;
+  border: 1px solid #e9d5ff;
   border-radius: 16px;
   padding: 10px 12px;
   box-shadow: var(--card-shadow);
