@@ -669,6 +669,28 @@ const MW_LOCK_GROUPS = [
   ["車通勤", "バイク通勤", "自転車通勤"],
 ];
 
+// ==== Must/Want の曖昧さ解消（ボタン出し用） ====
+// グループに複数命中したら選択肢を提示
+const MW_DISAMBIG_GROUPS = [
+  { root: "残業", options: ["残業", "残業月20時間以内"] },
+  // 追加したい場合はここに増やす（例：{ root: "夜勤", options: ["夜勤", "日勤"] }）
+];
+
+function uniqArr(arr = []) {
+  const s = new Set();
+  const out = [];
+  for (const x of arr) if (!s.has(x)) { s.add(x); out.push(x); }
+  return out;
+}
+
+function pickMwDisambigOptions(allLabels = []) {
+  for (const g of MW_DISAMBIG_GROUPS) {
+    const hits = g.options.filter(o => allLabels.includes(o));
+    if (hits.length >= 2) return g.options.slice(); // 同一グループから2つ以上出たら分岐
+  }
+  return [];
+}
+
 // アンカー/ゆらぎ用の正規化ヘルパ（既存の _norm_mw と同じ流儀でOK）
 function _norm_anchor(s){
   return String(s||"").toLowerCase()
@@ -1655,6 +1677,32 @@ if (options.length === 1) {
 } 
   
   // ---- Step5：絶対NG（Must NG） ----
+  // --- STEP5: MWあいまい選択中の確定処理 ---
+if (s.drill.phase === "mw-ng" && s.drill.awaitingChoice && s.drill.options?.length) {
+  const pick = normalizePick(text);
+  const chosen = s.drill.options.find(o => o === pick);
+  if (chosen) {
+    if (!s.status.must_ng.includes(chosen)) s.status.must_ng.push(chosen);
+    const id = resolveTagId(chosen);
+    if (id != null && !s.status.must_ng_ids.includes(id)) s.status.must_ng_ids.push(id);
+
+    resetDrill(s);
+    const emp = await generateEmpathy(text || "", s);
+    const tail = "他にも『これは絶対ダメ！』はある？（なければ「ない」って返してね）";
+    return res.json(withMeta({
+      response: joinEmp(emp, `OK！『${chosen}』だね。\n${tail}`),
+      step: 5, status: s.status, isNumberConfirmed: true,
+      candidateNumber: s.status.number, debug: debugState(s)
+    }, 5));
+  }
+
+  // 再提示
+  return res.json(withMeta({
+    response: `ごめん、もう一度どれが近いか教えて！『${s.drill.options.map(x=>`［${x}］`).join("／")}』`,
+    step: 5, status: s.status, isNumberConfirmed: true,
+    candidateNumber: s.status.number, debug: debugState(s)
+  }, 5));
+}
 if (s.step === 5) {
   // なし宣言 → 次へ
   if (isNone(text)) {
@@ -1665,6 +1713,33 @@ if (s.step === 5) {
       candidateNumber: s.status.number, debug: debugState(s),
     }, 6));
   }
+
+  // --- あいまい（例：残業 vs 残業月20時間以内）を先に判定してボタン提示 ---
+{
+  const picked = extractMustWantFromText(text, 6);
+  const labels = picked.want.length ? picked.want : picked.must;
+
+  let rawLabels = [];
+  try {
+    const rawIds = matchTagIdsInText(text);
+    rawLabels = rawIds.map(id => tagNameById.get(id)).filter(Boolean);
+  } catch {}
+  const allCandidates = uniqArr([...(labels || []), ...rawLabels]);
+
+  const opts = pickMwDisambigOptions(allCandidates);
+  if (opts.length >= 2) {
+    s.drill.phase = "mw-have";
+    s.drill.awaitingChoice = true;
+    s.drill.options = opts;
+
+    const emp = await generateEmpathy(text || "", s);
+    return res.json(withMeta({
+      response: joinEmp(emp, `どっちに近い？『${opts.map(x=>`［${x}］`).join("／")}』`),
+      step: 6, status: s.status, isNumberConfirmed: true,
+      candidateNumber: s.status.number, debug: debugState(s)
+    }, 6));
+  }
+}
 
   const picked = extractMustWantFromText(text, 6); // 既存抽出ロジックを流用
   const addedMsgs = [];
@@ -1706,6 +1781,32 @@ if (s.step === 5) {
 
 
  // ---- Step6：絶対欲しい（Must Have） ----
+  // --- STEP6: MWあいまい選択中の確定処理 ---
+if (s.drill.phase === "mw-have" && s.drill.awaitingChoice && s.drill.options?.length) {
+  const pick = normalizePick(text);
+  const chosen = s.drill.options.find(o => o === pick);
+  if (chosen) {
+    if (!s.status.must_have.includes(chosen)) s.status.must_have.push(chosen);
+    const id = resolveTagId(chosen);
+    if (id != null && !s.status.must_have_ids.includes(id)) s.status.must_have_ids.push(id);
+
+    resetDrill(s);
+    const emp = await generateEmpathy(text || "", s);
+    const tail = "他にも『これは必須でほしい！』はある？（なければ「ない」って返してね）";
+    return res.json(withMeta({
+      response: joinEmp(emp, `『${chosen}』も担当エージェントに共有するね！\n${tail}`),
+      step: 6, status: s.status, isNumberConfirmed: true,
+      candidateNumber: s.status.number, debug: debugState(s)
+    }, 6));
+  }
+
+  // 再提示
+  return res.json(withMeta({
+    response: `ごめん、もう一度どれが近いか教えて！『${s.drill.options.map(x=>`［${x}］`).join("／")}』`,
+    step: 6, status: s.status, isNumberConfirmed: true,
+    candidateNumber: s.status.number, debug: debugState(s)
+  }, 6));
+}
 if (s.step === 6) {
   if (isNone(text)) {
     s.step = 7;
@@ -1714,7 +1815,33 @@ if (s.step === 6) {
       step: 7, status: s.status, isNumberConfirmed: true,
       candidateNumber: s.status.number, debug: debugState(s)
     }, 7));
+  
+  // --- あいまい（例：残業 vs 残業月20時間以内）を先に判定してボタン提示 ---
+{
+  const picked = extractMustWantFromText(text, 6);
+  const labels = picked.want.length ? picked.want : picked.must;
+
+  let rawLabels = [];
+  try {
+    const rawIds = matchTagIdsInText(text);
+    rawLabels = rawIds.map(id => tagNameById.get(id)).filter(Boolean);
+  } catch {}
+  const allCandidates = uniqArr([...(labels || []), ...rawLabels]);
+
+  const opts = pickMwDisambigOptions(allCandidates);
+  if (opts.length >= 2) {
+    s.drill.phase = "mw-have";
+    s.drill.awaitingChoice = true;
+    s.drill.options = opts;
+
+    const emp = await generateEmpathy(text || "", s);
+    return res.json(withMeta({
+      response: joinEmp(emp, `どっちに近い？『${opts.map(x=>`［${x}］`).join("／")}』`),
+      step: 6, status: s.status, isNumberConfirmed: true,
+      candidateNumber: s.status.number, debug: debugState(s)
+    }, 6));
   }
+}
 
   const picked = extractMustWantFromText(text, 6);
   const addedMsgs = [];
