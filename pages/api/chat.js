@@ -20,26 +20,35 @@ try {
 // 所有資格の ID マスタ（qualifications.json）を読む
 let licenseTagList = [];
 try {
-  const raw = require("../../qualifications.json"); // ルート直下（tags.jsonと同階層）
-  licenseTagList = Array.isArray(raw?.tags) ? raw.tags : (Array.isArray(raw) ? raw : []);
+  const raw = require("../../qualifications.json"); // ルート直下
+  const src =
+    Array.isArray(raw) ? raw :
+    Array.isArray(raw?.qualifications) ? raw.qualifications :
+    Array.isArray(raw?.items) ? raw.items :
+    Array.isArray(raw?.tags) ? raw.tags : [];
+  // どのキーでも {id, name} に正規化
+  licenseTagList = src.map(x => ({
+    id:   x?.id ?? x?.tag_id ?? x?.value ?? null,
+    name: x?.name ?? x?.label ?? x?.tag_label ?? ""
+  })).filter(t => t.id != null && t.name);
 } catch (e) {
   console.error("qualifications.json 読み込み失敗:", e);
   licenseTagList = [];
 }
 
-// 「所有資格」名称 → ID のマップ（全角/半角ゆらぎも両方登録）
+// 「所有資格」名称 → ID のマップ
 const licenseTagIdByName = new Map();
-const licenseTagNameById = new Map(); // ★追加：id -> 正式名称
+const licenseTagNameById = new Map();
 try {
   for (const t of (Array.isArray(licenseTagList) ? licenseTagList : [])) {
     const name = String(t?.name ?? "");
     if (!name || t?.id == null) continue;
-    const fw = name.replace(/\(/g, "（").replace(/\)/g, "）").replace(/~/g, "～");
-    const hw = name.replace(/（/g, "(").replace(/）/g, ")").replace(/～/g, "~");
+    const fw = name.replace(/\(/g,"（").replace(/\)/g,"）").replace(/~/g,"～");
+    const hw = name.replace(/（/g,"(").replace(/）/g,")").replace(/～/g,"~");
     licenseTagIdByName.set(name, t.id);
-    licenseTagIdByName.set(fw, t.id);
-    licenseTagIdByName.set(hw, t.id);
-    licenseTagNameById.set(t.id, name); // ★追加
+    licenseTagIdByName.set(fw,   t.id);
+    licenseTagIdByName.set(hw,   t.id);
+    licenseTagNameById.set(t.id, name);
   }
 } catch (e) {
   console.error("licenseTagIdByName 構築失敗:", e);
@@ -1043,18 +1052,24 @@ if (!s.drill.awaitingChoice) {
     }, 3));
   }
 
-  // 候補ゼロ：入力そのまま（IDは空でクリア）
-  if (found.length === 0) {
+  // 候補ゼロ：公式マスタからのID解決をまず試す（成功したら正式名に正規化）
+if (found.length === 0) {
+  const ids = getIdsForOfficialLicense(text);
+  if (ids.length) {
+    s.status.role_ids = ids;
+    const official = licenseTagNameById.get(ids[0]) || text || "";
+    s.status.role = official;
+  } else {
     s.status.role = text || "";
-    s.status.licenses = [];
     s.status.role_ids = [];
-    s.step = 3;
-    return res.json(withMeta({
-      response: "受け取ったよ！次に【今どこで働いてる？】を教えてね。\n（例）急性期病棟／訪問看護ステーション",
-      step: 3, status: s.status, isNumberConfirmed: true,
-      candidateNumber: s.status.number, debug: debugState(s)
-    }, 3));
   }
+  s.step = 3;
+  return res.json(withMeta({
+    response: "受け取ったよ！次に【今どこで働いてる？】を教えてね。\n（例）急性期病棟／訪問看護ステーション",
+    step: 3, status: s.status, isNumberConfirmed: true,
+    candidateNumber: s.status.number, debug: debugState(s)
+  }, 3));
+}
 
   // 複数候補：選択肢を提示
   const options = found.slice(0, 6);
