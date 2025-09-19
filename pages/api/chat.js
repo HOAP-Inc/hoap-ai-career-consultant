@@ -17,13 +17,13 @@ try {
   licenses = {};
 }
 
-// 所有資格の ID マスタ（licenses.tags.json）を読む
+// 所有資格の ID マスタ（qualifications.json）を読む
 let licenseTagList = [];
 try {
-  const raw = require("../../licenses.tags.json"); // ルート直下（tags.jsonと同階層）
+  const raw = require("../../qualifications.json"); // ルート直下（tags.jsonと同階層）
   licenseTagList = Array.isArray(raw?.tags) ? raw.tags : (Array.isArray(raw) ? raw : []);
 } catch (e) {
-  console.error("licenses.tags.json 読み込み失敗:", e);
+  console.error("qualifications.json 読み込み失敗:", e);
   licenseTagList = [];
 }
 
@@ -2385,7 +2385,7 @@ function getIdsForLicenseLabel(label = "") {
   return Array.from(ids);
 }
 
-// === 所有資格（licenses.tags.json）用：正式ラベルからID配列を引く ===
+// === 所有資格（qualifications.json）用：正式ラベルからID配列を引く ===
 // 仕様：まず「ラベルそのもの」の厳密一致のみを最優先（単一IDで返す）。
 //       見つからない場合のみ、別名や部分一致にフォールバックして最も近い1件に絞る。
 function getIdsForOfficialLicense(label = "") {
@@ -2431,7 +2431,7 @@ function getIdsForOfficialLicense(label = "") {
     return [exactCandidates[0].id];
   }
 
-  // 2-2) それでも無ければ、licenses.tags.json 全体を双方向部分一致で探索し、最も近い1件
+  // 2-2) それでも無ければ、qualifications.json 全体を双方向部分一致で探索し、最も近い1件
   const needles = Array.from(needleSet).map(normalize).filter(Boolean);
   let best = null;
   for (const t of (Array.isArray(licenseTagList) ? licenseTagList : [])) {
