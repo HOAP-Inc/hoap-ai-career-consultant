@@ -955,6 +955,7 @@ s.status.memo.must_have_raw ||= [];
   }
 
   // ========== ここから通常の会話処理（POST） ==========
+  try {
   const { message = "" } = safeBody;  // ← req.body じゃなく safeBody を使う
   const text = String(message || "").trim();
 
@@ -972,6 +973,13 @@ const looksId = idDigits.length >= 10 && idDigits.length <= 20;
       candidateNumber: s.status.number,
       debug: debugState(s),
     }, s.step));
+    } catch (err) {
+  console.error("chat handler error:", err && (err.stack || err.message || err));
+  return res.status(500).json({
+    error: "handler_crashed",
+    message: String(err && (err.message || err)) || "unknown",
+  });
+}
   }
 
   // ---- Step1：求職者ID ----
