@@ -955,13 +955,19 @@ s.status.memo.must_have_raw ||= [];
   }
 
   // ========== ここから通常の会話処理（POST） ==========
+
+// ここで関数スコープに変数を確保（Step1以降でも使えるように var を使用）
+var text = "";
+var idDigits = "";
+var looksId = false;
+
 try {
   const { message = "" } = safeBody;  // ← req.body じゃなく safeBody を使う
-  const text = String(message || "").trim();
+  text = String(message || "").trim();
 
   // IDフォーマット判定（10〜20桁の数字を許容。ハイフン/空白など混在OK）
-  const idDigits = String(text || "").replace(/\D/g, ""); // 数字だけ抽出
-  const looksId = idDigits.length >= 10 && idDigits.length <= 20;
+  idDigits = String(text || "").replace(/\D/g, ""); // 数字だけ抽出
+  looksId = idDigits.length >= 10 && idDigits.length <= 20;
 
   // 既にID確認済みで、さらにIDっぽい入力が来たら「次へ進む」案内を返す
   if (s.isNumberConfirmed && looksId) {
