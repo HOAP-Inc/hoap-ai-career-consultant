@@ -235,13 +235,13 @@ export default function Home() {
     if (el) el.scrollIntoView({ behavior: "smooth", block: "end" });
   }, [messages.length, step]);
 
-    // 送信処理（選択肢ボタンからも呼べるように修正）
+      // 送信処理（選択肢ボタンからも呼べるように修正）
   async function onSend(forcedText) {
     // クリック時などに渡ってくる MouseEvent を無効化
     if (
       forcedText &&
-      typeof forcedText === "object" &&
-      ("nativeEvent" in forcedText || "preventDefault" in forcedText || "type" in forcedText)
+      typeof forcedText === 'object' &&
+      ('nativeEvent' in forcedText || 'preventDefault' in forcedText || 'type' in forcedText)
     ) {
       forcedText = undefined;
     }
@@ -254,22 +254,22 @@ export default function Home() {
     // ユーザー入力を即時反映
     const userText = text;
     setUserEcho(userText);
-    if (forcedText == null) setInput("");
+    if (forcedText == null) setInput('');
 
     // タイピング開始
     setIsTyping(true);
-    setAiText("");
+    setAiText('');
 
     try {
-      const res = await fetch("/api/chat", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
+      const res = await fetch('/api/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ message: userText, sessionId }),
       });
 
-      // ★重要：常にテキストで受けてから JSON を試す（405 等で本文空でも落ちない）
+      // 常にテキストで受けてから JSON を試す（405 等で本文空でも落ちない）
       const raw = await res.text();
-      let data: any = null;
+      let data = null;
       try {
         data = raw ? JSON.parse(raw) : null;
       } catch {
@@ -277,9 +277,9 @@ export default function Home() {
       }
 
       if (!res.ok || !data) {
-        // サーバがJSONを返さない（= 405や5xx）ときは落とさず画面に可視化
+        // サーバが JSON を返さない時は落とさず画面に可視化
         const statusLine = `サーバ応答: ${res.status}`;
-        const bodyLine = raw ? `本文: ${raw.slice(0, 200)}` : "本文なし";
+        const bodyLine = raw ? `本文: ${raw.slice(0, 200)}` : '本文なし';
         setAiText(`${statusLine}\n${bodyLine}`);
         setIsTyping(false);
         return;
@@ -290,9 +290,9 @@ export default function Home() {
       setIsTyping(false);
 
       // 次ステップ
-      const nextStep = data.meta?.step != null ? data.meta.step : step;
+      const nextStep = data.meta && data.meta.step != null ? data.meta.step : step;
 
-      // ▼ ステータス・ステップ更新（バッジを整形して適用）
+      // ステータス・ステップ更新（バッジを整形して適用）
       setStatus(toBadges(data));
       setStep(nextStep);
 
@@ -305,7 +305,7 @@ export default function Home() {
       );
     } catch (err) {
       console.error(err);
-      setAiText("通信エラーが発生したよ🙏");
+      setAiText('通信エラーが発生したよ🙏');
       setIsTyping(false);
     } finally {
       setSending(false);
