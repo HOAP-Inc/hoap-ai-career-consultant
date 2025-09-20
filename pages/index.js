@@ -235,7 +235,7 @@ export default function Home() {
     if (el) el.scrollIntoView({ behavior: "smooth", block: "end" });
   }, [messages.length, step]);
 
-  // 送信処理（選択肢ボタンからも呼べるように修正）
+    // 送信処理（選択肢ボタンからも呼べるように修正）
   async function onSend(forcedText) {
     // クリック時などに渡ってくる MouseEvent を無効化
     if (
@@ -266,7 +266,24 @@ export default function Home() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ message: userText, sessionId }),
       });
-      const data = await res.json();
+
+      // ★重要：常にテキストで受けてから JSON を試す（405 等で本文空でも落ちない）
+      const raw = await res.text();
+      let data: any = null;
+      try {
+        data = raw ? JSON.parse(raw) : null;
+      } catch {
+        data = null;
+      }
+
+      if (!res.ok || !data) {
+        // サーバがJSONを返さない（= 405や5xx）ときは落とさず画面に可視化
+        const statusLine = `サーバ応答: ${res.status}`;
+        const bodyLine = raw ? `本文: ${raw.slice(0, 200)}` : "本文なし";
+        setAiText(`${statusLine}\n${bodyLine}`);
+        setIsTyping(false);
+        return;
+      }
 
       // 本文反映
       setAiText(data.response);
@@ -294,7 +311,7 @@ export default function Home() {
       setSending(false);
     }
   }
-
+  
   function onKeyDown(e) {
     if (e.key === "Enter" && !isComposing && !e.shiftKey) {
       e.preventDefault();
