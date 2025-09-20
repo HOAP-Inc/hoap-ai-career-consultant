@@ -135,8 +135,13 @@ export default function Home() {
     let aborted = false;
     (async () => {
       try {
-        const res = await fetch(`api/chat?sessionId=${sessionId}`, { method: "GET" })
-        const data = await res.json();
+        const res = await fetch('/api/chat', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({ message: '', sessionId }),
+});
+const raw = await res.text();
+const data = raw ? JSON.parse(raw) : null;
         if (aborted) return;
 
         setAiText(data.response);
@@ -261,7 +266,7 @@ export default function Home() {
     setAiText('');
 
     try {
-      const res = await fetch('api/chat', {
+      const res = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ message: userText, sessionId }),
