@@ -955,7 +955,7 @@ s.status.memo.must_have_raw ||= [];
   }
 
   // ========== ここから通常の会話処理（POST） ==========
-  const { message = "" } = req.body || {};
+  const { message = "" } = safeBody;  // ← req.body じゃなく safeBody を使う
   const text = String(message || "").trim();
 
   // IDフォーマット判定（10〜20桁の数字を許容。ハイフン/空白など混在OK）
