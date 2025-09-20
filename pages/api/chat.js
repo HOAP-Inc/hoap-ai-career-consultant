@@ -955,13 +955,13 @@ s.status.memo.must_have_raw ||= [];
   }
 
   // ========== ここから通常の会話処理（POST） ==========
-  try {
+try {
   const { message = "" } = safeBody;  // ← req.body じゃなく safeBody を使う
   const text = String(message || "").trim();
 
   // IDフォーマット判定（10〜20桁の数字を許容。ハイフン/空白など混在OK）
-const idDigits = String(text || "").replace(/\D/g, ""); // 数字だけ抽出
-const looksId = idDigits.length >= 10 && idDigits.length <= 20;
+  const idDigits = String(text || "").replace(/\D/g, ""); // 数字だけ抽出
+  const looksId = idDigits.length >= 10 && idDigits.length <= 20;
 
   // 既にID確認済みで、さらにIDっぽい入力が来たら「次へ進む」案内を返す
   if (s.isNumberConfirmed && looksId) {
@@ -973,14 +973,14 @@ const looksId = idDigits.length >= 10 && idDigits.length <= 20;
       candidateNumber: s.status.number,
       debug: debugState(s),
     }, s.step));
-    } catch (err) {
+  }
+} catch (err) {
   console.error("chat handler error:", err && (err.stack || err.message || err));
   return res.status(500).json({
     error: "handler_crashed",
     message: String(err && (err.message || err)) || "unknown",
   });
 }
-  }
 
   // ---- Step1：求職者ID ----
   if (s.step === 1) {
