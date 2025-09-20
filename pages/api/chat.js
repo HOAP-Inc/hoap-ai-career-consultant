@@ -901,6 +901,10 @@ function resetDrill(s) {
 }
 
 export default async function handler(req, res) {
+const method = (req.method || "GET").toUpperCase(); // ←現行に合わせる
+console.log("[api/chat] HIT", method);
+res.setHeader("X-Api-Chat-Sign", "chat.js@diagnostic"); // 応答識別用
+
   // ==== CORS（常にJSONを返す前提で統一）====
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Vary", "Origin");
