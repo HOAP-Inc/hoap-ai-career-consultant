@@ -1824,9 +1824,7 @@ if (s.step === 5) {
 }
 
  // ---- Step6：絶対欲しい（Must Have） ----
-  s.step = typeof s.step === 'number' ? s.step : (parseInt(s.step, 10) || 0);
-
-  // --- STEP6: MWあいまい選択中の確定処理 ---
+  // --- MWあいまい選択中の確定処理 ---
 if (s.drill.phase === "mw-have" && s.drill.awaitingChoice && s.drill.options?.length) {
   const pick = normalizePick(text);
   const chosen = s.drill.options.find(o => o === pick);
@@ -2101,25 +2099,6 @@ function _toFW(s){ return String(s||"").replace(/\(/g,"（").replace(/\)/g,"）"
 function _toHW(s){ return String(s||"").replace(/（/g,"(").replace(/）/g,")").replace(/～/g,"~"); }
 function _scrub(s){ return String(s||"").replace(/[ \t\r\n\u3000、。・／\/＿\u2013\u2014\-~～!?！？。、，．・]/g,""); }
 function _norm(s){ return _scrub(_toHW(_toFW(String(s||"")))); }
-
-// 2-gram（連続2文字）集合
-function _bigrams(s){
-  const n = _norm(s);
-  const arr = [];
-  for (let i=0; i<n.length-1; i++) arr.push(n.slice(i, i+2));
-  return new Set(arr);
-}
-
-// 類似度：Jaccard（2-gram）
-function scoreSimilarity(a, b){
-  const A = _bigrams(a||"");
-  const B = _bigrams(b||"");
-  if (!A.size || !B.size) return 0;
-  let inter = 0;
-  for (const x of A) if (B.has(x)) inter++;
-  const union = A.size + B.size - inter;
-  return union ? inter / union : 0;
-}
 
 // ==== deep質問セレクタ ====
 // 文脈に合わせて deep1 / deep2 の中からもっとも合いそうな質問を1つ選ぶ
