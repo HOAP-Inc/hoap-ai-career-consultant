@@ -686,6 +686,13 @@ const MW_DISAMBIG_GROUPS = [
   { root: "年収600万台", options: ["年収600万以上", "年収650万以上"] },
 ];
 
+const MW_LOCK_GROUPS = [
+  ["残業0", "残業月20時間以内"],
+  ["年収400万以上", "年収450万以上"],
+  ["年収500万以上", "年収550万以上"],
+  ["年収600万以上", "年収650万以上"],
+];
+
 function uniqArr(arr = []) {
   const s = new Set();
   const out = [];
