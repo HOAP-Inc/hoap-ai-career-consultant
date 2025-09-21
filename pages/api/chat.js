@@ -1751,38 +1751,31 @@ if (s.step === 5) {
   }
 
   // 3) 入力を解析して曖昧解消が必要かチェック（例：残業 vs 残業月20時間以内）
-  const parsed = extractMustWantFromText(text, 6);
-  const baseLabels = parsed.must.length ? parsed.must : parsed.want;
+const parsed = extractMustWantFromText(text, 6);
+const baseLabels = parsed.must.length ? parsed.must : parsed.want;
 
-  let rawLabels = [];
-  try {
-    const rawIds = matchTagIdsInText(text);
-    rawLabels = rawIds.map(id => tagNameById.get(id)).filter(Boolean);
-  } catch {}
+let rawLabels = [];
+try {
+  const rawIds = matchTagIdsInText(text);
+  rawLabels = rawIds.map(id => tagNameById.get(id)).filter(Boolean);
+} catch {}
 
-  const candSet = new Set([...(baseLabels || []), ...rawLabels]);
+// ★ここから置換：集合を作って自前で group.filter するのはやめる
+const allCandidates = uniqArr([...(baseLabels || []), ...rawLabels]);
+const opts = pickMwDisambigOptions(allCandidates);  // ← 既存ヘルパを使う
 
-  let options = [];
-  for (const group of MW_DISAMBIG_GROUPS) {
-    const hits = group.filter(lb => candSet.has(lb));
-    if (hits.length >= 2) {
-      options = hits;
-      break;
-    }
-  }
+if (opts.length >= 2) {
+  s.drill.phase = "mw-ng";
+  s.drill.awaitingChoice = true;
+  s.drill.options = opts.slice(0, 6);
 
-  if (options.length >= 2) {
-    s.drill.phase = "mw-ng";
-    s.drill.awaitingChoice = true;
-    s.drill.options = options.slice(0, 6);
-
-    const emp = await generateEmpathy(text || "", s);
-    return res.json(withMeta({
-      response: joinEmp(emp, `どっちに近い？『${s.drill.options.map(x=>`［${x}］`).join("／")}』`),
-      step: 5, status: s.status, isNumberConfirmed: true,
-      candidateNumber: s.status.number, debug: debugState(s)
-    }, 5));
-  }
+  const emp = await generateEmpathy(text || "", s);
+  return res.json(withMeta({
+    response: joinEmp(emp, `どっちに近い？『${s.drill.options.map(x=>`［${x}］`).join("／")}』`),
+    step: 5, status: s.status, isNumberConfirmed: true,
+    candidateNumber: s.status.number, debug: debugState(s)
+  }, 5));
+}
 
   // 4) 通常処理（抽出 → 追加）
   const picked = parsed;
