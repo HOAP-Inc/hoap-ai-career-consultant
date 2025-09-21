@@ -1,4 +1,3 @@
-const MW_DISAMBIG_GROUPS = // pages/api/chat.js
 // ほーぷちゃん：会話ロジック（Step厳密・深掘り2回・候補提示・ステータス算出）
 function _bigrams(text) {
   const s = String(text || '').toLowerCase();
