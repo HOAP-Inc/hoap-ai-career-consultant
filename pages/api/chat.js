@@ -1824,6 +1824,8 @@ if (s.step === 5) {
 }
 
  // ---- Step6：絶対欲しい（Must Have） ----
+  s.step = typeof s.step === 'number' ? s.step : (parseInt(s.step, 10) || 0);
+
   // --- STEP6: MWあいまい選択中の確定処理 ---
 if (s.drill.phase === "mw-have" && s.drill.awaitingChoice && s.drill.options?.length) {
   const pick = normalizePick(text);
