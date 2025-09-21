@@ -1855,7 +1855,7 @@ if (s.step === 6) {
     s.step = 6;
     return res.json(withMeta({
       response: "次は【これがあったら（なかったら）嬉しいな】という条件を教えてね。\n「多職種連携しやすい職場がいいな」\n「子育てに理解があるといいな」\nって感じ。\n自由に回答してね！",
-      step: 7, status: s.status, isNumberConfirmed: true,
+      step: 6, status: s.status, isNumberConfirmed: true,
       candidateNumber: s.status.number, debug: debugState(s)
     }, 7));
   
