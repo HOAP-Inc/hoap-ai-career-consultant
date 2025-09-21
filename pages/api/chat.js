@@ -1,5 +1,22 @@
 // pages/api/chat.js
 // ほーぷちゃん：会話ロジック（Step厳密・深掘り2回・候補提示・ステータス算出）
+function _bigrams(text) {
+  const s = String(text || '').toLowerCase();
+  const set = new Set();
+  for (let i = 0; i < s.length - 1; i++) set.add(s.slice(i, i + 2));
+  return set;
+}
+
+function scoreSimilarity(a, b) {
+  const A = _bigrams(a || '');
+  const B = _bigrams(b || '');
+  if (!A.size || !B.size) return 0;
+  let inter = 0;
+  for (const x of A) if (B.has(x)) inter++;
+  const union = A.size + B.size - inter;
+  return union ? inter / union : 0;
+}
+
 let tagList = [];
 try {
   const raw = require("../../tags.json");
