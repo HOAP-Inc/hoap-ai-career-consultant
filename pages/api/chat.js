@@ -1824,33 +1824,35 @@ if (s.step === 5) {
 }
 
  // ---- Step6：絶対欲しい（Must Have） ----
-  // --- MWあいまい選択中の確定処理 ---
-if (s.drill.phase === "mw-have" && s.drill.awaitingChoice && s.drill.options?.length) {
-  const pick = normalizePick(text);
-  const chosen = s.drill.options.find(o => o === pick);
-  if (chosen) {
-    if (!s.status.must_have.includes(chosen)) s.status.must_have.push(chosen);
-    const id = resolveTagId(chosen);
-    if (id != null && !s.status.must_have_ids.includes(id)) s.status.must_have_ids.push(id);
+if (s.step === 6) {
+  // 1) 選択肢（曖昧解消）の回答処理
+  if (s.drill.phase === "mw-have" && s.drill.awaitingChoice && s.drill.options?.length) {
+    const pick = normalizePick(text);
+    const chosen = s.drill.options.find(o => o === pick);
+    if (chosen) {
+      if (!s.status.must_have.includes(chosen)) s.status.must_have.push(chosen);
+      const id = resolveTagId(chosen);
+      if (id != null && !s.status.must_have_ids.includes(id)) s.status.must_have_ids.push(id);
 
-    resetDrill(s);
-    const emp = await generateEmpathy(text || "", s);
-    const tail = "他にも『これは必須でほしい！』はある？（なければ「ない」って返してね）";
+      resetDrill(s);
+      const emp = await generateEmpathy(text || "", s);
+      const tail = "他にも『これは必須でほしい！』はある？（なければ「ない」って返してね）";
+      return res.json(withMeta({
+        response: joinEmp(emp, `『${chosen}』も担当エージェントに共有するね！\n${tail}`),
+        step: 6, status: s.status, isNumberConfirmed: true,
+        candidateNumber: s.status.number, debug: debugState(s)
+      }, 6));
+    }
+
+    // 再提示
     return res.json(withMeta({
-      response: joinEmp(emp, `『${chosen}』も担当エージェントに共有するね！\n${tail}`),
+      response: `ごめん、もう一度どれが近いか教えて！『${s.drill.options.map(x=>`［${x}］`).join("／")}』`,
       step: 6, status: s.status, isNumberConfirmed: true,
       candidateNumber: s.status.number, debug: debugState(s)
     }, 6));
   }
 
-  // 再提示
-  return res.json(withMeta({
-    response: `ごめん、もう一度どれが近いか教えて！『${s.drill.options.map(x=>`［${x}］`).join("／")}』`,
-    step: 6, status: s.status, isNumberConfirmed: true,
-    candidateNumber: s.status.number, debug: debugState(s)
-  }, 6));
-}
-if (s.step === 6) {
+  // 2) なし宣言 → 次へ
   if (isNone(text)) {
     s.step = 7;
     return res.json(withMeta({
@@ -1858,9 +1860,9 @@ if (s.step === 6) {
       step: 7, status: s.status, isNumberConfirmed: true,
       candidateNumber: s.status.number, debug: debugState(s)
     }, 7));
-  
-  // --- あいまい（例：残業 vs 残業月20時間以内）を先に判定してボタン提示 ---
-{
+  }
+
+  // 3) あいまい解消チェック
   const picked = extractMustWantFromText(text, 6);
   const labels = picked.want.length ? picked.want : picked.must;
 
@@ -1884,12 +1886,9 @@ if (s.step === 6) {
       candidateNumber: s.status.number, debug: debugState(s)
     }, 6));
   }
-}
 
-  const picked = extractMustWantFromText(text, 6);
+  // 4) 通常処理
   const addedMsgs = [];
-
-  const labels = picked.want.length ? picked.want : picked.must;
   if (labels.length) {
     const uniq = [];
     for (const lb of labels) if (!uniq.includes(lb)) uniq.push(lb);
@@ -1905,7 +1904,7 @@ if (s.step === 6) {
     s.status.memo.must_have_raw.push(text);
   }
 
-  // ★追加：原文からも tags.json の ID を抽出してマージ（取りこぼし防止）
+  // 原文からもIDを抽出
   try {
     const rawIdsHave = matchTagIdsInText(text);
     for (const rid of rawIdsHave) {
