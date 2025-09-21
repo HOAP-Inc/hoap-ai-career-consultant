@@ -484,39 +484,6 @@ const GENERIC_REASON_Q_POS = {
   deep2: ["実現のために今足りていない経験やスキルはある？どのくらいの期間で動きたい？"],
 };
 
-// テキスト全体からカテゴリごとのヒット数を採点
-function scoreCategories(text) {
-  const t = (text || "").toLowerCase();
-
-  // 「上司/管理者」系キーワードは、ネガ語が同時に出ていない限りスコアに入れない
-  const BOSS_KEYWORDS = /(管理者|管理職|上司|師長|看護師長|部長|課長|マネージャ|マネージャー|上層部|リーダー|院長|園長)/i;
-
-  const ranking = [];
-  let best = null, hits = 0;
-
-  for (const [cat, def] of Object.entries(transferReasonFlow)) {
-    const h = (def.keywords || []).reduce((acc, kw) => {
-      const k = String(kw).toLowerCase();
-      const hit = t.includes(k);
-
-      // boss系はネガ同伴でのみ加点
-      const isBossKw = BOSS_KEYWORDS.test(String(kw));
-      const allow = !isBossKw || NEG_TERMS.test(t);
-
-      return acc + (hit && allow ? 1 : 0);
-    }, 0);
-
-    ranking.push({ cat, hits: h });
-    if (h > hits) {
-      hits = h;
-      best = cat;
-    }
-  }
-
-  ranking.sort((a, b) => b.hits - a.hits);
-  return { best, hits, ranking };
-}
-
 // ---- 転職理由カテゴリ（深掘りQ & 候補） ----
 const transferReasonFlow = {
   "経営・組織に関すること": {
@@ -613,6 +580,208 @@ const transferReasonFlow = {
   "職場の安定性": { keywords: ["安定","将来性","経営状況","倒産","リストラ","不安","継続","持続","成長","発展","先行き"], internal_options: [], deep1: [], deep2: [] },
   "給与・待遇":   { keywords: ["給料","給与","年収","月収","手取り","賞与","ボーナス","昇給","手当","待遇","福利厚生","安い","低い","上がらない","生活できない","お金"], internal_options: [], deep1: [], deep2: [] },
 };
+
+// ========= JP 正規化・トークナイズ =========
+function _normJa(s=""){
+  return String(s||"")
+    .toLowerCase()
+    .replace(/\(/g,"（").replace(/\)/g,"）").replace(/~/g,"～")
+    .replace(/（/g,"(").replace(/）/g,")").replace(/～/g,"~")
+    .replace(/[ \t\r\n\u3000]/g," ")
+    .replace(/[、。・／\/＿\-–—!?！？。，．・]/g," ");
+}
+function _blocksJa(s=""){
+  const t = _normJa(s);
+  const kind = c =>
+    /[一-龥]/.test(c) ? "kanji" :
+    /[ぁ-ん]/.test(c) ? "hira"  :
+    /[ァ-ヴー]/.test(c)? "kata" :
+    /[a-z]/.test(c)    ? "latin" :
+    /[0-9]/.test(c)    ? "num"   : "other";
+  const out = []; let buf = "", k0 = null;
+  for (const ch of t){
+    const k = kind(ch);
+    if (k === "other" || ch === " "){ if (buf){ out.push(buf); buf=""; k0=null; } continue; }
+    if (k0 && k !== k0){ out.push(buf); buf=""; }
+    buf += ch; k0 = k;
+  }
+  if (buf) out.push(buf);
+  return out;
+}
+function _stemJa(tok=""){
+  return tok
+    .replace(/(でした|でしたら|でしたが|ます|ません|です)$/,"")
+    .replace(/(したい|したく|したら|してる|している)$/,"")
+    .replace(/(たい|たく|てる|ている)$/,"")
+    .replace(/する$/,"")
+    .replace(/的$/,"");
+}
+function _tokenizeJa(s=""){
+  const toks = [];
+  for (const b of _blocksJa(s)){
+    if (/^[一-龥]+$/.test(b) && b.length >= 2){
+      for (let i=0;i<b.length-1;i++) toks.push(b.slice(i,i+2)); // 未知語に強く
+    }
+    toks.push(_stemJa(b));
+  }
+  return Array.from(new Set(toks.filter(Boolean)));
+}
+function _charBigrams(s=""){
+  const t = _normJa(s).replace(/ /g,"");
+  const set = new Set();
+  for (let i=0;i<t.length-1;i++) set.add(t.slice(i,i+2));
+  return set;
+}
+function _jaccardBigram(a="", b=""){
+  const A = _charBigrams(a), B = _charBigrams(b);
+  if (!A.size || !B.size) return 0;
+  let inter = 0; for (const x of A) if (B.has(x)) inter++;
+  return inter / (A.size + B.size - inter);
+}
+function _cosSim(mapA, mapB){
+  let dot=0, na=0, nb=0;
+  for (const [,v] of mapA) na += v*v;
+  for (const [,v] of mapB) nb += v*v;
+  const smaller = mapA.size < mapB.size ? mapA : mapB;
+  const bigger  = smaller===mapA ? mapB : mapA;
+  for (const [k,v] of smaller) { const w = bigger.get(k)||0; if (w) dot += v*w; }
+  if (!na || !nb) return 0;
+  return dot / (Math.sqrt(na)*Math.sqrt(nb));
+}
+function _vecFromTokens(toks, idf){
+  const tf = new Map(); for (const t of toks) tf.set(t, (tf.get(t)||0)+1);
+  const v  = new Map(); for (const [t, tfv] of tf) v.set(t, tfv * (idf.get(t)||0));
+  return v;
+}
+
+// ========= カテゴリ・アンカー自動抽出（起動後に1度だけ構築） =========
+let _reasonIndex = null;
+function _buildReasonIndex(){
+  const cats = Object.entries(transferReasonFlow || {});
+  const docs = [];
+  for (const [cat, def] of cats){
+    const text = [].concat(def.keywords||[], def.internal_options||[]).join(" ");
+    const toks = _tokenizeJa(text);
+    docs.push({ cat, toks, raw: text });
+  }
+  // DF/IDF
+  const df = new Map();
+  for (const d of docs) for (const t of d.toks) df.set(t, (df.get(t)||0)+1);
+  const N = Math.max(1, docs.length);
+  const idf = new Map(); for (const [t,dfv] of df) idf.set(t, Math.log((N+1)/(dfv+0.5))+1);
+
+  // カテゴリベクトル
+  const catVec = new Map();
+  for (const d of docs){
+    const v = _vecFromTokens(d.toks, idf);
+    catVec.set(d.cat, v);
+  }
+
+  // アンカー（そのカテゴリで重みが高いトークン上位）
+  const anchors = new Map(); // cat -> Set(token)
+  for (const d of docs){
+    const tf = new Map(); for (const t of d.toks) tf.set(t, (tf.get(t)||0)+1);
+    const arr = Array.from(tf.entries())
+      .map(([t,tfv]) => [t, tfv * (idf.get(t)||0)])
+      .sort((a,b)=> b[1]-a[1])
+      .slice(0, 40)
+      .map(([t])=> t);
+    anchors.set(d.cat, new Set(arr));
+  }
+
+  // optionベクトル
+  const optVecs = new Map();
+  for (const [cat, def] of cats){
+    const base = (def.keywords||[]).join(" ");
+    for (const opt of (def.internal_options||[])){
+      const toks = _tokenizeJa(opt + " " + base);
+      optVecs.set(opt, _vecFromTokens(toks, idf));
+    }
+  }
+
+  return { idf, catVec, anchors, optVecs, docs };
+}
+function _ensureReasonIndex(){ if(!_reasonIndex) _reasonIndex = _buildReasonIndex(); return _reasonIndex; }
+
+// ========= 形のシグナル（汎用・短いまま） =========
+const _NEG_PAT = /(ない|無し|なし|ぬ|未|無|不|違う|変)/; // 否定・不足の“型”
+const _POS_PAT = /(挑戦|成長|スキル|学び|広げ|キャリア|役割|責任)/;
+
+// ========= 置き換え版：カテゴリ推定 =========
+function scoreCategories(text){
+  const idx = _ensureReasonIndex();
+  const toks = _tokenizeJa(text);
+  const vq   = _vecFromTokens(toks, idx.idf);
+
+  const neg = _NEG_PAT.test(text);
+  const pos = _POS_PAT.test(text);
+
+  const rows = [];
+  for (const {cat, raw} of idx.docs){
+    const vc  = idx.catVec.get(cat);
+    const cos = _cosSim(vq, vc);           // 意味の近さ
+    const jac = _jaccardBigram(text, raw); // 表層の近さ
+
+    // アンカー一致（概念一致）
+    const anch = idx.anchors.get(cat) || new Set();
+    let anchorHit = 0;
+    for (const t of toks) if (anch.has(t)) anchorHit++;
+    const anchorRate = anch.size ? (anchorHit / Math.min(anch.size, 12)) : 0;
+
+    // 形シグナル（汎用）
+    let morphBoost = 0;
+    if (neg && cat === "経営・組織に関すること"){ morphBoost += 0.08; }
+    if (pos && cat === "仕事内容・キャリアに関すること"){ morphBoost += 0.08; }
+
+    const sc = cos*0.7 + jac*0.3 + anchorRate*0.25 + morphBoost;
+    rows.push({ cat, hits: sc });
+  }
+
+  rows.sort((a,b)=> b.hits - a.hits);
+
+  // 既存の除外カテゴリは最後尾へ
+  const filtered = rows.filter(r => !noOptionCategory(r.cat));
+  const top = filtered.length ? filtered[0] : rows[0] || {cat:null,hits:0};
+
+  return { best: top.cat, hits: top.hits, ranking: rows };
+}
+
+// ========= 置き換え版：オプション並べ替え =========
+function rankReasonOptions(options=[], userText="", k=3){
+  const idx = _ensureReasonIndex();
+  const vq  = _vecFromTokens(_tokenizeJa(userText), idx.idf);
+
+  const scored = options.map(opt=>{
+    const vo  = idx.optVecs.get(opt) || _vecFromTokens(_tokenizeJa(opt), idx.idf);
+    const cos = _cosSim(vq, vo);
+    const jac = _jaccardBigram(userText, opt);
+    return { opt, sc: cos*0.8 + jac*0.2 };
+  });
+  scored.sort((a,b)=> b.sc - a.sc);
+  return scored.slice(0, k).map(x=>x.opt);
+}
+
+// ========= 置き換え版：深掘り質問セレクタ =========
+function pickDeepQuestion(cat, stage /* "deep1" | "deep2" */, userText=""){
+  const qs = (transferReasonFlow?.[cat]?.[stage] || []).slice();
+  if (!qs.length){
+    return (stage==="deep1")
+      ? (GENERIC_REASON_Q.deep1[0] || "もう少し詳しく教えて！")
+      : (GENERIC_REASON_Q.deep2[0] || "もう少し詳しく教えて！");
+  }
+  const idx = _ensureReasonIndex();
+  const vq  = _vecFromTokens(_tokenizeJa(userText), idx.idf);
+
+  let best = qs[0], bestSc = -1;
+  for (const q of qs){
+    const vo  = _vecFromTokens(_tokenizeJa(q), idx.idf);
+    const jac = _jaccardBigram(userText, q);
+    const sc  = _cosSim(vq, vo)*0.8 + jac*0.2;
+    if (sc > bestSc){ bestSc = sc; best = q; }
+  }
+  return best;
+}
+
 
 // ---- Must/Want 辞書（tag_labelのみ） ----
 const mustWantItems = [
@@ -2093,56 +2262,6 @@ function _toHW(s){ return String(s||"").replace(/（/g,"(").replace(/）/g,")").
 function _scrub(s){ return String(s||"").replace(/[ \t\r\n\u3000、。・／\/＿\u2013\u2014\-~～!?！？。、，．・]/g,""); }
 function _norm(s){ return _scrub(_toHW(_toFW(String(s||"")))); }
 
-// ==== deep質問セレクタ ====
-// 文脈に合わせて deep1 / deep2 の中からもっとも合いそうな質問を1つ選ぶ
-function pickDeepQuestion(cat, stage /* "deep1" | "deep2" */, userText = "") {
-  const qs = (transferReasonFlow?.[cat]?.[stage] || []).slice();
-  if (!qs.length) {
-    return (stage === "deep1")
-      ? (GENERIC_REASON_Q.deep1[0] || "もう少し詳しく教えて！")
-      : (GENERIC_REASON_Q.deep2[0] || "もう少し詳しく教えて！");
-  }
-
-  const t = String(userText).toLowerCase();
-
-  // 簡易ヒューリスティック（痛み / 前向き）
-  const painRe = /(きつい|辛い|しんどい|大変|消耗|重い|疲|負担|件数|ノルマ|介助|入浴)/;
-  const upRe   = /(昇進|昇格|資格|スキル|学び|挑戦|成長|キャリア)/;
-
-  if (cat === "仕事内容・キャリアに関すること") {
-    if (painRe.test(t)) {
-      const hit = qs.find(q => q.includes("やりがい"));
-      if (hit) return hit;
-    }
-    if (upRe.test(t)) {
-      const hit = qs.find(q => q.includes("キャリアアップ"));
-      if (hit) return hit;
-    }
-  }
-
-  if (cat === "働く仲間に関すること") {
-    if (/(見下|高圧|上司|師長|医師|先生|ヘルパー|介護職)/.test(t)) {
-      const hit = qs.find(q => /どんな人間関係|上司|同僚|雰囲気/.test(q));
-      if (hit) return hit;
-    }
-  }
-
-  if (cat === "労働条件に関すること") {
-    if (/(夜勤|残業|シフト|休|有給|オンコール|呼び出し|移動|自転車)/.test(t)) {
-      const hit = qs.find(q => /一番きつい|勤務条件/.test(q));
-      if (hit) return hit;
-    }
-  }
-
-  // ルールで決まらなければ、発話との類似度で選ぶ
-  let best = qs[0], bestScore = -1;
-  for (const q of qs) {
-    const s = scoreSimilarity(q, userText);
-    if (s > bestScore) { best = q; bestScore = s; }
-  }
-  return best || qs[0];
-}
-
 // internal_options をユーザ発話との類似度で降順ソートして上位k件を返す
 function pickTopKOptions(options = [], userText = "", k = 3){
   const scored = options.map(opt => ({
@@ -2153,25 +2272,6 @@ function pickTopKOptions(options = [], userText = "", k = 3){
   // スコアが全て0なら、従来どおり先頭k件（念のためのフォールバック）
   const anyHit = scored.some(s => s.score > 0);
   return (anyHit ? scored : options.map(o=>({opt:o,score:0})))
-    .slice(0, k)
-    .map(s => s.opt);
-}
-
-// 追加：候補ランク付け（3件）
-function rankReasonOptions(options = [], userText = "", k = 3) {
-  const t = String(userText).toLowerCase();
-  const boss = /(管理者|管理職|上司|師長|看護師長|部長|課長|マネージャ|ﾏﾈｰｼﾞｬ|リーダー|院長|園長)/;
-
-  return options
-    .map(opt => {
-      let score = scoreSimilarity(opt, userText);
-      // 上司/管理者の文脈なら、人間関係/上司/経営者/ロールモデル系を微ブースト
-      if (boss.test(t) && /(人間関係|上司|経営者|ロールモデル|一体感|価値観)/.test(opt)) {
-        score += 0.15;
-      }
-      return { opt, score };
-    })
-    .sort((a,b)=> b.score - a.score)
     .slice(0, k)
     .map(s => s.opt);
 }
