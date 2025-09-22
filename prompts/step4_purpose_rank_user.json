@@ -1,0 +1,10 @@
+{
+  "context": {
+    "recent": "{{recent}}",
+    "role": "{{role}}",
+    "place": "{{place}}",
+    "category": "{{category}}"
+  },
+  "user_utterances": {{utter_array}},
+  "purpose_pool": {{purpose_pool}}
+}
