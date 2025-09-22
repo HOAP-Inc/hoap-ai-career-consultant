@@ -131,9 +131,6 @@ try {
   }
 } catch {}
 
-// ←この1行を“この関数の直後”に追加（単数名を呼ばれても動くように）
-const matchLicenseInText = matchLicensesInText;
-
 // 「名称 → ID」のマップを両表記で作る
 const tagIdByName = new Map();
 try {
@@ -395,6 +392,121 @@ try {
   console.error("reasonIdByName 構築失敗:", e);
 }
 
+// ==== STEP4 LLM 用：理由IDカタログ・サニタイズ・判定 ====
+const REASON_ID_SET = new Set(
+  (Array.isArray(reasonMaster) ? reasonMaster : [])
+    .map(t => t?.id)
+    .filter(v => v != null)
+);
+
+const REASON_ID_LABELS = (Array.isArray(reasonMaster) ? reasonMaster : [])
+  .map(t => ({ id: t?.id, label: String(t?.tag_label ?? t?.name ?? "") }))
+  .filter(x => x.id != null && x.label);
+
+// モデル出力のJSONを抽出（```json ... ``` でも、生テキスト内 {...} でもOKにする）
+function _extractJsonBlock(s = "") {
+  const t = String(s || "");
+  const code = t.match(/```json\s*([\s\S]*?)```/i)?.[1]
+            || t.match(/```[\s\S]*?```/i)?.[0]?.replace(/```/g, "")
+            || null;
+  const raw = code || t;
+  // 最初の { から最後の } までを強引に拾って parse を試みる
+  const i = raw.indexOf("{");
+  const j = raw.lastIndexOf("}");
+  if (i >= 0 && j > i) {
+    const slice = raw.slice(i, j + 1);
+    try { return JSON.parse(slice); } catch {}
+  }
+  try { return JSON.parse(raw); } catch {}
+  return null;
+}
+
+// 構造チェック＋正規化
+function _sanitizeReasonLLM(obj) {
+  const out = { empathy: "", summary: "", suggested_question: "", candidates: [] };
+  if (!obj || typeof obj !== "object") return out;
+  out.empathy = String(obj.empathy || "");
+  out.summary = String(obj.summary || "");
+  out.suggested_question = String(obj.suggested_question || "");
+  const list = Array.isArray(obj.candidates) ? obj.candidates : [];
+  const norm = [];
+  for (const c of list) {
+    const id = Number(c?.id);
+    let conf = Number(c?.confidence);
+    if (!Number.isFinite(id) || !REASON_ID_SET.has(id)) continue;
+    if (!Number.isFinite(conf)) conf = 0;
+    if (conf < 0) conf = 0; if (conf > 1) conf = 1;
+    norm.push({ id, confidence: conf });
+  }
+  norm.sort((a,b)=> b.confidence - a.confidence);
+  out.candidates = norm.slice(0, 3);
+  return out;
+}
+
+// LLM呼び出し：共感＋要約＋候補ID＋次の質問（JSONで返す）
+async function analyzeReasonWithLLM(userText = "", s) {
+  const key = process.env.OPENAI_API_KEY;
+  if (!key) return { empathy: "", summary: "", suggested_question: "", candidates: [] };
+
+  const { default: OpenAI } = await import("openai");
+  const client = new OpenAI({ apiKey: key });
+
+  const role = s?.status?.role || "未入力";
+  const place = s?.status?.place || "未入力";
+  const recent = Array.isArray(s?.drill?.reasonBuf) ? s.drill.reasonBuf.slice(-3).join(" / ") : "";
+
+  const system = [
+    "あなたは日本語で自然に寄り添う文章を返すアシスタント。",
+    "出力は必ずJSONのみ。余計なテキストや敬語は不要。"
+  ].join("\\n");
+
+  const catalog = REASON_ID_LABELS.map(x => `${x.id}:${x.label}`).join(", ");
+
+  const user = [
+    `直近の発話: ${recent || "なし"}`,
+    `今回の発話: ${userText || "（内容なし）"}`,
+    `職種: ${role}`,
+    `現職: ${place}`,
+    "",
+    "job_change_purposes の候補一覧（id:label）:",
+    catalog,
+    "",
+    "要件：JSONのみで返す。形式は：",
+    `{
+      "empathy": "共感ひとこと（100文字以内・言い切り）",
+      "summary": "転職理由の自然な短い要約（100文字以内）",
+      "candidates": [{"id": 数値, "confidence": 0〜1の数値}] ,
+      "suggested_question": "次に投げる自然な1問（言い切り）"
+    }`
+  ].join("\\n");
+
+  const rsp = await client.chat.completions.create({
+    model: "gpt-4o-mini",
+    temperature: 0.2,
+    max_tokens: 300,
+    messages: [
+      { role: "system", content: system },
+      { role: "user", content: user }
+    ]
+  });
+
+  const txt = rsp?.choices?.[0]?.message?.content || "";
+  const obj = _extractJsonBlock(txt);
+  return _sanitizeReasonLLM(obj);
+}
+
+// 候補から「確定/あいまい/不明」を決める
+function decideReasonFromCandidates(cands = []) {
+  const top = cands?.[0], second = cands?.[1];
+  if (!top) return { status: "uncertain" };
+  const gap = second ? (top.confidence - second.confidence) : Infinity;
+  if (top.confidence >= 0.82 && gap >= 0.12) {
+    return { status: "confirm", id: top.id };
+  }
+  const options = (cands || []).slice(0, 3).map(c => reasonNameById.get(c.id)).filter(Boolean);
+  return options.length ? { status: "ambiguous", options } : { status: "uncertain" };
+}
+
 // ---- Step ラベル（UI用） ----
 const STEP_LABELS = {
   1: "求職者ID",
@@ -420,43 +532,6 @@ const GENERIC_REASON_Q = {
   ],
 };
 
-// 置き換え：isPositiveMotivation
-function isPositiveMotivation(text = "") {
-  const t = String(text).toLowerCase();
-
-  // 強いネガ語があればポジ扱いしない
-  const neg = /(嫌い|無理|合わない|しんどい|辛い|やめたい|辞めたい|不満|怒|ストレス|いじめ|ハラスメント|パワハラ|セクハラ)/;
-  if (neg.test(t)) return false;
-
-  // 前向きワード
-  const pos = /(挑戦|やりたい|なりたい|目指(す|して)|スキルアップ|学びたい|成長|キャリア|経験を積みたい|責任|役職|昇進|昇格|資格(を取りたい)?|新しいこと|幅を広げたい)/;
-  if (pos.test(t)) return true;
-
-  // 明示的に「管理職になりたい」などはポジ
-  if (/(管理(者|職)).*(なりたい|目指|挑戦)/.test(t)) return true;
-
-  return false;
-}
-
-// === 追加：発話のポジ/ネガ/中立分類 ===
-const POS_TERMS = /(挑戦|やりたい|なりたい|目指(す|して)|スキルアップ|学びたい|成長|キャリア|経験を積みたい|責任|役職|昇進|昇格|資格(を取りたい)?|新しいこと|幅を広げたい)/i;
-const NEG_TERMS = /(嫌い|嫌だ|無理|合わない|しんどい|辛い|きつい|やめたい|辞めたい|不満|怒|ストレス|いじめ|ハラスメント|パワハラ|セクハラ|理不尽|圧|支配)/i;
-const MGMT_POS  = /(管理(者|職)).*(なりたい|目指|挑戦)/i; // 「管理者になりたい」等を確実にポジ扱い
-
-function isNegativeMotivation(text=""){ 
-  return NEG_TERMS.test(String(text)); 
-}
-
-function classifyMotivation(text=""){
-  const t = String(text);
-  const pos = (MGMT_POS.test(t) || POS_TERMS.test(t)) ? 1 : 0;
-  const neg = NEG_TERMS.test(t) ? 1 : 0;
-  if (pos && !neg) return "pos";
-  if (!pos && neg) return "neg";
-  if (pos && neg)  return "mixed";
-  return "neutral";
-}
-
 // >>> SALARY: helpers (after classifyMotivation)
 // --- STEP4用：給与ワード検知ヘルパー ---
 function detectSalaryIssue(text=""){
@@ -469,319 +544,6 @@ function isValueMismatchSalary(text=""){
   return /(見合わない|割に合わない|評価|人事考課|等級|査定|フィードバック|昇給|昇格|不公平|公平|基準|成果|反映)/i.test(String(text||""));
 }
 // <<< SALARY: helpers
-
-// 追加：上司/管理者×ネガの早期カテゴリ確定
-function detectBossRelationIssue(text = "") {
-  const t = String(text).toLowerCase();
-  const boss = /(管理者|管理職|上司|師長|看護師長|部長|課長|マネージャ|ﾏﾈｰｼﾞｬ|リーダー|院長|園長|同僚|先輩|後輩|スタッフ|看護師(さん)?)/;
-const neg  = /(嫌い|嫌だ|無理|合わない|苦手|不満|理不尽|ストレス|パワハラ|セクハラ|陰口|圧|支配|きつい|性格がきつい|高圧)/;
-  return boss.test(t) && neg.test(t);
-}
-
-// ポジティブ用の汎用深掘り
-const GENERIC_REASON_Q_POS = {
-  deep1: ["目指している姿や挑戦したいことは何？直近でやってみたい具体例があれば教えて！"],
-  deep2: ["実現のために今足りていない経験やスキルはある？どのくらいの期間で動きたい？"],
-};
-
-// ---- 転職理由カテゴリ（深掘りQ & 候補） ----
-const transferReasonFlow = {
-  "経営・組織に関すること": {
-    keywords: ["理念","方針","価値観","経営","運営","マネジメント","方向性","ビジョン","ミッション","考え方","姿勢","経営陣","トップ","風通し","意見","発言","評価制度","評価","昇給","昇格","公平","基準","教育体制","研修","マニュアル","OJT","フォロー","教育","サポート","経営者","院長","経営者","社長","代表","現場理解","売上","数字"],
-    internal_options: [
-      "MVV・経営理念に共感できる職場で働きたい",
-      "風通しがよく意見が言いやすい職場で働きたい",
-      "評価制度が導入されている職場で働きたい",
-      "教育体制が整備されている職場で働きたい",
-      "経営者が医療職のところで働きたい",
-      "経営者が医療職ではないところで働きたい",
-    ],
-    deep1: ["経営方針で特に合わないと感じる部分は？","組織の体制で困ってることがある？","評価や教育面で不満がある？"],
-    deep2: ["それって改善されそうにない感じ？","他のスタッフも同じように感じてる？","具体的にはどんな場面で一番感じる？"],
-  },
-  "働く仲間に関すること": {
-  keywords: [
-    "人間関係","職場の雰囲気","上司","先輩","同僚","チームワーク","いじめ","パワハラ","セクハラ","陰口","派閥","お局","臭い","キモい",
-    "理不尽","相談できない","孤立","連携","古株","権力","圧","支配","管理者","管理職","師長","看護師長","部長","課長","リーダー",
-    "マネージャ","マネージャー","上層部","院長","園長",
-    // 医療現場ならでは
-    "ドクターとの関係","医師","ドクター","先生",
-    "コメディカル","多職種連携が悪い","ロールモデルがいない",
-    "カンファ","カンファレンス","申し送り","詰所","師長面談","委員会","勉強会で詰められる","ケース会議",
-    // ★追加要望（見下される/きつい）
-    "看護師が見下してくる","先生が見下してくる","医者が見下してくる",
-    "見下す","マウント","高圧的",
-    "ヘルパーがきつい","介護職がきつい","ヘルパー","介護職"
-  ],
-  internal_options: [
-    "人間関係のトラブルが少ない職場で働きたい",
-    "同じ価値観を持つ仲間と働きたい",
-    "尊敬できる上司・経営者と働きたい",
-    "ロールモデルとなる上司や先輩がほしい",
-    "職種関係なく一体感がある仲間と働きたい",
-    "お局がいない職場で働きたい",
-  ],
-  deep1: ["具体的にはどんな人間関係で困ってるの？","上司や先輩との関係？それとも同僚との関係？","職場の雰囲気が悪いってこと？"],
-  deep2: ["それって毎日続いてる感じ？","相談できる人はいない状況？","チームワークの面でも困ってることある？"],
-},
-  "仕事内容・キャリアに関すること": {
-  keywords: [
-    "仕事内容","業務内容","やりがい","やりたい仕事","スキルアップ","成長","挑戦","キャリア","経験","専門性","研修","教育",
-    "昇進","昇格","資格取得","学べる","新しい","幅を広げる","強み","活かす","未経験","役割","役職","裁量","登用","機会",
-    // 医療・介護の具体タスク
-    "看護記録","SOAP","電子カルテ","記録に追われる","アセスメント","インシデント","ラウンド","受け持ち人数","受け持ち患者",
-    "採血","点滴","処置","バイタル","申し送りが長い","件数が多い","訪問件数","ケアプラン","ADL","リハビリ計画",
-    "外来対応","病棟業務","訪問看護","訪問リハ","訪問栄養","ST","PT","OT",
-    // ★追加要望
-    "訪問入浴","入浴介助"
-  ],
-  internal_options: [
-    "今までの経験や自分の強みを活かしたい",
-    "未経験の仕事／分野に挑戦したい",
-    "スキルアップしたい",
-    "患者・利用者への貢献実感を感じられる仕事に携われる",
-    "昇進・昇格の機会がある",
-  ],
-  deep1: ["今の仕事内容で物足りなさを感じてる？","キャリアアップの機会がない？","やりがいを感じられない？"],
-  deep2: ["どんな仕事だったらやりがいを感じられそう？","スキルアップの機会が欲しい？","もっと責任のある仕事をしたい？"],
-},
-  "労働条件に関すること": {
-  keywords: [
-  "残業","休日","有給","働き方","時間","シフト","勤務時間","連勤","休憩",
-  "呼び出し","副業","兼業","社会保険","保険","健保","厚生年金","診療時間",
-  "自己研鑽","勉強","学習","研修時間","直行直帰","事務所","立ち寄り","朝礼","日報","定時",
-  "サービス残業","申請制","人員配置","希望日","半休","時間有休","承認","就業規則","許可",
-  "健康保険","雇用保険","労災","手続き","始業前","準備","清掃","打刻",
-],
-  internal_options: [
-    "直行直帰ができる職場で働きたい",
-    "残業のない職場で働きたい",
-    "希望通りに有給が取得できる職場で働きたい",
-    "副業OKな職場で働きたい",
-    "社会保険を完備している職場で働きたい",
-    "診療時間内で自己研鑽できる職場で働きたい",
-    "前残業のない職場で働きたい",
-  ],
-  deep1: ["具体的にはどの辺りが一番きつい？","時間的なこと？それとも休みの取りづらさ？","勤務条件で特に困ってることは？"],
-  deep2: ["それがずっと続いてる状況？","改善の見込みはなさそう？","他にも労働条件で困ってることある？"],
-},
-  
-  "プライベートに関すること": {
-    keywords: ["家庭","介護","育児","子育て","両立","ライフステージ","子ども","家族","介護","保育園","送迎","学校行事","通院","発熱","中抜け","時短","イベント","飲み会","BBQ","社員旅行","早朝清掃","強制","業務外","就業後","休日","オフ","プライベート","仲良く","交流","ごはん","趣味","オンコール","夜勤"],
-    internal_options: [
-      "家庭との両立に理解のある職場で働きたい",
-      "勤務時間外でイベントがない職場で働きたい",
-      "プライベートでも仲良くしている職場で働きたい",
-    ],
-    deep1: ["家庭との両立で困ってることがある？","プライベートの時間が取れない？","職場のイベントが負担？"],
-    deep2: ["それって改善の余地はなさそう？","他にも両立で困ってることある？","理想的な働き方はどんな感じ？"],
-  },
-  "職場環境・設備": { keywords: ["設備","環境","施設","機器","IT","デジタル","古い","新しい","最新","導入","整備"], internal_options: [], deep1: [], deep2: [] },
-  "職場の安定性": { keywords: ["安定","将来性","経営状況","倒産","リストラ","不安","継続","持続","成長","発展","先行き"], internal_options: [], deep1: [], deep2: [] },
-  "給与・待遇":   { keywords: ["給料","給与","年収","月収","手取り","賞与","ボーナス","昇給","手当","待遇","福利厚生","安い","低い","上がらない","生活できない","お金"], internal_options: [], deep1: [], deep2: [] },
-};
-
-// ========= JP 正規化・トークナイズ =========
-function _normJa(s=""){
-  return String(s||"")
-    .toLowerCase()
-    .replace(/\(/g,"（").replace(/\)/g,"）").replace(/~/g,"～")
-    .replace(/（/g,"(").replace(/）/g,")").replace(/～/g,"~")
-    .replace(/[ \t\r\n\u3000]/g," ")
-    .replace(/[、。・／\/＿\-–—!?！？。，．・]/g," ");
-}
-function _blocksJa(s=""){
-  const t = _normJa(s);
-  const kind = c =>
-    /[一-龥]/.test(c) ? "kanji" :
-    /[ぁ-ん]/.test(c) ? "hira"  :
-    /[ァ-ヴー]/.test(c)? "kata" :
-    /[a-z]/.test(c)    ? "latin" :
-    /[0-9]/.test(c)    ? "num"   : "other";
-  const out = []; let buf = "", k0 = null;
-  for (const ch of t){
-    const k = kind(ch);
-    if (k === "other" || ch === " "){ if (buf){ out.push(buf); buf=""; k0=null; } continue; }
-    if (k0 && k !== k0){ out.push(buf); buf=""; }
-    buf += ch; k0 = k;
-  }
-  if (buf) out.push(buf);
-  return out;
-}
-function _stemJa(tok=""){
-  return tok
-    .replace(/(でした|でしたら|でしたが|ます|ません|です)$/,"")
-    .replace(/(したい|したく|したら|してる|している)$/,"")
-    .replace(/(たい|たく|てる|ている)$/,"")
-    .replace(/する$/,"")
-    .replace(/的$/,"");
-}
-function _tokenizeJa(s=""){
-  const toks = [];
-  for (const b of _blocksJa(s)){
-    if (/^[一-龥]+$/.test(b) && b.length >= 2){
-      for (let i=0;i<b.length-1;i++) toks.push(b.slice(i,i+2)); // 未知語に強く
-    }
-    toks.push(_stemJa(b));
-  }
-  return Array.from(new Set(toks.filter(Boolean)));
-}
-function _charBigrams(s=""){
-  const t = _normJa(s).replace(/ /g,"");
-  const set = new Set();
-  for (let i=0;i<t.length-1;i++) set.add(t.slice(i,i+2));
-  return set;
-}
-function _jaccardBigram(a="", b=""){
-  const A = _charBigrams(a), B = _charBigrams(b);
-  if (!A.size || !B.size) return 0;
-  let inter = 0; for (const x of A) if (B.has(x)) inter++;
-  return inter / (A.size + B.size - inter);
-}
-function _cosSim(mapA, mapB){
-  let dot=0, na=0, nb=0;
-  for (const [,v] of mapA) na += v*v;
-  for (const [,v] of mapB) nb += v*v;
-  const smaller = mapA.size < mapB.size ? mapA : mapB;
-  const bigger  = smaller===mapA ? mapB : mapA;
-  for (const [k,v] of smaller) { const w = bigger.get(k)||0; if (w) dot += v*w; }
-  if (!na || !nb) return 0;
-  return dot / (Math.sqrt(na)*Math.sqrt(nb));
-}
-function _vecFromTokens(toks, idf){
-  const tf = new Map(); for (const t of toks) tf.set(t, (tf.get(t)||0)+1);
-  const v  = new Map(); for (const [t, tfv] of tf) v.set(t, tfv * (idf.get(t)||0));
-  return v;
-}
-
-// ========= カテゴリ・アンカー自動抽出（起動後に1度だけ構築） =========
-let _reasonIndex = null;
-function _buildReasonIndex(){
-  const cats = Object.entries(transferReasonFlow || {});
-  const docs = [];
-  for (const [cat, def] of cats){
-    const text = [].concat(def.keywords||[], def.internal_options||[]).join(" ");
-    const toks = _tokenizeJa(text);
-    docs.push({ cat, toks, raw: text });
-  }
-  // DF/IDF
-  const df = new Map();
-  for (const d of docs) for (const t of d.toks) df.set(t, (df.get(t)||0)+1);
-  const N = Math.max(1, docs.length);
-  const idf = new Map(); for (const [t,dfv] of df) idf.set(t, Math.log((N+1)/(dfv+0.5))+1);
-
-  // カテゴリベクトル
-  const catVec = new Map();
-  for (const d of docs){
-    const v = _vecFromTokens(d.toks, idf);
-    catVec.set(d.cat, v);
-  }
-
-  // アンカー（そのカテゴリで重みが高いトークン上位）
-  const anchors = new Map(); // cat -> Set(token)
-  for (const d of docs){
-    const tf = new Map(); for (const t of d.toks) tf.set(t, (tf.get(t)||0)+1);
-    const arr = Array.from(tf.entries())
-      .map(([t,tfv]) => [t, tfv * (idf.get(t)||0)])
-      .sort((a,b)=> b[1]-a[1])
-      .slice(0, 40)
-      .map(([t])=> t);
-    anchors.set(d.cat, new Set(arr));
-  }
-
-  // optionベクトル
-  const optVecs = new Map();
-  for (const [cat, def] of cats){
-    const base = (def.keywords||[]).join(" ");
-    for (const opt of (def.internal_options||[])){
-      const toks = _tokenizeJa(opt + " " + base);
-      optVecs.set(opt, _vecFromTokens(toks, idf));
-    }
-  }
-
-  return { idf, catVec, anchors, optVecs, docs };
-}
-function _ensureReasonIndex(){ if(!_reasonIndex) _reasonIndex = _buildReasonIndex(); return _reasonIndex; }
-
-// ========= 形のシグナル（汎用・短いまま） =========
-const _NEG_PAT = /(ない|無し|なし|ぬ|未|無|不|違う|変)/; // 否定・不足の“型”
-const _POS_PAT = /(挑戦|成長|スキル|学び|広げ|キャリア|役割|責任)/;
-
-// ========= 置き換え版：カテゴリ推定 =========
-function scoreCategories(text){
-  const idx = _ensureReasonIndex();
-  const toks = _tokenizeJa(text);
-  const vq   = _vecFromTokens(toks, idx.idf);
-
-  const neg = _NEG_PAT.test(text);
-  const pos = _POS_PAT.test(text);
-
-  const rows = [];
-  for (const {cat, raw} of idx.docs){
-    const vc  = idx.catVec.get(cat);
-    const cos = _cosSim(vq, vc);           // 意味の近さ
-    const jac = _jaccardBigram(text, raw); // 表層の近さ
-
-    // アンカー一致（概念一致）
-    const anch = idx.anchors.get(cat) || new Set();
-    let anchorHit = 0;
-    for (const t of toks) if (anch.has(t)) anchorHit++;
-    const anchorRate = anch.size ? (anchorHit / Math.min(anch.size, 12)) : 0;
-
-    // 形シグナル（汎用）
-    let morphBoost = 0;
-    if (neg && cat === "経営・組織に関すること"){ morphBoost += 0.08; }
-    if (pos && cat === "仕事内容・キャリアに関すること"){ morphBoost += 0.08; }
-
-    const sc = cos*0.7 + jac*0.3 + anchorRate*0.25 + morphBoost;
-    rows.push({ cat, hits: sc });
-  }
-
-  rows.sort((a,b)=> b.hits - a.hits);
-
-  // 既存の除外カテゴリは最後尾へ
-  const filtered = rows.filter(r => !noOptionCategory(r.cat));
-  const top = filtered.length ? filtered[0] : rows[0] || {cat:null,hits:0};
-
-  return { best: top.cat, hits: top.hits, ranking: rows };
-}
-
-// ========= 置き換え版：オプション並べ替え =========
-function rankReasonOptions(options=[], userText="", k=3){
-  const idx = _ensureReasonIndex();
-  const vq  = _vecFromTokens(_tokenizeJa(userText), idx.idf);
-
-  const scored = options.map(opt=>{
-    const vo  = idx.optVecs.get(opt) || _vecFromTokens(_tokenizeJa(opt), idx.idf);
-    const cos = _cosSim(vq, vo);
-    const jac = _jaccardBigram(userText, opt);
-    return { opt, sc: cos*0.8 + jac*0.2 };
-  });
-  scored.sort((a,b)=> b.sc - a.sc);
-  return scored.slice(0, k).map(x=>x.opt);
-}
-
-// ========= 置き換え版：深掘り質問セレクタ =========
-function pickDeepQuestion(cat, stage /* "deep1" | "deep2" */, userText=""){
-  const qs = (transferReasonFlow?.[cat]?.[stage] || []).slice();
-  if (!qs.length){
-    return (stage==="deep1")
-      ? (GENERIC_REASON_Q.deep1[0] || "もう少し詳しく教えて！")
-      : (GENERIC_REASON_Q.deep2[0] || "もう少し詳しく教えて！");
-  }
-  const idx = _ensureReasonIndex();
-  const vq  = _vecFromTokens(_tokenizeJa(userText), idx.idf);
-
-  let best = qs[0], bestSc = -1;
-  for (const q of qs){
-    const vo  = _vecFromTokens(_tokenizeJa(q), idx.idf);
-    const jac = _jaccardBigram(userText, q);
-    const sc  = _cosSim(vq, vo)*0.8 + jac*0.2;
-    if (sc > bestSc){ bestSc = sc; best = q; }
-  }
-  return best;
-}
-
 
 // ---- Must/Want 辞書（tag_labelのみ） ----
 const mustWantItems = [
@@ -802,7 +564,7 @@ const mustWantItems = [
   "毎週～隔週シフト提出","有給消化率ほぼ100%","長期休暇","週休2日","週休3日",
   "日勤","夜勤","2交替制","3交替制","午前のみ","午後のみ",
   "残業0","オンコール","緊急訪問","時差出勤導入","フレックスタイム制度",
-  "残業月20時間以内","スキマ時間勤務","時短勤務相","駅近（5分以内）","車通勤",
+  "残業月20時間以内","スキマ時間勤務","時短勤務相談","駅近（5分以内）","車通勤",
   "バイク通勤","自転車通勤","駐車場","直行直帰","年収300万以上","年収350万以上",
   "年収400万以上","年収450万以上","年収500万以上","年収550万以上","年収600万以上",
   "年収650万以上","年収700万以上","賞与","退職金","寮・社宅",
@@ -1477,16 +1239,14 @@ return res.json(withMeta({
   
 }
 
-   // ---- Step4：転職理由（深掘り2回→候補提示） ----
+ // ---- Step4：転職理由（LLM主導：共感＋要約＋ID候補＋次の深掘り） ----
 if (s.step === 4) {
 
-   // >>> SALARY: triage handler (top of Step4)
-  // --- 給与トリアージの回答処理 ---
+  // --- 既存：給与トリアージ（最優先） ---
   if (s.drill.phase === "salary-triage" && s.drill.awaitingChoice) {
     s.drill.reasonBuf.push(text || "");
 
     if (isPeerComparisonSalary(text)) {
-      // 純粋に年収アップ目的 → 未マッチ（金額はMust/Wantで具体化）
       s.status.reason_tag = "";
       s.status.reason_ids = [];
       resetDrill(s);
@@ -1502,7 +1262,6 @@ if (s.step === 4) {
     }
 
     if (isValueMismatchSalary(text)) {
-      // 「働きに見合ってない」→ 評価の文脈（仕事内容・キャリア）に寄せる
       s.drill.category = "仕事内容・キャリアに関すること";
       s.drill.awaitingChoice = false;
       s.drill.count = 1;
@@ -1516,371 +1275,276 @@ if (s.step === 4) {
       }, 4));
     }
 
-    // 判定つかないときは従来ロジックへ（やわらかい深掘りに合流）
+    // 判定つかない → 通常LLMルートへ合流
     s.drill.awaitingChoice = false;
     s.drill.count = 1;
-    const cls = classifyMotivation(s.drill.reasonBuf.join(" "));
-    const q = (cls === "pos" || cls === "mixed")
-      ? GENERIC_REASON_Q_POS.deep1[0]
-      : "一番のひっかかりはどこ？（仕事内容/人間関係/労働時間のどれに近い？）";
-    const emp = await generateEmpathy(text, s);
-    return res.json(withMeta({
-      response: joinEmp(emp, q),
-      step: 4, status: s.status, isNumberConfirmed: true,
-      candidateNumber: s.status.number, debug: debugState(s)
-    }, 4));
   }
-  // <<< SALARY: triage handler
 
+  // --- 既存：オンコール/夜勤のプライベート強制（確認フロー） ---
   if (s.drill.phase === "private-confirm" && s.drill.awaitingChoice) {
-  if (isYes(text)) {
-    const tag = "家庭との両立に理解のある職場で働きたい";
-    s.status.reason_tag = tag;
-    const rid = reasonIdByName.get(tag);
-    s.status.reason_ids = Array.isArray(rid) ? rid : (rid != null ? [rid] : []);
-    s.drill = { phase: null, count: 0, category: null, awaitingChoice: false,
-                options: [], reasonBuf: s.drill.reasonBuf, flags: s.drill.flags };
-    s.step = 5;
-    return res.json(withMeta({
-      response: `『${tag}』だね！担当エージェントに伝えておくね。\n\n${mustIntroText()}`,
-      step: 5, status: s.status, isNumberConfirmed: true,
-      candidateNumber: s.status.number, debug: debugState(s)
-    }, 5));
-  }
-
-  // Yes 以外はすべて固定文＋未マッチ
-  s.drill.flags.privateDeclined = true;
-  s.drill = { phase: null, count: 0, category: null, awaitingChoice: false,
-              options: [], reasonBuf: s.drill.reasonBuf, flags: s.drill.flags };
-  s.status.reason_tag = "";
-  s.status.reason_ids = [];
-  s.step = 5;
-
-  const emp0 = await generateEmpathy(text, s);
-  const fixed = "無理なく働ける職場を考えていこうね。";
-
-  return res.json(withMeta({
-    response: joinEmp(emp0, `${fixed}\n\n${mustIntroText()}`),
-    step: 5, status: s.status, isNumberConfirmed: true,
-    candidateNumber: s.status.number, debug: debugState(s)
-  }, 5));
-}
-  
-  // 1) カテゴリ選択待ち（最終手段）
-  if (s.drill.phase === "reason-cat" && s.drill.awaitingChoice && s.drill.options?.length) {
-    const pick = normalizePick(text);
-    const chosenCat = s.drill.options.find(o => o === pick);
-    if (chosenCat) {
-      s.drill.category = chosenCat;
-
-      // ここまでのユーザー発話をまとめる
-      const joinedUser = s.drill.reasonBuf.join(" ");
-
-      // オンコール/夜勤なら強制でプライベート × 候補固定
-const forced1 = shouldForcePrivate(s) ? forcePrivateOncallNight(joinedUser) : null;
-if (forced1) {
-  s.drill.category = forced1.category;
-
-  // 1択なら即確定して Step5 へ
-  const sole = forced1.options && forced1.options.length === 1 ? forced1.options[0] : null;
-  if (sole) {
-    s.status.reason_tag = sole;
-    const rid = reasonIdByName.get(sole);
-    s.status.reason_ids = Array.isArray(rid) ? rid : (rid != null ? [rid] : []);
-    s.step = 5;
+    if (isYes(text)) {
+      const tag = "家庭との両立に理解のある職場で働きたい";
+      s.status.reason_tag = tag;
+      const rid = reasonIdByName.get(tag);
+      s.status.reason_ids = Array.isArray(rid) ? rid : (rid != null ? [rid] : []);
+      resetDrill(s);
+      s.step = 5;
+      return res.json(withMeta({
+        response: `『${tag}』だね！担当エージェントに伝えておくね。\n\n${mustIntroText()}`,
+        step: 5, status: s.status, isNumberConfirmed: true,
+        candidateNumber: s.status.number, debug: debugState(s)
+      }, 5));
+    }
+    // Yes以外 → 固定文で未マッチ扱い
+    s.drill.flags.privateDeclined = true;
     resetDrill(s);
+    s.status.reason_tag = "";
+    s.status.reason_ids = [];
+    s.step = 5;
+
+    const emp0 = await generateEmpathy(text, s);
+    const fixed = "無理なく働ける職場を考えていこうね。";
     return res.json(withMeta({
-      response: `『${sole}』だね！担当エージェントに伝えておくね。\n\n${mustIntroText()}`,
+      response: joinEmp(emp0, `${fixed}\n\n${mustIntroText()}`),
       step: 5, status: s.status, isNumberConfirmed: true,
       candidateNumber: s.status.number, debug: debugState(s)
     }, 5));
   }
 
-  // 通常（複数候補）なら選択肢提示
-  s.drill.phase = "reason";
-  s.drill.awaitingChoice = true;
-  s.drill.options = forced1.options;
-  return res.json(withMeta({
-    response: `この中だとどれが一番近い？『${s.drill.options.map(x=>`［${x}］`).join("／")}』`,
-    step: 4, status: s.status, isNumberConfirmed: true,
-    candidateNumber: s.status.number, debug: debugState(s)
-  }, 4));
-}
+  // --- 新規：LLM提示の選択肢に対する回答（最大3つから1つ） ---
+  if (s.drill.phase === "reason-llm-choice" && s.drill.awaitingChoice && s.drill.options?.length) {
+    const pick = normalizePick(text);
+    const chosen = s.drill.options.find(o => o === pick);
+    if (chosen) {
+      s.status.reason_tag = chosen;
+      const rid = reasonIdByName.get(chosen);
+      s.status.reason_ids = Array.isArray(rid) ? rid : (rid != null ? [rid] : []);
+      resetDrill(s);
+      s.step = 5;
 
-      // 候補が出せない場合：共感を返さずに Must へ
-s.step = 5;
-return res.json(withMeta({
-  response: mustIntroText(),
-  step: 5, status: s.status, isNumberConfirmed: true, candidateNumber: s.status.number, debug: debugState(s)
-}, 5));
+      const emp = await generateEmpathy(text, s);
+      return res.json(withMeta({
+        response: joinEmp(emp, `『${chosen}』だね！担当エージェントに伝えておくね。\n\n${mustIntroText()}`),
+        step: 5, status: s.status, isNumberConfirmed: true,
+        candidateNumber: s.status.number, debug: debugState(s)
+      }, 5));
     }
     // 再提示
     return res.json(withMeta({
       response: `ごめん、もう一度どれが近いか教えて！『${s.drill.options.map(x=>`［${x}］`).join("／")}』`,
-      step: 4, status: s.status, isNumberConfirmed: true, candidateNumber: s.status.number, debug: debugState(s)
+      step: 4, status: s.status, isNumberConfirmed: true,
+      candidateNumber: s.status.number, debug: debugState(s)
     }, 4));
   }
 
-  // 2) 具体候補の選択（確定）
-if (s.drill.phase === "reason" && s.drill.awaitingChoice && s.drill.options?.length) {
-  const pick = normalizePick(text);
-const chosen = s.drill.options.find(o => o === pick);
-if (chosen) {
-  const repeat = `『${chosen}』だね！担当エージェントに伝えておくね。`;
-
-  s.status.reason_tag = chosen;
-
-  // 名前からID引く。見つからなければ空配列
-  const rid = reasonIdByName.get(chosen);
-  s.status.reason_ids = Array.isArray(rid) ? rid : (rid != null ? [rid] : []);
-
-  s.step = 5;
-  resetDrill(s);
-  return res.json(withMeta({
-    response: `${repeat}\n\n${mustIntroText()}`,
-    step: 5,
-    status: s.status,
-    isNumberConfirmed: true,
-    candidateNumber: s.status.number,
-    debug: debugState(s)
-  }, 5));
-}
-
-  // 再提示（候補に一致しなかったときだけ）
-  return res.json(withMeta({
-    response: `ごめん、もう一度教えて！この中だとどれが一番近い？『${s.drill.options.map(x=>`［${x}］`).join("／")}』`,
-    step: 4, status: s.status, isNumberConfirmed: true, candidateNumber: s.status.number, debug: debugState(s)
-  }, 4));
-}
-  
-  // 3) 1回目の入力を受信 → まずはオンコール/夜勤の早期確認へ
-if (s.drill.count === 0) {
-
-  // >>> SALARY: triage entry (top of count===0)
-  // --- 給与トリアージを最優先で実行 ---
-  if (detectSalaryIssue(text)) {
+  // --- 入口：1回目の入力（count===0） ---
+  if (s.drill.count === 0) {
+    // ID未確定テキストを保持（未マッチ時に使う）
     s.status.reason = text || "";
     s.status.memo.reason_raw = text || "";
     s.drill.reasonBuf = [text || ""];
 
-    s.drill.phase = "salary-triage";
-    s.drill.awaitingChoice = true;
-    s.drill.count = 0;
+    // 最優先：オンコール/夜勤の強制判定
+    const forced0 = shouldForcePrivate(s) ? forcePrivateOncallNight(text) : null;
+    if (forced0) {
+      s.drill.category = forced0.category;
+      s.drill.phase = "private-confirm";
+      s.drill.awaitingChoice = true;
+      s.drill.count = 0;
 
-    const emp0 = await generateEmpathy(text, s);
-    const triage = "どうしてそう思う？周りの相場と比べて？それとも自分の働きに見合ってない感じ？";
+      const emp0 = await generateEmpathy(text, s);
+      const confirmText = "プライベートや家庭との両立に理解がほしい感じ？";
+      return res.json(withMeta({
+        response: joinEmp(emp0, confirmText),
+        step: 4, status: s.status, isNumberConfirmed: true,
+        candidateNumber: s.status.number, debug: debugState(s)
+      }, 4));
+    }
+
+    // 給与トリアージのエントリチェック（既存ロジック）
+    if (detectSalaryIssue(text)) {
+      s.drill.phase = "salary-triage";
+      s.drill.awaitingChoice = true;
+      s.drill.count = 0;
+
+      const emp0 = await generateEmpathy(text, s);
+      const triage = "どうしてそう思う？周りの相場と比べて？それとも自分の働きに見合ってない感じ？";
+      return res.json(withMeta({
+        response: joinEmp(emp0, triage),
+        step: 4, status: s.status, isNumberConfirmed: true,
+        candidateNumber: s.status.number, debug: debugState(s)
+      }, 4));
+    }
+
+    // --- LLM呼び出し（第1回）：共感＋要約＋次の深掘り ---
+    const llm1 = await analyzeReasonWithLLM(text, s);
+    const empathy = llm1?.empathy || await generateEmpathy(text, s);
+    const nextQ   = (llm1?.next_question && llm1.next_question.trim()) || "一番ひっかかる点はどこ？もう少しだけ教えて！";
+
+    s.drill.count = 1;
+    s.drill.phase = "reason-llm-ask2";
+    s.drill.awaitingChoice = false;
+    // 内部用メモ（返却しない）
+    s.drill.flags.last_llm_candidates = llm1?.candidates || [];
+    s.drill.flags.last_llm_summary = llm1?.summary || "";
+
     return res.json(withMeta({
-      response: joinEmp(emp0, triage),
+      response: joinEmp(empathy, nextQ),
       step: 4, status: s.status, isNumberConfirmed: true,
       candidateNumber: s.status.number, debug: debugState(s)
     }, 4));
   }
-  // <<< SALARY: triage entry
-  
-  s.status.reason = text || "";
-  s.status.memo.reason_raw = text || "";
-  s.drill.reasonBuf = [text || ""];
 
-  const forced0 = shouldForcePrivate(s) ? forcePrivateOncallNight(text) : null;
-  if (forced0) {
-    // 深掘りには進まず、まずは1回でキャッチアップ → 確認だけする
-    s.drill.category = forced0.category;              // "プライベートに関すること"
-    s.drill.phase = "private-confirm";                // ← 確認フェーズに入る
-    s.drill.awaitingChoice = true;
-    s.drill.count = 0;                                // ← 深掘り回数は進めない
-    s.drill.flags = s.drill.flags || {};             // ← 念のため初期化
-
-    const emp0 = await generateEmpathy(text, s);
-    const confirmText = "プライベートや家庭との両立に理解がほしい感じ？";
-    return res.json(withMeta({
-      response: joinEmp(emp0, confirmText),
-      step: 4, status: s.status, isNumberConfirmed: true,
-      candidateNumber: s.status.number, debug: debugState(s)
-    }, 4));
-  }
-
-  // （以下はオンコール/夜勤じゃない通常ルート。元の処理そのまま）
-  // 先行判定：管理者/上司 × ネガ → 「働く仲間に関すること」へ寄せる
-  if (detectBossRelationIssue(text)) {
-    s.drill.category = "働く仲間に関すること";
-    s.drill.count = 1;
-    const q = pickDeepQuestion("働く仲間に関すること", "deep1", text);
-    const emp0 = await generateEmpathy(text, s);
-    return res.json(withMeta({
-      response: joinEmp(emp0, q),
-      step: 4, status: s.status, isNumberConfirmed: true, candidateNumber: s.status.number, debug: debugState(s)
-    }, 4));
-  }
-
-  const { best, hits } = scoreCategories(s.drill.reasonBuf.join(" "));
-  if (!best || hits === 0 || noOptionCategory(best)) {
-    const cls = classifyMotivation(s.status.reason || text || "");
-    s.drill.category = (cls === "pos" || cls === "mixed")
-      ? "仕事内容・キャリアに関すること"
-      : null;
-    s.drill.count = 1;
-
-    const q = (cls === "pos" || cls === "mixed")
-      ? GENERIC_REASON_Q_POS.deep1[0]
-      : GENERIC_REASON_Q.deep1[0];
-
-    const emp0 = await generateEmpathy(s.status.reason || text || "", s);
-    return res.json(withMeta({
-      response: joinEmp(emp0, q),
-      step: 4, status: s.status, isNumberConfirmed: true, candidateNumber: s.status.number, debug: debugState(s)
-    }, 4));
-  }
-
-  // 推定できたらカテゴリ深掘りへ
-  s.drill.category = best;
-  s.drill.count = 1;
-  const q = pickDeepQuestion(best, "deep1", s.status.reason || text || "");
-  const emp0 = await generateEmpathy(s.status.reason || text || "", s);
-  return res.json(withMeta({
-    response: joinEmp(emp0, q),
-    step: 4, status: s.status, isNumberConfirmed: true, candidateNumber: s.status.number, debug: debugState(s)
-  }, 4));
-}
-
-  // 4) 2回目の深掘り
+  // --- 2回目の入力（count===1）：確定/もう1ターン判断 ---
   if (s.drill.count === 1) {
     s.drill.reasonBuf.push(text || "");
     const joined = s.drill.reasonBuf.join(" ");
 
-    // 先行補強：1発目で未確定でも、通算文脈で「上司問題」なら寄せる
-if (!s.drill.category && detectBossRelationIssue(joined)) {
-  s.drill.category = "働く仲間に関すること";
-}
-
-    // 未確定なら再推定
-    if (!s.drill.category) {
-      const { best, hits } = scoreCategories(joined);
-      if (best && hits > 0 && !noOptionCategory(best)) {
-        s.drill.category = best;
+    // 強制分岐の再チェック
+    const forced1 = shouldForcePrivate(s) ? forcePrivateOncallNight(joined) : null;
+    if (forced1) {
+      const sole = forced1.options?.length === 1 ? forced1.options[0] : null;
+      if (sole) {
+        s.status.reason_tag = sole;
+        const rid = reasonIdByName.get(sole);
+        s.status.reason_ids = Array.isArray(rid) ? rid : (rid != null ? [rid] : []);
+        resetDrill(s);
+        s.step = 5;
+        return res.json(withMeta({
+          response: `『${sole}』だね！担当エージェントに伝えておくね。\n\n${mustIntroText()}`,
+          step: 5, status: s.status, isNumberConfirmed: true,
+          candidateNumber: s.status.number, debug: debugState(s)
+        }, 5));
       }
     }
 
+    // --- LLM呼び出し（第2回）：候補で確定判定 ---
+    const llm2 = await analyzeReasonWithLLM(joined, s);
+    const empathy2 = llm2?.empathy || await generateEmpathy(text, s);
+    const decision = decideReasonFromCandidates(llm2?.candidates || []);
+
+    if (decision.status === "confirm") {
+      const id = decision.id;
+      const label = reasonNameById.get(id) || "";
+      s.status.reason_tag = label;
+      s.status.reason_ids = [id];
+      resetDrill(s);
+      s.step = 5;
+      return res.json(withMeta({
+        response: joinEmp(empathy2, `『${label}』だね！担当エージェントに伝えておくね。\n\n${mustIntroText()}`),
+        step: 5, status: s.status, isNumberConfirmed: true,
+        candidateNumber: s.status.number, debug: debugState(s)
+      }, 5));
+    }
+
+    if (decision.status === "ambiguous") {
+      // もう1ターン深掘り（ここではまだ選択肢を出さない）
+      const nextQ = llm2?.next_question || "具体的にどんな場面で一番強く感じた？";
+      s.drill.count = 2;
+      s.drill.phase = "reason-llm-ask3";
+      s.drill.awaitingChoice = false;
+      s.drill.flags.last_llm_candidates = llm2?.candidates || [];
+      s.drill.flags.last_llm_summary   = llm2?.summary || "";
+
+      return res.json(withMeta({
+        response: joinEmp(empathy2, nextQ),
+        step: 4, status: s.status, isNumberConfirmed: true,
+        candidateNumber: s.status.number, debug: debugState(s)
+      }, 4));
+    }
+
+    // 不確定：もう1ターン深掘り
+    const nextQ = llm2?.next_question || "一番の根っこは何だと思う？";
     s.drill.count = 2;
-const cat = s.drill.category;
-const cls = classifyMotivation(joined);
-let q;
-if (!cat) {
-  // カテゴリ未確定：pos/mixed→前向き、neg/neutral→通常
-  q = (cls === "pos" || cls === "mixed")
-    ? GENERIC_REASON_Q_POS.deep2[0]
-    : GENERIC_REASON_Q.deep2[0];
-} else if (cat === "仕事内容・キャリアに関すること" && (cls === "pos" || cls === "mixed")) {
-  // キャリア系かつ前向きなら、前向きの聞き方に
-  q = "どんな役割で力を発揮したい？身につけたいスキルや専門領域があれば教えて！";
-} else {
-  // 従来どおりカテゴリ固有の深掘り
-  q = pickDeepQuestion(cat, "deep2", joined);
-}
+    s.drill.phase = "reason-llm-ask3";
+    s.drill.awaitingChoice = false;
+    s.drill.flags.last_llm_candidates = llm2?.candidates || [];
 
-  const emp1 = await generateEmpathy(text || "", s);
-  return res.json(withMeta({
-    response: joinEmp(emp1, q),
-    step: 4, status: s.status, isNumberConfirmed: true, candidateNumber: s.status.number, debug: debugState(s)
-  }, 4));
-}
+    return res.json(withMeta({
+      response: joinEmp(empathy2, nextQ),
+      step: 4, status: s.status, isNumberConfirmed: true,
+      candidateNumber: s.status.number, debug: debugState(s)
+    }, 4));
+  }
 
-  // 5) 深掘り後の確定（カテゴリ不明ならカテゴリ選択へ）
+  // --- 3回目の入力（count===2）：確定 or 選択肢提示（最大3） ---
   if (s.drill.count === 2) {
     s.drill.reasonBuf.push(text || "");
+    const joined = s.drill.reasonBuf.join(" ");
 
-    if (!s.drill.category) {
-      const { best, hits, ranking } = scoreCategories(s.drill.reasonBuf.join(" "));
-      if (best && hits > 0 && !noOptionCategory(best)) {
-        s.drill.category = best;
-      } else {
-        // それでも未確定：代表カテゴリを選んでもらう
-        const pool = ranking.length
-          ? ranking.slice(0,5).map(r=>r.cat)
-          : ["仕事内容・キャリアに関すること","労働条件に関すること","働く仲間に関すること","経営・組織に関すること","プライベートに関すること"];
-        s.drill.phase = "reason-cat";
-        s.drill.awaitingChoice = true;
-        s.drill.options = pool;
-        const empC = await generateEmpathy(s.drill.reasonBuf.join(" "), s);
+    const forced2 = shouldForcePrivate(s) ? forcePrivateOncallNight(joined) : null;
+    if (forced2) {
+      const sole = forced2.options?.length === 1 ? forced2.options[0] : null;
+      if (sole) {
+        s.status.reason_tag = sole;
+        const rid = reasonIdByName.get(sole);
+        s.status.reason_ids = Array.isArray(rid) ? rid : (rid != null ? [rid] : []);
+        resetDrill(s);
+        s.step = 5;
         return res.json(withMeta({
-          response: joinEmp(empC, `ちなみに、この中だとどのカテゴリが一番近い？『${pool.map(x=>`［${x}］`).join("／")}』`),
-          step: 4, status: s.status, isNumberConfirmed: true, candidateNumber: s.status.number, debug: debugState(s)
-        }, 4));
+          response: `『${sole}』だね！担当エージェントに伝えておくね。\n\n${mustIntroText()}`,
+          step: 5, status: s.status, isNumberConfirmed: true,
+          candidateNumber: s.status.number, debug: debugState(s)
+        }, 5));
       }
     }
 
-    const cat = s.drill.category;
-    const allOptions = (transferReasonFlow[cat].internal_options || []);
-    const joinedUser = s.drill.reasonBuf.join(" "); // ここまでのユーザー発話
-    
-    // オンコール/夜勤なら強制でプライベート × 候補固定
-const forced2 = shouldForcePrivate(s) ? forcePrivateOncallNight(joinedUser) : null;
-if (forced2) {
-  s.drill.category = forced2.category;
+    const llm3 = await analyzeReasonWithLLM(joined, s);
+    const empathy3 = llm3?.empathy || await generateEmpathy(text, s);
+    const decision = decideReasonFromCandidates(llm3?.candidates || []);
 
-  // 1択なら即確定して Step5 へ
-  const sole = forced2.options && forced2.options.length === 1 ? forced2.options[0] : null;
-  if (sole) {
-    s.status.reason_tag = sole;
-    const rid = reasonIdByName.get(sole);
-    s.status.reason_ids = Array.isArray(rid) ? rid : (rid != null ? [rid] : []);
-    s.step = 5;
+    if (decision.status === "confirm") {
+      const id = decision.id;
+      const label = reasonNameById.get(id) || "";
+      s.status.reason_tag = label;
+      s.status.reason_ids = [id];
+      resetDrill(s);
+      s.step = 5;
+      return res.json(withMeta({
+        response: joinEmp(empathy3, `『${label}』だね！担当エージェントに伝えておくね。\n\n${mustIntroText()}`),
+        step: 5, status: s.status, isNumberConfirmed: true,
+        candidateNumber: s.status.number, debug: debugState(s)
+      }, 5));
+    }
+
+    // まだ曖昧 → 最大3つの選択肢を提示（確定済みなら出さない）
+    const options = (decision.status === "ambiguous" ? decision.options : [])
+      .filter(Boolean)
+      .slice(0, 3);
+
+    if (options.length) {
+      s.drill.phase = "reason-llm-choice";
+      s.drill.awaitingChoice = true;
+      s.drill.options = options;
+
+      return res.json(withMeta({
+        response: joinEmp(ephy3, `この中だとどれが一番近い？『${options.map(x=>`［${x}］`).join("／")}』`),
+        step: 4, status: s.status, isNumberConfirmed: true,
+        candidateNumber: s.status.number, debug: debugState(s)
+      }, 4));
+    }
+
+    // それでも未決 → 未マッチとしてStep5へ（原文保持）
+    s.status.reason_tag = "";
+    s.status.reason_ids = [];
     resetDrill(s);
+    s.step = 5;
     return res.json(withMeta({
-      response: `『${sole}』だね！担当エージェントに伝えておくね。\n\n${mustIntroText()}`,
+      response: joinEmp(ephy3, mustIntroText()),
       step: 5, status: s.status, isNumberConfirmed: true,
       candidateNumber: s.status.number, debug: debugState(s)
     }, 5));
   }
 
-  // 通常（複数候補）なら選択肢提示
-  s.drill.phase = "reason";
-  s.drill.awaitingChoice = true;
-  s.drill.options = forced2.options;
+  // フォールバック
+  const empF = await generateEmpathy(text || "", s);
   return res.json(withMeta({
-    response: `この中だとどれが一番近い？『${s.drill.options.map(x=>`［${x}］`).join("／")}』`,
+    response: joinEmp(empF, "もう少しだけ詳しく教えて！"),
     step: 4, status: s.status, isNumberConfirmed: true,
     candidateNumber: s.status.number, debug: debugState(s)
   }, 4));
 }
-
-    const options = rankReasonOptions(allOptions, joinedUser, 3);
-
-    if (!options.length) {
-  // options.length === 0 のとき：共感なしで Must へ
-  s.step = 5;
-  return res.json(withMeta({
-    response: mustIntroText(),
-    step: 5,
-    status: s.status,
-    isNumberConfirmed: true,
-    candidateNumber: s.status.number,
-    debug: debugState(s)
-  }, 5));
-}
-
-    // ★ここから追加：1択なら即確定して Step5 へ
-if (options.length === 1) {
-  const sole = options[0];
-  s.status.reason_tag = sole;
-  const rid = reasonIdByName.get(sole);
-  s.status.reason_ids = Array.isArray(rid) ? rid : (rid != null ? [rid] : []);
-  s.step = 5;
-  return res.json(withMeta({
-    response: `『${sole}』だね！担当エージェントに伝えておくね。\n\n${mustIntroText()}`,
-    step: 5, status: s.status, isNumberConfirmed: true,
-    candidateNumber: s.status.number, debug: debugState(s)
-  }, 5));
-}
-
-    s.drill.phase = "reason";
-    s.drill.awaitingChoice = true;
-    s.drill.options = options;
-    return res.json(withMeta({
-      response: `この中だとどれが一番近い？『${options.map(x=>`［${x}］`).join("／")}』`,
-      step: 4, status: s.status, isNumberConfirmed: true, candidateNumber: s.status.number, debug: debugState(s)
-    }, 4));
-  }
-} 
+  
   
   // ---- Step5：絶対NG（Must NG） ----
 if (s.step === 5) {
@@ -2209,51 +1873,7 @@ async function generateEmpathy(userText, s){
     return fallback;
   }
 }
-// ローカル簡易生成（カテゴリとキーワードで揺らぎ）
-function localEmpathy(text = "", cat = ""){
-  const t = String(text);
-  const has = (w) => t.includes(w);
-  const table = {
-    "経営・組織に関すること": [
-      "その方針ズレ、放置できないね。", "価値観の距離、無視できないね。"
-    ],
-    "働く仲間に関すること": [
-      "関係の消耗、積み重なるときつい。", "安心して話せない職場は疲れるよね。"
-    ],
-    "仕事内容・キャリアに関すること": [
-      "物足りなさ、次の一歩に変えよう。", "挑戦欲が出てる、この流れ大事。"
-    ],
-    "労働条件に関すること": [
-      "その負荷、長期では持たないよね。", "時間の縛り、生活に食い込むよね。"
-    ],
-    "プライベートに関すること": [
-      "両立の壁、見過ごせないポイントだ。", "生活リズム守れる働き方に寄せよう。"
-    ]
-  };
-  const generic = [
-    "その違和感、次の判断材料にしよう。", "しんどさの正体、ここで言語化しよう。"
-  ];
-  let pool = table[cat] || [];
-  if (has("残業") || has("夜勤")) pool = pool.concat(["休めない感覚、疲労に直結だよね。"]);
-  if (has("評価") || has("教育")) pool = pool.concat(["評価と成長のズレ、響くよね。"]);
-  if (!pool.length) pool = generic;
-  return pool[Math.floor(Math.random() * pool.length)];
-}
 
-// 2-gram Jaccard
-function jaccard2gram(a = "", b = ""){
-  const grams = (s) => {
-    const z = s.replace(/\s/g, "");
-    const out = new Set();
-    for (let i=0; i<z.length-1; i++) out.add(z.slice(i, i+2));
-    return out;
-  };
-  const A = grams(a), B = grams(b);
-  if (!A.size || !B.size) return 0;
-  let inter = 0;
-  for (const x of A) if (B.has(x)) inter++;
-  return inter / (A.size + B.size - inter);
-}
 // ==== 類似度＆共感用ヘルパ ====
 
 // 全角↔半角のゆらぎ吸収＆区切り削除
@@ -2261,20 +1881,6 @@ function _toFW(s){ return String(s||"").replace(/\(/g,"（").replace(/\)/g,"）"
 function _toHW(s){ return String(s||"").replace(/（/g,"(").replace(/）/g,")").replace(/～/g,"~"); }
 function _scrub(s){ return String(s||"").replace(/[ \t\r\n\u3000、。・／\/＿\u2013\u2014\-~～!?！？。、，．・]/g,""); }
 function _norm(s){ return _scrub(_toHW(_toFW(String(s||"")))); }
-
-// internal_options をユーザ発話との類似度で降順ソートして上位k件を返す
-function pickTopKOptions(options = [], userText = "", k = 3){
-  const scored = options.map(opt => ({
-    opt,
-    score: scoreSimilarity(opt, userText)
-  }));
-  scored.sort((a,b)=> b.score - a.score);
-  // スコアが全て0なら、従来どおり先頭k件（念のためのフォールバック）
-  const anyHit = scored.some(s => s.score > 0);
-  return (anyHit ? scored : options.map(o=>({opt:o,score:0})))
-    .slice(0, k)
-    .map(s => s.opt);
-}
 
 function forcePrivateOncallNight(userText = "") {
   const t = String(userText || "");
@@ -2460,65 +2066,6 @@ function matchLicensesInText(text = "") {
   return Array.from(out);
 }
 
-// 入力に含まれる「現職（施設/形態）」候補ラベルを返す（重複排除）
-function matchPlacesInText(text = "") {
-  const raw = String(text || "").trim();
-  if (!raw) return [];
-
-  const toFW = (s) => String(s || "").replace(/\(/g,"（").replace(/\)/g,"）").replace(/~/g,"～");
-  const toHW = (s) => String(s || "").replace(/（/g,"(").replace(/）/g,")").replace(/～/g,"~");
-  const scrub = (s) =>
-    String(s || "").toLowerCase()
-      .replace(/[ \t\r\n\u3000、。・／\/＿\-–—~～!?！？。、，．・]/g, "");
-  const norm  = (s) => scrub(toHW(toFW(s)));
-  const normText = norm(raw);
-
-  const out = new Set();
-
-  // 0) 厳密一致 → 正式ラベル
-  const byExact =
-      tagIdByName.get(raw)
-   || tagIdByName.get(toFW(raw))
-   || tagIdByName.get(toHW(raw));
-  if (byExact != null) {
-    const name = tagNameById.get(byExact);
-    if (name) out.add(name);
-  }
-
-  // 1) エイリアス命中 → 正式ラベル
-  for (const [alias, label] of Object.entries(PLACE_ALIASES || {})) {
-    if (!alias || !label) continue;
-    if (normText.includes(norm(alias))) out.add(label);
-  }
-
-  // 2) 双方向部分一致
-  const normalize = (s) => (s ? norm(s) : "");
-  for (const t of (Array.isArray(tagList) ? tagList : [])) {
-    const name = String(t?.name ?? "");
-    if (!name) continue;
-    const nTag = normalize(name);
-    if (!nTag) continue;
-    if (normText.includes(nTag) || nTag.includes(normText)) out.add(name);
-  }
-
-  // 3) ファジー補完（必要時）
-  if (out.size === 0) {
-    const pool = [];
-    for (const t of (Array.isArray(tagList) ? tagList : [])) {
-      const name = String(t?.name ?? "");
-      if (!name) continue;
-      const s = scoreSimilarity(name, raw);
-      if (s > 0) pool.push({ name, s });
-    }
-    pool.sort((a,b)=> b.s - a.s);
-    for (const { name, s } of pool.slice(0, 6)) {
-      if (s >= 0.35) out.add(name);
-    }
-  }
-
-  return Array.from(out);
-}
-
 // これで既存の matchTagIdsInText を“丸ごと置き換え”
 function matchTagIdsInText(text = "") {
   const raw = String(text || "").trim();
@@ -2580,67 +2127,6 @@ function matchTagIdsInText(text = "") {
     }
   }
   return Array.from(out);
-}
-// ラベル（正式ラベル）から、別名も含めて tags.json の ID を集める（正規化＋双方向部分一致）
-function getIdsForLicenseLabel(label = "") {
-  if (!label) return [];
-
-  // 全角/半角ゆらぎと区切り記号を吸収して比較する
-  const toFW = (s) => String(s || "").replace(/\(/g, "（").replace(/\)/g, "）").replace(/~/g, "～");
-  const toHW = (s) => String(s || "").replace(/（/g, "(").replace(/）/g, ")").replace(/～/g, "~");
-  const scrub = (s) =>
-    String(s || "").trim().replace(/[ \t\r\n\u3000、。・／\/＿\u2013\u2014\-~～]/g, "");
-  const normalize = (s) => scrub(toHW(toFW(String(s || ""))));
-
-  // このラベルに紐づく「検索語」セット（ラベル自身＋ゆらぎ＋別名）
-  const nameSet = new Set();
-  const pushAllForms = (s) => {
-    if (!s) return;
-    nameSet.add(s);
-    nameSet.add(toFW(s));
-    nameSet.add(toHW(s));
-  };
-
-  // ラベル自身
-  pushAllForms(label);
-
-  // licenseMap は「別名 → [ラベル…]」。label を含むすべての別名を追加
-  for (const [alias, labels] of licenseMap.entries()) {
-    if (Array.isArray(labels) && labels.includes(label)) {
-      pushAllForms(alias);
-    }
-  }
-
-  // まずは tagIdByName での厳密一致（高速パス）
-  const exactIds = new Set();
-  for (const n of nameSet) {
-    const id = tagIdByName.get(n);
-    if (id != null) exactIds.add(id);
-  }
-  if (exactIds.size) return Array.from(exactIds);
-
-  // 厳密一致で取れない場合は、tags.json 全走査で双方向部分一致
-  const needles = Array.from(nameSet).map(normalize).filter(Boolean);
-  const ids = new Set();
-
-  for (const t of (Array.isArray(tagList) ? tagList : [])) {
-    const name = String(t?.name ?? "");
-    if (!name) continue;
-
-    const normTag = normalize(name);
-    if (!normTag) continue;
-
-    for (const nd of needles) {
-      if (!nd) continue;
-      // 「タグ名が検索語に含まれる」または「検索語がタグ名に含まれる」
-      if (normTag.includes(nd) || nd.includes(normTag)) {
-        if (t.id != null) ids.add(t.id);
-        break;
-      }
-    }
-  }
-
-  return Array.from(ids);
 }
 
 // === 所有資格（qualifications.json）用：正式ラベルからID配列を引く ===
