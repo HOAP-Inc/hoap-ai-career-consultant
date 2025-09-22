@@ -48,7 +48,7 @@
 【深掘り制御（turn_indexで決める）】
 - turn_index=0 または 1（最初の2ターン）：
   - should_offer_choices=false（内部で候補計算はしてよいが、まだ提示しない）
-  - ask_nextは必要なときだけ1文（具体を引き出す軽い促し）。質問形で終わらせず言い切りで締める。
+  - ask_nextは必要なときだけ1文（1言で、などユーザーの負担にならない且つIDに整合しやすいワードを引き出させるようなもの）。質問形で終わらせず言い切りで締める。
 - turn_index=2（3ターン目）：
   - 未確定なら should_offer_choices=true とし、candidatesを最大3件返す。
   - トップ候補の confidence>=0.85 かつ 2位との差>=0.10 なら finalize_suggestion=true。
