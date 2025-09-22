@@ -839,6 +839,59 @@ function initSession() {
   };
 }
 
+// --- セッション互換初期化：ここだけが初期化の単一箇所 ---
+function normalizeSession(s){
+  s.step ??= 1;
+  s.isNumberConfirmed ??= false;
+  s.drill ??= { phase:null, count:0, category:null, awaitingChoice:false, options:[], reasonBuf:[], flags:{} };
+
+  s.status ??= {};
+  s.status.number ??= "";
+  s.status.role ??= "";
+  s.status.role_ids ??= [];
+  s.status.place ??= "";
+  s.status.place_ids ??= [];
+  s.status.place_id ??= null;
+
+  s.status.reason ??= "";
+  s.status.reason_tag ??= "";
+  s.status.reason_ids ??= [];
+
+  s.status.must_ng ??= [];
+  s.status.must_have ??= [];
+  s.status.must_ng_ids ??= [];
+  s.status.must_have_ids ??= [];
+
+  s.status.want_text ??= "";
+  s.status.can ??= "";
+  s.status.will ??= "";
+  s.status.licenses ??= [];
+
+  s.status.memo ??= {};
+  s.status.memo.role_raw ??= "";
+  s.status.memo.reason_raw ??= "";
+  s.status.memo.must_ng_raw ??= [];
+  s.status.memo.must_have_raw ??= [];
+  return s;
+}
+
+// --- リクエストからセッションを一度だけ確定 ---
+function bootstrapSessionFromReq(req){
+  const method   = (req.method || "GET").toUpperCase();
+  const safeBody = (typeof req.body === "object" && req.body) ? req.body : {};
+
+  const headerSid = String(req.headers["x-session-id"] || "").trim();
+  const querySid  = String(req.query?.sessionId || "").trim();
+  const bodySid   = String(safeBody.sessionId || "").trim();
+  const sessionId = headerSid || querySid || bodySid || "default";
+
+  if (!sessions[sessionId] && safeBody.snapshot && method === "POST") {
+    sessions[sessionId] = safeBody.snapshot;
+  }
+  const s = sessions[sessionId] ?? (sessions[sessionId] = initSession());
+  normalizeSession(s);
+  return { s, sessionId, method, safeBody };
+}
 
 // ★追加：Step4の選択状態を完全に終了させる
 function resetDrill(s) {
@@ -853,47 +906,22 @@ function resetDrill(s) {
   };
 }
 
-export default async function handler(req, res) {
-  // ==== CORS（常にJSONを返す前提で統一）====
+// --- 共通: CORS/JSON をまとめる ---
+function setCorsJson(res){
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Vary", "Origin");
   res.setHeader("Access-Control-Allow-Methods", "GET,POST,PUT,PATCH,DELETE,HEAD,OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type, X-Session-Id");
   res.setHeader("Allow", "GET,POST,PUT,PATCH,DELETE,HEAD,OPTIONS");
   res.setHeader("Content-Type", "application/json; charset=utf-8");
+}
 
-  // メソッド正規化
-  const method = (req.method || "GET").toUpperCase();
+export default async function handler(req, res) {
+  setCorsJson(res);
+  const { s, method, safeBody } = bootstrapSessionFromReq(req);
 
-  // セッションIDの取り出しは先にやる（全メソッドで同じ応答が返るように）
-  const headerSid = String(req.headers["x-session-id"] || "").trim();
-  const querySid  = String(req.query?.sessionId || "").trim();
-  // 予防：req.bodyが未パース/空でも落ちないように
-  const safeBody  = (typeof req.body === "object" && req.body) ? req.body : {};
-  const bodySid   = String(safeBody.sessionId || "").trim();
-  const sessionId = headerSid || querySid || bodySid || "default";
-
-  if (!sessions[sessionId] && safeBody.snapshot && method === "POST") {
-    sessions[sessionId] = safeBody.snapshot;
-  }
-  const s = sessions[sessionId] ?? (sessions[sessionId] = initSession());
-  s.drill ||= { phase: null, count: 0, category: null, awaitingChoice: false, options: [], reasonBuf: [], flags: {} };
-
-// 旧プロパティが残っていても落ちないように最低限の互換初期化
-s.status.must_ng       ||= [];
-s.status.must_have     ||= [];
-s.status.must_ng_ids   ||= [];
-s.status.must_have_ids ||= [];
-s.status.want_text     ||= "";
-s.status.memo          ||= {};
-s.status.memo.must_ng_raw   ||= [];
-s.status.memo.must_have_raw ||= [];
-
-
-  // ここで、POST 以外の全メソッドは **必ず 200 + JSON** を返す
-  // （OPTIONS/HEAD/PUT/PATCH/DELETE/GET を統一挙動にする）
+  // 非POSTは統一で 200 + JSON
   if (method !== "POST") {
-    // OPTIONS も HEAD も 200 + JSON（空でOK）に統一し、フロントの response.json() を必ず成功させる
     const greet = s.isNumberConfirmed
       ? nextAfterId(s)
       : "こんにちは！私はAIキャリアエージェント『ほーぷちゃん』です🤖✨\n担当との面談の前に、あなたの希望条件や想いを整理していくね！\n\n最初に【求職者ID】を教えてね。※メールに届いているIDだよ。";
@@ -907,6 +935,7 @@ s.status.memo.must_have_raw ||= [];
       debug: debugState(s),
     }, s.step));
   }
+
 
   // ========== ここから通常の会話処理（POST） ==========
 
@@ -1379,7 +1408,7 @@ if (s.step === 4) {
     // --- LLM呼び出し（第1回）：共感＋要約＋次の深掘り ---
     const llm1 = await analyzeReasonWithLLM(text, s);
     const empathy = llm1?.empathy || await generateEmpathy(text, s);
-    const nextQ   = (llm1?.next_question && llm1.next_question.trim()) || "一番ひっかかる点はどこ？もう少しだけ教えて！";
+    const nextQ   = (llm1?.suggested_question && llm1.suggested_question.trim()) || "一番ひっかかる点はどこ？もう少しだけ教えて！";
 
     s.drill.count = 1;
     s.drill.phase = "reason-llm-ask2";
@@ -1439,7 +1468,7 @@ if (s.step === 4) {
 
     if (decision.status === "ambiguous") {
       // もう1ターン深掘り（ここではまだ選択肢を出さない）
-      const nextQ = llm2?.next_question || "具体的にどんな場面で一番強く感じた？";
+      const nextQ = llm2?.suggested_question || "具体的にどんな場面で一番強く感じた？";
       s.drill.count = 2;
       s.drill.phase = "reason-llm-ask3";
       s.drill.awaitingChoice = false;
@@ -1454,7 +1483,7 @@ if (s.step === 4) {
     }
 
     // 不確定：もう1ターン深掘り
-    const nextQ = llm2?.next_question || "一番の根っこは何だと思う？";
+    const nextQ = llm2?.suggested_question || "一番の根っこは何だと思う？"
     s.drill.count = 2;
     s.drill.phase = "reason-llm-ask3";
     s.drill.awaitingChoice = false;
@@ -1490,7 +1519,7 @@ if (s.step === 4) {
     }
 
     const llm3 = await analyzeReasonWithLLM(joined, s);
-    const generateEmpathy = llm3?.generateEmpathy || await generateEmpathy(text, s);
+    const empathy3 = llm3?.empathy || await generateEmpathy(text, s);
     const decision = decideReasonFromCandidates(llm3?.candidates || []);
 
     if (decision.status === "confirm") {
@@ -1501,7 +1530,7 @@ if (s.step === 4) {
       resetDrill(s);
       s.step = 5;
       return res.json(withMeta({
-        response: joinEmp(generateEmpathy, `『${label}』だね！担当エージェントに伝えておくね。\n\n${mustIntroText()}`),
+        response: joinEmp(empathy3, `『${label}』だね！担当エージェントに伝えておくね。\n\n${mustIntroText()}`),
         step: 5, status: s.status, isNumberConfirmed: true,
         candidateNumber: s.status.number, debug: debugState(s)
       }, 5));
@@ -1518,7 +1547,7 @@ if (s.step === 4) {
       s.drill.options = options;
 
       return res.json(withMeta({
-        response: joinEmp(generateEmpathy, `この中だとどれが一番近い？『${options.map(x=>`［${x}］`).join("／")}』`),
+        response: joinEmp(empathy3, `この中だとどれが一番近い？『${options.map(x=>`［${x}］`).join("／")}』`),
         step: 4, status: s.status, isNumberConfirmed: true,
         candidateNumber: s.status.number, debug: debugState(s)
       }, 4));
@@ -1530,7 +1559,7 @@ if (s.step === 4) {
     resetDrill(s);
     s.step = 5;
     return res.json(withMeta({
-      response: joinEmp(generateEmpathy, mustIntroText()),
+      response: joinEmp(empathy3, mustIntroText()),
       step: 5, status: s.status, isNumberConfirmed: true,
       candidateNumber: s.status.number, debug: debugState(s)
     }, 5));
