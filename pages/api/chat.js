@@ -1490,7 +1490,7 @@ if (s.step === 4) {
     }
 
     const llm3 = await analyzeReasonWithLLM(joined, s);
-    const empathy3 = llm3?.empathy || await generateEmpathy(text, s);
+    const generateEmpathy = llm3?.generateEmpathy || await generateEmpathy(text, s);
     const decision = decideReasonFromCandidates(llm3?.candidates || []);
 
     if (decision.status === "confirm") {
@@ -1501,7 +1501,7 @@ if (s.step === 4) {
       resetDrill(s);
       s.step = 5;
       return res.json(withMeta({
-        response: joinEmp(empathy3, `『${label}』だね！担当エージェントに伝えておくね。\n\n${mustIntroText()}`),
+        response: joinEmp(generateEmpathy, `『${label}』だね！担当エージェントに伝えておくね。\n\n${mustIntroText()}`),
         step: 5, status: s.status, isNumberConfirmed: true,
         candidateNumber: s.status.number, debug: debugState(s)
       }, 5));
@@ -1518,7 +1518,7 @@ if (s.step === 4) {
       s.drill.options = options;
 
       return res.json(withMeta({
-        response: joinEmp(ephy3, `この中だとどれが一番近い？『${options.map(x=>`［${x}］`).join("／")}』`),
+        response: joinEmp(generateEmpathy, `この中だとどれが一番近い？『${options.map(x=>`［${x}］`).join("／")}』`),
         step: 4, status: s.status, isNumberConfirmed: true,
         candidateNumber: s.status.number, debug: debugState(s)
       }, 4));
@@ -1530,7 +1530,7 @@ if (s.step === 4) {
     resetDrill(s);
     s.step = 5;
     return res.json(withMeta({
-      response: joinEmp(ephy3, mustIntroText()),
+      response: joinEmp(generateEmpathy, mustIntroText()),
       step: 5, status: s.status, isNumberConfirmed: true,
       candidateNumber: s.status.number, debug: debugState(s)
     }, 5));
