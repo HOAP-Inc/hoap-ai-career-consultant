@@ -1,9 +1,0 @@
-{
-  "locale": "ja",
-  "stage": { "turn_index": {{turn_index}} },
-  "user_text": "{{user_text}}",
-  "recent_texts": {{recent_texts_json}},
-  "role": "{{role}}",
-  "place": "{{place}}",
-  "available_purposes": {{available_purposes_json}}
-}
