@@ -423,11 +423,13 @@ function _extractJsonBlock(s = "") {
 
 // 構造チェック＋正規化
 function _sanitizeReasonLLM(obj) {
-  const out = { empathy: "", summary: "", suggested_question: "", candidates: [] };
+  const out = { empathy: "", paraphrase: "", suggested_question: "", candidates: [] };
   if (!obj || typeof obj !== "object") return out;
+
   out.empathy = String(obj.empathy || "");
-  out.summary = String(obj.summary || "");
-  out.suggested_question = String(obj.suggested_question || "");
+  out.paraphrase = String(obj.paraphrase || obj.summary || "");
+  out.suggested_question = String(obj.ask_next || obj.suggested_question || "");
+
   const list = Array.isArray(obj.candidates) ? obj.candidates : [];
   const norm = [];
   for (const c of list) {
@@ -443,27 +445,30 @@ function _sanitizeReasonLLM(obj) {
   return out;
 }
 
-// LLM呼び出し：共感＋要約＋候補ID＋次の質問（JSONで返す）
+// LLM呼び出し：共感＋要約（paraphrase）＋候補ID＋次の深掘り（JSONで返す）
+// ←この関数を丸ごと置換
 async function analyzeReasonWithLLM(userText = "", s) {
   const key = process.env.OPENAI_API_KEY;
-  if (!key) return { empathy: "", summary: "", suggested_question: "", candidates: [] };
+  if (!key) return { empathy: "", paraphrase: "", suggested_question: "", candidates: [] };
 
   const { default: OpenAI } = await import("openai");
   const client = new OpenAI({ apiKey: key });
 
-  const role = s?.status?.role || "未入力";
-  const place = s?.status?.place || "未入力";
-  const recent = Array.isArray(s?.drill?.reasonBuf) ? s.drill.reasonBuf.slice(-3).join(" / ") : "";
+  const role    = s?.status?.role || "未入力";
+  const place   = s?.status?.place || "未入力";
+  const recent  = Array.isArray(s?.drill?.reasonBuf) ? s.drill.reasonBuf.slice(-3).join(" / ") : "";
+  const lastAsk = s?.drill?.flags?.last_ask || "";
 
   const system = [
-    "あなたは日本語で自然に寄り添う文章を返すアシスタント。",
-    "出力は必ずJSONのみ。余計なテキストや敬語は不要。"
+    "あなたは日本語で自然に寄り添うキャリアエージェントAI。",
+    "出力は必ずJSONのみ。前置きや説明は書かない。"
   ].join("\\n");
 
   const catalog = REASON_ID_LABELS.map(x => `${x.id}:${x.label}`).join(", ");
 
   const user = [
     `直近の発話: ${recent || "なし"}`,
+    `直前の問いかけ: ${lastAsk || "なし"}`,
     `今回の発話: ${userText || "（内容なし）"}`,
     `職種: ${role}`,
     `現職: ${place}`,
@@ -473,17 +478,17 @@ async function analyzeReasonWithLLM(userText = "", s) {
     "",
     "要件：JSONのみで返す。形式は：",
     `{
-      "empathy": "共感ひとこと（100文字以内・言い切り）",
-      "summary": "転職理由の自然な短い要約（100文字以内）",
-      "candidates": [{"id": 数値, "confidence": 0〜1の数値}] ,
-      "suggested_question": "次に投げる自然な1問（言い切り）"
+      "empathy": "2〜3文／100〜180字。疑問で終わらせない。命令・説教・決めつけNG。常体〜軽い口語。",
+      "paraphrase": "保存用の短い言い換え（30字以内・評価語は避ける）",
+      "candidates": [{"id": 数値（上のidのみ）, "confidence": 0〜1}],
+      "ask_next": "次の一言（<=80字）。疑問符で終わらせない。直前の問いとかぶらない表現。"
     }`
   ].join("\\n");
 
   const rsp = await client.chat.completions.create({
     model: "gpt-4o-mini",
     temperature: 0.2,
-    max_tokens: 300,
+    max_tokens: 500,
     messages: [
       { role: "system", content: system },
       { role: "user", content: user }
@@ -1406,22 +1411,24 @@ if (s.step === 4) {
     }
 
     // --- LLM呼び出し（第1回）：共感＋要約＋次の深掘り ---
-    const llm1 = await analyzeReasonWithLLM(text, s);
-    const empathy = llm1?.empathy || await generateEmpathy(text, s);
-    const nextQ   = (llm1?.suggested_question && llm1.suggested_question.trim()) || "一番ひっかかる点はどこ？もう少しだけ教えて！";
+const llm1 = await analyzeReasonWithLLM(text, s);
+const empathy = llm1?.empathy || await generateEmpathy(text, s);
+const nextQ   = (llm1?.suggested_question && llm1.suggested_question.trim())
+  || "一番ひっかかる点はどこか、もう少しだけ教えてね。";
 
-    s.drill.count = 1;
-    s.drill.phase = "reason-llm-ask2";
-    s.drill.awaitingChoice = false;
-    // 内部用メモ（返却しない）
-    s.drill.flags.last_llm_candidates = llm1?.candidates || [];
-    s.drill.flags.last_llm_summary = llm1?.summary || "";
+s.drill.count = 1;
+s.drill.phase = "reason-llm-ask2";
+s.drill.awaitingChoice = false;
+// 内部用メモ（返却しない）
+s.drill.flags.last_llm_candidates = llm1?.candidates || [];
+s.drill.flags.last_llm_summary    = llm1?.paraphrase || "";  // ← summary→paraphrase
+s.drill.flags.last_ask            = nextQ;                   // ← 追加：直前の問いかけを保持
 
-    return res.json(withMeta({
-      response: joinEmp(empathy, nextQ),
-      step: 4, status: s.status, isNumberConfirmed: true,
-      candidateNumber: s.status.number, debug: debugState(s)
-    }, 4));
+return res.json(withMeta({
+  response: joinEmp(empathy, nextQ),
+  step: 4, status: s.status, isNumberConfirmed: true,
+  candidateNumber: s.status.number, debug: debugState(s)
+}, 4));
   }
 
   // --- 2回目の入力（count===1）：確定/もう1ターン判断 ---
@@ -1467,33 +1474,34 @@ if (s.step === 4) {
     }
 
     if (decision.status === "ambiguous") {
-      // もう1ターン深掘り（ここではまだ選択肢を出さない）
-      const nextQ = llm2?.suggested_question || "具体的にどんな場面で一番強く感じた？";
-      s.drill.count = 2;
-      s.drill.phase = "reason-llm-ask3";
-      s.drill.awaitingChoice = false;
-      s.drill.flags.last_llm_candidates = llm2?.candidates || [];
-      s.drill.flags.last_llm_summary   = llm2?.summary || "";
+  const nextQ = llm2?.suggested_question || "具体的にどんな場面で一番強く感じたか、教えてね。";
+  s.drill.count = 2;
+  s.drill.phase = "reason-llm-ask3";
+  s.drill.awaitingChoice = false;
+  s.drill.flags.last_llm_candidates = llm2?.candidates || [];
+  s.drill.flags.last_llm_summary    = llm2?.paraphrase || ""; // ← summary→paraphrase
+  s.drill.flags.last_ask            = nextQ;                  // ← 追加
 
-      return res.json(withMeta({
-        response: joinEmp(empathy2, nextQ),
-        step: 4, status: s.status, isNumberConfirmed: true,
-        candidateNumber: s.status.number, debug: debugState(s)
-      }, 4));
-    }
+  return res.json(withMeta({
+    response: joinEmp(empathy2, nextQ),
+    step: 4, status: s.status, isNumberConfirmed: true,
+    candidateNumber: s.status.number, debug: debugState(s)
+  }, 4));
+}
 
     // 不確定：もう1ターン深掘り
-    const nextQ = llm2?.suggested_question || "一番の根っこは何だと思う？"
-    s.drill.count = 2;
-    s.drill.phase = "reason-llm-ask3";
-    s.drill.awaitingChoice = false;
-    s.drill.flags.last_llm_candidates = llm2?.candidates || [];
+const nextQ = llm2?.suggested_question || "一番の根っこは何か、言葉にしてみてね。";
+s.drill.count = 2;
+s.drill.phase = "reason-llm-ask3";
+s.drill.awaitingChoice = false;
+s.drill.flags.last_llm_candidates = llm2?.candidates || [];
+s.drill.flags.last_ask = nextQ;  // ← 追加：直前の問いかけを保持
 
-    return res.json(withMeta({
-      response: joinEmp(empathy2, nextQ),
-      step: 4, status: s.status, isNumberConfirmed: true,
-      candidateNumber: s.status.number, debug: debugState(s)
-    }, 4));
+return res.json(withMeta({
+  response: joinEmp(empathy2, nextQ),
+  step: 4, status: s.status, isNumberConfirmed: true,
+  candidateNumber: s.status.number, debug: debugState(s)
+}, 4));
   }
 
   // --- 3回目の入力（count===2）：確定 or 選択肢提示（最大3） ---
@@ -1843,6 +1851,7 @@ if (s.step === 10) {
 // ---- 入口 ここまで ----
 
 // ==== 共感生成（自然な会話風） ====
+// ←この関数を丸ごと置換
 async function generateEmpathy(userText, s){
   const key = process.env.OPENAI_API_KEY;
   const fallback = "今の話、ちゃんと受け取ったよ。";
@@ -1858,16 +1867,12 @@ async function generateEmpathy(userText, s){
     const client = new OpenAI({ apiKey: key });
 
     const system = [
-  "あなたは日本語で自然に寄り添う会話を返すAI。",
-  "決まり文句やお祈り文句は禁止。",
-  "丁寧すぎず、崩しすぎない口調。",
-  "敬語は禁止。寄り添うキャリアエージェントという立場の口調。",
-  "質問系、疑問系で終わらない。言い切り分で終わる。説教しない。",
-  "必ず言い切り分で終わる。",
-  "説教しない。",
-  "無理に転職や現職へ留まることを勧めない。",
-  "返答は必ず100文字以内に収める。前後の流れから自然な文にする。"
-].join("\n");
+      "あなたは日本語で自然に寄り添う会話を返すAI。",
+      "決まり文句やお祈り文句は禁止。",
+      "丁寧すぎず崩しすぎない口調。敬語に寄りすぎない。",
+      "命令・説教・断定の押し付けは禁止。",
+      "共感文は必ず 2〜3文／100〜180字。疑問符で終わらせない。"
+    ].join("\\n");
 
     const user = [
       `直近の発話: ${recent || "なし"}`,
@@ -1878,25 +1883,23 @@ async function generateEmpathy(userText, s){
       `今回の発話: ${userText || "（内容なし）"}`,
       "",
       "避ける言い回し例: ありがとう 大切 寄り添う わかる そうだよね 安心して 頑張ろう 大丈夫 受け止めた 整理しよう"
-    ].join("\n");
+    ].join("\\n");
 
     const rsp = await client.chat.completions.create({
       model: "gpt-4o-mini",
-      temperature: 0.9,
+      temperature: 0.7,
       top_p: 0.9,
       messages: [
         { role: "system", content: system },
         { role: "user", content: user }
       ],
-      max_tokens: 180,
+      max_tokens: 220,
     });
 
     let txt = rsp?.choices?.[0]?.message?.content?.trim() || "";
-    // 後処理（記号やダブりの軽整形）
-    txt = txt.replace(/\"/g, "").replace(/\s+\n/g, "\n").replace(/\n{3,}/g, "\n\n");
-
+    // 後処理（軽整形＋終端調整）
+    txt = txt.replace(/\"/g, "").replace(/\s+\n/g, "\n").replace(/\n{3,}/g, "\n\n").trim();
     txt = enforcePlainEnding(txt);
-    
     return txt || fallback;
   } catch {
     return fallback;
@@ -1936,17 +1939,18 @@ function isYes(text = "") {
 
 // ---- ヘルパ ----
 
-// 疑問で終わらせないフィルタ
+// 疑問で終わらせないフィルタ（←この関数を丸ごと置換）
 function enforcePlainEnding(text = '') {
   let t = String(text).trim();
   if (!t) return t;
 
-  // 軽い整形だけ（改行の詰めすぎ防止など）
   t = t.replace(/\s+\n/g, '\n').replace(/\n{3,}/g, '\n\n');
 
-  // 語尾は基本そのまま。終端に句読点等がなければ「。」だけ付ける
-  if (!/[。！？!？＞）)\]]$/.test(t)) t += '。';
+  // 末尾が ? / ？ のときは句点に置換
+  t = t.replace(/[？?]+$/,'。');
 
+  // 終端に句読点等がなければ句点を付与
+  if (!/[。！？!？＞）)\]]$/.test(t)) t += '。';
   return t;
 }
 
