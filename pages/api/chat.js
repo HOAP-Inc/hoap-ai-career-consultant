@@ -1285,7 +1285,6 @@ if (s.step === 4) {
         }, 5));
       }
     }
-}
     // --- LLM呼び出し（第2回）：候補で確定判定 ---
     const llm2 = await analyzeReasonWithLLM(joined, s);
     const empathy2 = llm2?.empathy || await generateEmpathy(text, s);
@@ -1372,7 +1371,7 @@ if (s.step === 4) {
     const empathy3 = llm3?.empathy || await generateEmpathy(text, s);
     const decision = decideReasonFromCandidates(llm3?.candidates || []);
 
-        if (decision.status === "confirm") {
+    if (decision.status === "confirm") {
       const id = decision.id;
       const label = reasonNameById.get(id) || "";
       s.status.reason_tag = label;
@@ -1397,32 +1396,32 @@ if (s.step === 4) {
       s.drill.awaitingChoice = true;
       s.drill.options = options;
 
-        const empathy3Safe = sanitizeEmpathy(empathy3);
-        return res.json(withMeta({
-          response: joinEmp(empathy3Safe, `この中だとどれが一番近い？『${options.map(x=>`［${x}］`).join("／")}』`),
-          step: 4, status: s.status, isNumberConfirmed: true,
-          candidateNumber: s.status.number, debug: debugState(s)
-        }, 4));
+      const empathy3Safe = sanitizeEmpathy(empathy3);
+      return res.json(withMeta({
+        response: joinEmp(empathy3Safe, `この中だとどれが一番近い？『${options.map(x=>`［${x}］`).join("／")}』`),
+        step: 4, status: s.status, isNumberConfirmed: true,
+        candidateNumber: s.status.number, debug: debugState(s)
+      }, 4));
+    }
 
     // それでも未決 → paraphraseテキストで確定してStep5へ
-    // ルール：IDが確定できない場合は、LLMのparaphrase（<=30字）をステータスにテキストのまま保持し、必ずStep5へ進める。
-      const p1 = String(llm3?.paraphrase || "").trim();
-      const p2 = String(s.drill?.flags?.last_llm_summary || "").trim();
-      const p3 = String(joined || "").slice(0, 30);
-      const finalParaphrase = (p1 || p2 || p3) || "理由（テキスト）";
+    const p1 = String(llm3?.paraphrase || "").trim();
+    const p2 = String(s.drill?.flags?.last_llm_summary || "").trim();
+    const p3 = String(joined || "").slice(0, 30);
+    const finalParaphrase = (p1 || p2 || p3) || "理由（テキスト）";
 
-      s.status.reason_tag = finalParaphrase; // ステータスバーにはテキストをそのまま表示
-      s.status.reason_ids = [];              // IDは未確定なので空
-      resetDrill(s);
-      s.step = 5;
+    s.status.reason_tag = finalParaphrase;
+    s.status.reason_ids = [];
+    resetDrill(s);
+    s.step = 5;
 
-        const empathy3Safe = sanitizeEmpathy(empathy3);
-        return res.json(withMeta({
-          response: joinEmp(empathy3Safe, mustIntroText()),
-          step: 5, status: s.status, isNumberConfirmed: true,
-          candidateNumber: s.status.number, debug: debugState(s)
-        }, 5));
-  }
+    const empathy3Safe = sanitizeEmpathy(empathy3);
+    return res.json(withMeta({
+      response: joinEmp(empathy3Safe, mustIntroText()),
+      step: 5, status: s.status, isNumberConfirmed: true,
+      candidateNumber: s.status.number, debug: debugState(s)
+    }, 5));
+  } // ← この閉じかっこが抜けてた！
 
   // フォールバック
   const empF = await generateEmpathy(text || "", s);
