@@ -1407,7 +1407,6 @@ if (s.step === 4) {
           step: 4, status: s.status, isNumberConfirmed: true,
           candidateNumber: s.status.number, debug: debugState(s)
         }, 4));
-      }
 
     // それでも未決 → paraphraseテキストで確定してStep5へ
     // ルール：IDが確定できない場合は、LLMのparaphrase（<=30字）をステータスにテキストのまま保持し、必ずStep5へ進める。
@@ -1429,7 +1428,6 @@ if (s.step === 4) {
           step: 5, status: s.status, isNumberConfirmed: true,
           candidateNumber: s.status.number, debug: debugState(s)
         }, 5));
-      }
     }
   }
 
