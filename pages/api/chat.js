@@ -1326,7 +1326,7 @@ if (s.step === 4) {
         candidateNumber: s.status.number, debug: debugState(s)
       }, 4));
     }
-
+}
         // 不確定：もう1ターン深掘り
       let nextQ = llm2?.suggested_question || "一番の根っこは何か、言葉にしてみてね。";
       const empathy2Safe = sanitizeEmpathy(empathy2);
