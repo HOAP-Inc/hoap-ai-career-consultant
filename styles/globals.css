@@ -298,7 +298,7 @@ html, body, #__next { height: 100%; }
   position: absolute;              /* 入力バー(fixed)を基準に配置 */
   left: 0;
   right: 0;
-  bottom: calc(100% + 8px);        /* 入力欄の“直上”に8pxあけて固定 */
+  bottom: calc(100% + 24px);        /* 入力欄の“直上”に8pxあけて固定 */
   z-index: 40;                     /* 前面に出す（進捗/チャットより上） */
   display: flex;
   justify-content: flex-end;       /* 右寄せ（UI踏襲） */
