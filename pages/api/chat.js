@@ -1,4 +1,4 @@
-f// ほーぷちゃん：会話ロジック（Step厳密・深掘り2回・候補提示・ステータス算出）
+// ほーぷちゃん：会話ロジック（Step厳密・深掘り2回・候補提示・ステータス算出）
 function _bigrams(text) {
   const s = String(text || '').toLowerCase();
   const set = new Set();
