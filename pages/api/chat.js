@@ -1,4 +1,4 @@
-// ほーぷちゃん：会話ロジック（Step厳密・深掘り2回・候補提示・ステータス算出）
+f// ほーぷちゃん：会話ロジック（Step厳密・深掘り2回・候補提示・ステータス算出）
 function _bigrams(text) {
   const s = String(text || '').toLowerCase();
   const set = new Set();
@@ -1285,7 +1285,7 @@ if (s.step === 4) {
         }, 5));
       }
     }
-
+}
     // --- LLM呼び出し（第2回）：候補で確定判定 ---
     const llm2 = await analyzeReasonWithLLM(joined, s);
     const empathy2 = llm2?.empathy || await generateEmpathy(text, s);
@@ -1326,7 +1326,6 @@ if (s.step === 4) {
         candidateNumber: s.status.number, debug: debugState(s)
       }, 4));
     }
-}
         // 不確定：もう1ターン深掘り
       let nextQ = llm2?.suggested_question || "一番の根っこは何か、言葉にしてみてね。";
       const empathy2Safe = sanitizeEmpathy(empathy2);
