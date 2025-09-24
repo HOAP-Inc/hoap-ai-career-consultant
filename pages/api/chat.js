@@ -1328,7 +1328,6 @@ if (s.step === 4) {
     }
 
         // 不確定：もう1ターン深掘り
-    {
       let nextQ = llm2?.suggested_question || "一番の根っこは何か、言葉にしてみてね。";
       const empathy2Safe = sanitizeEmpathy(empathy2);
 
@@ -1347,7 +1346,6 @@ if (s.step === 4) {
         step: 4, status: s.status, isNumberConfirmed: true,
         candidateNumber: s.status.number, debug: debugState(s)
       }, 4));
-    }
 
     // --- 3回目の入力（count===2）：確定 or 選択肢提示（最大3） ---
   if (s.drill.count === 2) {
@@ -1409,7 +1407,6 @@ if (s.step === 4) {
 
     // それでも未決 → paraphraseテキストで確定してStep5へ
     // ルール：IDが確定できない場合は、LLMのparaphrase（<=30字）をステータスにテキストのまま保持し、必ずStep5へ進める。
-    {
       const p1 = String(llm3?.paraphrase || "").trim();
       const p2 = String(s.drill?.flags?.last_llm_summary || "").trim();
       const p3 = String(joined || "").slice(0, 30);
@@ -1426,7 +1423,6 @@ if (s.step === 4) {
           step: 5, status: s.status, isNumberConfirmed: true,
           candidateNumber: s.status.number, debug: debugState(s)
         }, 5));
-    }
   }
 
   // フォールバック
