@@ -500,6 +500,76 @@ async function analyzeReasonWithLLM(userText = "", s) {
   return _sanitizeReasonLLM(obj);
 }
 
+// ==== STEP5/6 LLM 用：Must NG / Must Have を抽出（JSONで返す。IDは扱わない） ====
+function _sanitizeMWLLM(obj){
+  const out = { must_ng: [], must_have: [], summary: "", ask_next: "" };
+  if (!obj || typeof obj !== "object") return out;
+
+  const arr = (x) =>
+    Array.isArray(x)
+      ? x.filter(v => typeof v === "string" && v.trim()).slice(0, 10)
+      : [];
+
+  out.must_ng   = arr(obj.must_ng   ?? obj.ng   ?? obj.mustNG);
+  out.must_have = arr(obj.must_have ?? obj.have ?? obj.mustHave);
+  out.summary   = String(obj.summary || obj.paraphrase || "");
+  out.ask_next  = String(obj.ask_next || obj.suggested_question || "");
+  return out;
+}
+
+async function analyzeMWWithLLM(userText = "", mode /* 'ng' | 'have' */, s){
+  const key = process.env.OPENAI_API_KEY;
+  if (!key) return { must_ng: [], must_have: [], summary: "", ask_next: "" };
+
+  const { default: OpenAI } = await import("openai");
+  const client = new OpenAI({ apiKey: key });
+
+  const system = [
+    "あなたは日本語で自然に寄り添うキャリアエージェントAI。",
+    "出力は必ずJSONのみ（前置きや説明は禁止）。"
+  ].join("\n");
+
+  const role   = s?.status?.role  || "未入力";
+  const place  = s?.status?.place || "未入力";
+  const recent = Array.isArray(s?.drill?.reasonBuf) ? s.drill.reasonBuf.slice(-3).join(" / ") : "";
+
+  const ask = mode === "ng"
+    ? "ユーザーの発話から『絶対NG（Must NG）』に該当するラベルだけを抽出して返す。"
+    : "ユーザーの発話から『絶対欲しい（Must Have）』に該当するラベルだけを抽出して返す。";
+
+  const format = `{
+    "must_ng": ["文字列ラベル", ...],
+    "must_have": ["文字列ラベル", ...],
+    "summary": "30字以内の要約（評価語NG）",
+    "ask_next": "次の一言（<=80字／疑問符で終わらせない）"
+  }`;
+
+  const user = [
+    `直近の発話: ${recent || "なし"}`,
+    `職種: ${role}`, `現職: ${place}`,
+    `今回の発話: ${userText || "（内容なし）"}`,
+    "",
+    ask,
+    "ID・タグ辞書・スコアリングは使わない。ラベルは日本語の自然な語で返す。",
+    "出力は上記フォーマットのJSONのみ。", format
+  ].join("\n");
+
+  const rsp = await client.chat.completions.create({
+    model: "gpt-4o-mini",
+    temperature: 0.2,
+    max_tokens: 400,
+    messages: [
+      { role: "system", content: system },
+      { role: "user", content: user }
+    ],
+  });
+
+  const txt = rsp?.choices?.[0]?.message?.content || "";
+  const obj = _extractJsonBlock(txt);
+  return _sanitizeMWLLM(obj);
+}
+
+
 // 候補から「確定/あいまい/不明」を決める
 function decideReasonFromCandidates(cands = []) {
   const top = cands?.[0], second = cands?.[1];
@@ -549,258 +619,6 @@ function isValueMismatchSalary(text=""){
   return /(見合わない|割に合わない|評価|人事考課|等級|査定|フィードバック|昇給|昇格|不公平|公平|基準|成果|反映)/i.test(String(text||""));
 }
 // <<< SALARY: helpers
-
-// ---- Must/Want 辞書（tag_labelのみ） ----
-const mustWantItems = [
-  "急性期病棟","回復期病棟","慢性期・療養型病院","一般病院","地域包括ケア病棟","療養病棟",
-  "緩和ケア病棟（ホスピス）","クリニック","精神科病院","訪問看護ステーション",
-  "精神科特化型訪問看護ステーション","機能強化型訪問看護ステーション","訪問リハビリテーション",
-  "訪問栄養指導","通所介護（デイサービス）","認知症対応型通所介護（認知症専門デイサービス）",
-  "地域密着型通所介護（定員18名以下）","通所リハビリテーション（デイケア）","訪問介護",
-  "定期巡回・随時対応型訪問介護看護","訪問入浴","小規模多機能型居宅介護","看護小規模多機能型居宅介護",
-  "特別養護老人ホーム","地域密着型特別養護老人ホーム（定員29名以下）","介護老人保健施設",
-  "介護付き有料老人ホーム","ショートステイ（短期入所生活介護）","サービス付き高齢者向け住宅（サ高住）",
-  "住宅型有料老人ホーム","軽費老人ホーム（ケアハウス）","健康型有料老人ホーム","シニア向け分譲マンション",
-  "放課後等デイサービス","生活介護（障害者の日中活動）","就労継続支援A型","就労継続支援B型",
-  "短期入所（障害者向けショートステイ）","歯科クリニック","訪問歯科","歯科口腔外科（病院内診療科）",
-  "大学病院歯科・歯学部附属病院","歯科技工所","院内ラボ","保育園","幼稚園",
-  "企業（産業保健・企業内看護など）","4週8休","育児支援","年間休日120日以上",
-  "週1日からOK","週2日からOK","土日祝休み","家庭都合休","月1シフト提出",
-  "毎週～隔週シフト提出","有給消化率ほぼ100%","長期休暇","週休2日","週休3日",
-  "日勤","夜勤","2交替制","3交替制","午前のみ","午後のみ",
-  "残業0","オンコール","緊急訪問","時差出勤導入","フレックスタイム制度",
-  "残業月20時間以内","スキマ時間勤務","時短勤務相談","駅近（5分以内）","車通勤",
-  "バイク通勤","自転車通勤","駐車場","直行直帰","年収300万以上","年収350万以上",
-  "年収400万以上","年収450万以上","年収500万以上","年収550万以上","年収600万以上",
-  "年収650万以上","年収700万以上","賞与","退職金","寮・社宅",
-  "託児所・保育支援","社会保険完備","交通費支給","扶養控除内考慮","復職支援",
-  "住宅手当","副業","日・祝日給与UP","引越し手当","緊急訪問時の手当・代休",
-  "スマホ・タブレット貸与","電動アシスト自転車・バイク・車貸与","社割",
-  "ハラスメント相談窓口","研修制度","資格取得支援","セミナー参加費補助",
-  "マニュアル完備","動画マニュアル","評価制度","メンター制度","独立・開業支援",
-  "院長・分院長候補","担当制"
-];
-
-// === Must/Want 抽出の制御パラメータ（STEP4流の中核） ===
-// しきい値：弱いファジー一致は候補にしない
-const MW_SIM_THRESHOLD = 0.40;
-
-// ラベルごとの「実体アンカー」（この語が発話に含まれない限り候補化しない）
-// ※必要に応じて追加でOK（オンコール限定ではなく全体適用）
-const MW_ANCHORS = {
-  "賞与": /(賞与|ボーナス)/i,
-  "駅近（5分以内）": /(駅近|駅ﾁｶ|駅チカ|駅から近)/i,
-  "時短勤務相談": /(時短|短時間勤務)/i,
-  "オンコール": /(オンコール|ｵﾝｺｰﾙ|呼び出し|コール番|ベル)/i,
-  "緊急訪問": /(緊急訪問|緊急対応|緊急)/i,
-  "残業0": /(残業|定時|サービス残業|サビ残|前残業)/i,
-  "土日祝休み": /(土日祝.*休|週末.*休|土日.*休)/i,
-  "有給消化率ほぼ100%": /(有給|有休).*(取|申請|消化)/i,
-  "育児支援": /(育児|保育|託児|子育て|子ども)/i,
-  "車通勤": /(車通勤|マイカー通勤)/i,
-  "バイク通勤": /(バイク通勤|バイク)/i,
-  "自転車通勤": /(自転車通勤|チャリ通)/i,
-  "年収300万以上": /(300\s*万)/i,
-  "年収350万以上": /(350\s*万)/i,
-  "年収400万以上": /(400\s*万)/i,
-  "年収450万以上": /(450\s*万)/i,
-  "年収500万以上": /(500\s*万)/i,
-  "年収550万以上": /(550\s*万)/i,
-  "年収600万以上": /(600\s*万)/i,
-  "年収650万以上": /(650\s*万)/i,
-  "年収700万以上": /(700\s*万)/i,
-};
-
-// ==== MW disambiguation & lock (top-level) ====
-const MW_DISAMBIG_GROUPS = [
-  { root: "残業", options: ["残業0", "残業月20時間以内"] },
-  { root: "訪問", options: ["訪問看護ステーション","訪問介護","訪問リハビリテーション","訪問栄養指導","訪問入浴","訪問歯科"] },
-  { root: "通所", options: ["通所介護（デイサービス）","通所リハビリテーション（デイケア）"] },
-  { root: "病棟", options: ["急性期病棟","回復期病棟","療養病棟","地域包括ケア病棟"] },
-  { root: "有料", options: ["介護付き有料老人ホーム","住宅型有料老人ホーム","健康型有料老人ホーム"] },
-  { root: "年収400万台", options: ["年収400万以上","年収450万以上"] },
-  { root: "年収500万台", options: ["年収500万以上","年収550万以上"] },
-  { root: "年収600万台", options: ["年収600万以上","年収650万以上"] },
-];
-
-const MW_LOCK_GROUPS = [
-  ["残業0","残業月20時間以内"],
-  ["訪問看護ステーション","訪問介護","訪問リハビリテーション","訪問栄養指導","訪問入浴","訪問歯科"],
-  ["通所介護（デイサービス）","通所リハビリテーション（デイケア）"],
-  ["急性期病棟","回復期病棟","療養病棟","地域包括ケア病棟"],
-  ["介護付き有料老人ホーム","住宅型有料老人ホーム","健康型有料老人ホーム"],
-  ["年収400万以上","年収450万以上"],
-  ["年収500万以上","年収550万以上"],
-  ["年収600万以上","年収650万以上"],
-];
-
-function uniqArr(arr = []) {
-  const s = new Set();
-  const out = [];
-  for (const x of arr) if (!s.has(x)) { s.add(x); out.push(x); }
-  return out;
-}
-
-function pickMwDisambigOptions(allLabels = []) {
-  for (const g of MW_DISAMBIG_GROUPS) {
-    const hits = g.options.filter(o => allLabels.includes(o));
-    if (hits.length >= 2) return g.options.slice(); // 同一グループから2つ以上出たら分岐
-  }
-  return [];
-}
-
-// アンカー/ゆらぎ用の正規化ヘルパ（既存の _norm_mw と同じ流儀でOK）
-function _norm_anchor(s){
-  return String(s||"").toLowerCase()
-    .replace(/\(/g,"（").replace(/\)/g,"）").replace(/~/g,"～")
-    .replace(/（/g,"(").replace(/）/g,")").replace(/～/g,"~")
-    .replace(/[ \t\r\n\u3000、。・／\/＿\-–—~～!?！？。、，．・]/g,"");
-}
-
-// LOCK適用：同一グループ内でスコア最大の1件だけ残す
-function reduceByLocks(scored /* [{label, sc}] */){
-  if (!Array.isArray(scored) || !scored.length) return [];
-  const out = [];
-  const handled = new Set();
-  for (const group of MW_LOCK_GROUPS) {
-    const present = scored.filter(x => group.includes(x.label));
-    if (present.length) {
-      present.sort((a,b)=> b.sc - a.sc);
-      out.push(present[0]);             // トップだけ残す
-      for (const p of present) handled.add(p.label);
-    }
-  }
-  // どのグループにも属さない項目はそのまま
-  for (const row of scored) {
-    if (!handled.has(row.label)) out.push(row);
-  }
-  // 重複排除して返す
-  const seen = new Set();
-  return out.filter(r => !seen.has(r.label) && seen.add(r.label));
-}
-
-// === Must/Want 自由入力 → 抽出・ランク・強度判定（STEP4準拠） ===
-const MUST_STRONG = /(絶対|必ず|マスト|NG|ダメ|無理|できない|不可|禁止|外せない|いらない|したくない|行けない|受けられない|困る)/i;
-const WANT_SOFT  = /(あったら|できれば|希望|できると|望ましい|嬉しい|優先|できたら|あると良い|あれば)/i;
-
-// 例：自由に増やせる。左=別名、右=mustWantItemsの正式ラベル
-const MUSTWANT_ALIASES = {
-  // "駅チカ": "駅近（5分以内）",
-};
-
-const MW_HINTS = [
-  { kw: /(駅近|駅チカ|駅から近い)/i, label: "駅近（5分以内）" },
-  { kw: /(直行直帰)/i,               label: "直行直帰" },
-  { kw: /(時短)/i,                   label: "時短勤務" },
-
-  // ★追加：夜勤NG → 「日勤のみ可」にブリッジ
-  { kw: /(夜勤(は)?(無理|できない|不可|なし)|夜勤.*(無|なし|不可))/i, label: "日勤" },
-
-  { kw: /(オンコール.*(無|なし|免除)|呼び出し.*(無|なし))/i, label: "オンコール" },
-  { kw: /(残業.*(無|なし|ほぼなし)|定時)/i, label: "残業0" },
-  { kw: /(土日祝.*休)/i,             label: "土日祝休み" },
-  { kw: /(有給|有休).*取(り|れ)やす/i, label: "有給消化率ほぼ100%" },
-  { kw: /(育児|保育|託児)/i,         label: "育児支援" },
-  { kw: /(車通勤)/i,                 label: "車通勤" },
-  { kw: /(バイク通勤)/i,             label: "バイク通勤" },
-  { kw: /(自転車通勤)/i,             label: "自転車通勤" },
-];
-
-
-function parseIncomeLabels(text=""){
-  const outs = [];
-  const m = String(text).match(/([3-9]00|3[50]|4[50]|5[50]|6[50]|700)\s*万/);
-  if (m) {
-    const n = Number(m[1]);
-    const label = `年収${n}万以上`;
-    if (mustWantItems.includes(label)) outs.push(label);
-  }
-  return outs;
-}
-
-function _norm_mw(s){
-  const toFW = (x)=>String(x||"").replace(/\(/g,"（").replace(/\)/g,"）").replace(/~/g,"～");
-  const toHW = (x)=>String(x||"").replace(/（/g,"(").replace(/）/g,")").replace(/～/g,"~");
-  return toHW(toFW(String(s||""))).toLowerCase().replace(/[ \t\r\n\u3000、。・／\/＿\-–—~～!?！？。、，．・]/g,"");
-}
-
-function collectMustWantCandidates(text = "", k = 6){
-  const raw = String(text||"");
-  const ntext = _norm_mw(raw);
-
-  // 1) まずは厳密寄り（正規化した相互包含）でスコア
-  const prelim = [];
-  for (const label of mustWantItems) {
-    let sc = 0;
-
-    const nl = _norm_mw(label);
-    if (ntext && (ntext.includes(nl) || nl.includes(ntext))) sc += 0.45;
-
-    // 2) 鍵語（アンカー）で明確に上げる（重複発火しないよう label ごとに固有化）
-    const anc = MW_ANCHORS[label];
-    if (anc && anc.test(raw)) sc += 0.60;
-
-    // 3) 既存ヒント（寛め）には上限を設ける
-    for (const h of MW_HINTS) {
-      if (h.label === label && h.kw.test(raw)) { sc += 0.30; break; }
-    }
-
-    // 4) 類似度は弱め（誤爆の主因なので係数を小さく）
-    sc += scoreSimilarity(label, raw) * 0.25;
-
-    if (sc > 0) prelim.push({ label, sc });
-  }
-
-  // 5) 収入系の明示
-  for (const lb of parseIncomeLabels(raw)) {
-    const i = prelim.findIndex(x=>x.label===lb);
-    if (i>=0) prelim[i].sc += 0.5; else prelim.push({ label: lb, sc: 0.6 });
-  }
-
-  // 6) 最低スコア閾値（これで「オンコールなし」発話で他が通らない）
-  let scored = prelim.filter(x => x.sc >= MW_SIM_THRESHOLD);
-
-  // 7) 衝突抑制（同時に立ちやすい近縁ラベルを排他）
-  scored = reduceByLocks(scored);
-
-  // 8) 上位k件
-  scored.sort((a,b)=> b.sc - a.sc);
-  const out = [];
-  for (const {label} of scored) {
-    if (!out.includes(label)) out.push(label);
-    if (out.length >= k) break;
-  }
-  return out;
-}
-
-function decideStrength(text=""){
-  const t = String(text||"");
-  const must = MUST_STRONG.test(t);
-  const want = WANT_SOFT.test(t);
-  if (must && !want) return "must";
-  if (!must && want) return "want";
-  if (must && want)  return "must";
-  if (/(できない|無理|なし|不要|やらない|行けない|持てない|対応不可)/i.test(t)) return "must";
-  return "want";
-}
-
-function extractMustWantFromText(text = "", topK = 6){
-  const labels = collectMustWantCandidates(text, topK);
-  const strength = decideStrength(text);
-  const out = { must: [], want: [] };
-  if (!labels.length) return out;
-  if (strength === "must") out.must = labels; else out.want = labels;
-  return out;
-}
-
-// ID解決ヘルパ（tags.json由来のidに寄せる）
-function resolveTagId(label=""){
-  return tagIdByName.get(label)
-      || tagIdByName.get(label.replace(/\(/g,"（").replace(/\)/g,"）").replace(/~/g,"～"))
-      || tagIdByName.get(label.replace(/（/g,"(").replace(/）/g,")").replace(/～/g,"~"))
-      || (matchTagIdsInText(label)[0] ?? null);
-}
-
 
 // ---- セッション ----
 const sessions = Object.create(null);
@@ -1585,103 +1403,39 @@ return res.json(withMeta({
   
   // ---- Step5：絶対NG（Must NG） ----
 if (s.step === 5) {
-  // 1) 「選択肢（曖昧解消）」の回答処理
-  if (s.drill.phase === "mw-ng" && s.drill.awaitingChoice && s.drill.options?.length) {
-    const pick = normalizePick(text);
-    const chosen = s.drill.options.find(o => o === pick);
-    if (chosen) {
-      if (!s.status.must_ng.includes(chosen)) s.status.must_ng.push(chosen);
-      const id = resolveTagId(chosen);
-      if (id != null && !s.status.must_ng_ids.includes(id)) s.status.must_ng_ids.push(id);
-
-      resetDrill(s);
-      const emp = await generateEmpathy(text || "", s);
-      const tail = "他にも『これは絶対ダメ！』はある？（なければ「ない」って返してね）";
-      return res.json(withMeta({
-        response: joinEmp(emp, `OK！『${chosen}』だね。\n${tail}`),
-        step: 5, status: s.status, isNumberConfirmed: true,
-        candidateNumber: s.status.number, debug: debugState(s)
-      }, 5));
-    }
-    // 再提示
-    return res.json(withMeta({
-      response: `ごめん、もう一度どれが近いか教えて！『${s.drill.options.map(x=>`［${x}］`).join("／")}』`,
-      step: 5, status: s.status, isNumberConfirmed: true,
-      candidateNumber: s.status.number, debug: debugState(s)
-    }, 5));
-  }
-
-  // 2) なし宣言 → 次へ
+  // 1) なし宣言 → 次へ
   if (isNone(text)) {
     s.step = 6;
     return res.json(withMeta({
-      response: "次は【これだけは絶対ないと困る！】という条件を教えてね。\n「賞与がないと困る！」\n「絶対土日休みがいい！」\nって感じ。\n1個じゃなくてもOKだよ！",
+      response: "次は【これだけは絶対ないと困る！】という条件を教えてね。\n「賞与がないと困る！」\n「絶対土日休みがいい！」\nって感じ。1個じゃなくてもOKだよ！",
       step: 6, status: s.status, isNumberConfirmed: true,
       candidateNumber: s.status.number, debug: debugState(s),
     }, 6));
   }
 
-  // 3) 入力を解析して曖昧解消が必要かチェック（例：残業 vs 残業月20時間以内）
-const parsed = extractMustWantFromText(text, 6);
-const baseLabels = parsed.must.length ? parsed.must : parsed.want;
-
-let rawLabels = [];
-try {
-  const rawIds = matchTagIdsInText(text);
-  rawLabels = rawIds.map(id => tagNameById.get(id)).filter(Boolean);
-} catch {}
-
-// ★ここから置換：集合を作って自前で group.filter するのはやめる
-const allCandidates = uniqArr([...(baseLabels || []), ...rawLabels]);
-const opts = pickMwDisambigOptions(allCandidates);  // ← 既存ヘルパを使う
-
-if (opts.length >= 2) {
-  s.drill.phase = "mw-ng";
-  s.drill.awaitingChoice = true;
-  s.drill.options = opts.slice(0, 6);
-
+  // 2) LLM で抽出（タグ辞書・ID解決はしない）
+  const mw = await analyzeMWWithLLM(text, "ng", s);
   const emp = await generateEmpathy(text || "", s);
-  return res.json(withMeta({
-    response: joinEmp(emp, `どっちに近い？『${s.drill.options.map(x=>`［${x}］`).join("／")}』`),
-    step: 5, status: s.status, isNumberConfirmed: true,
-    candidateNumber: s.status.number, debug: debugState(s)
-  }, 5));
-}
 
-  // 4) 通常処理（抽出 → 追加）
-  const picked = parsed;
-  const addedMsgs = [];
-  const labels = picked.must.length ? picked.must : picked.want;
-
-  if (labels.length) {
-    const uniq = [];
-    for (const lb of labels) if (!uniq.includes(lb)) uniq.push(lb);
-
-    for (const lb of uniq) {
-      if (!s.status.must_ng.includes(lb)) s.status.must_ng.push(lb);
-      const id = resolveTagId(lb);
-      if (id != null && !s.status.must_ng_ids.includes(id)) s.status.must_ng_ids.push(id);
-      addedMsgs.push(`OK！『${lb}』だね。担当エージェントに共有するね。`);
+  // 3) 追加（文字列ラベルのみ保持）
+  const added = [];
+  for (const lb of (mw.must_ng || [])) {
+    if (!s.status.must_ng.includes(lb)) {
+      s.status.must_ng.push(lb);
+      added.push(lb);
     }
-  } else {
+  }
+  // ※ must_ng_ids は使わない（タグ辞書排除のため更新しない）
+  // 　未ヒットはメモに積む
+  if (!added.length) {
     s.status.memo.must_ng_raw ??= [];
     s.status.memo.must_ng_raw.push(text);
   }
 
-  // 原文から ID もマージ
-  try {
-    const rawIdsNg = matchTagIdsInText(text);
-    for (const rid of rawIdsNg) {
-      if (rid != null && !s.status.must_ng_ids.includes(rid)) {
-        s.status.must_ng_ids.push(rid);
-      }
-    }
-  } catch {}
-
-  const emp = await generateEmpathy(text || "", s);
   const tail = "他にも『これは絶対ダメ！』はある？（なければ「ない」って返してね）";
+  const head = added.length ? `OK！『${added.join("』『")}』だね。担当エージェントに共有するね。` : "";
   return res.json(withMeta({
-    response: joinEmp(emp, (addedMsgs.length ? addedMsgs.join("\n")+"\n" : "") + tail),
+    response: joinEmp(emp, [head, tail].filter(Boolean).join("\n")),
     step: 5, status: s.status, isNumberConfirmed: true,
     candidateNumber: s.status.number, debug: debugState(s)
   }, 5));
@@ -1689,99 +1443,38 @@ if (opts.length >= 2) {
 
  // ---- Step6：絶対欲しい（Must Have） ----
 if (s.step === 6) {
-  // 1) 選択肢（曖昧解消）の回答処理
-  if (s.drill.phase === "mw-have" && s.drill.awaitingChoice && s.drill.options?.length) {
-    const pick = normalizePick(text);
-    const chosen = s.drill.options.find(o => o === pick);
-    if (chosen) {
-      if (!s.status.must_have.includes(chosen)) s.status.must_have.push(chosen);
-      const id = resolveTagId(chosen);
-      if (id != null && !s.status.must_have_ids.includes(id)) s.status.must_have_ids.push(id);
-
-      resetDrill(s);
-      const emp = await generateEmpathy(text || "", s);
-      const tail = "他にも『これは必須でほしい！』はある？（なければ「ない」って返してね）";
-      return res.json(withMeta({
-        response: joinEmp(emp, `『${chosen}』も担当エージェントに共有するね！\n${tail}`),
-        step: 6, status: s.status, isNumberConfirmed: true,
-        candidateNumber: s.status.number, debug: debugState(s)
-      }, 6));
-    }
-
-    // 再提示
-    return res.json(withMeta({
-      response: `ごめん、もう一度どれが近いか教えて！『${s.drill.options.map(x=>`［${x}］`).join("／")}』`,
-      step: 6, status: s.status, isNumberConfirmed: true,
-      candidateNumber: s.status.number, debug: debugState(s)
-    }, 6));
-  }
-
-  // 2) なし宣言 → 次へ
+  // 1) なし宣言 → 次へ
   if (isNone(text)) {
     s.step = 7;
     return res.json(withMeta({
-      response: "次は【これがあったら（なかったら）嬉しいな】という条件を教えてね。\n「多職種連携しやすい職場がいいな」\n「子育てに理解があるといいな」\nって感じ。\n自由に回答してね！",
+      response: "次は【これがあったら（なかったら）嬉しいな】という条件を教えてね。\n自由に回答してね！",
       step: 7, status: s.status, isNumberConfirmed: true,
       candidateNumber: s.status.number, debug: debugState(s)
     }, 7));
   }
 
-  // 3) あいまい解消チェック
-  const picked = extractMustWantFromText(text, 6);
-  const labels = picked.want.length ? picked.want : picked.must;
+  // 2) LLM で抽出（タグ辞書・ID解決はしない）
+  const mw = await analyzeMWWithLLM(text, "have", s);
+  const emp = await generateEmpathy(text || "", s);
 
-  let rawLabels = [];
-  try {
-    const rawIds = matchTagIdsInText(text);
-    rawLabels = rawIds.map(id => tagNameById.get(id)).filter(Boolean);
-  } catch {}
-  const allCandidates = uniqArr([...(labels || []), ...rawLabels]);
-
-  const opts = pickMwDisambigOptions(allCandidates);
-  if (opts.length >= 2) {
-    s.drill.phase = "mw-have";
-    s.drill.awaitingChoice = true;
-    s.drill.options = opts;
-
-    const emp = await generateEmpathy(text || "", s);
-    return res.json(withMeta({
-      response: joinEmp(emp, `どっちに近い？『${opts.map(x=>`［${x}］`).join("／")}』`),
-      step: 6, status: s.status, isNumberConfirmed: true,
-      candidateNumber: s.status.number, debug: debugState(s)
-    }, 6));
-  }
-
-  // 4) 通常処理
-  const addedMsgs = [];
-  if (labels.length) {
-    const uniq = [];
-    for (const lb of labels) if (!uniq.includes(lb)) uniq.push(lb);
-
-    for (const lb of uniq) {
-      if (!s.status.must_have.includes(lb)) s.status.must_have.push(lb);
-      const id = resolveTagId(lb);
-      if (id != null && !s.status.must_have_ids.includes(id)) s.status.must_have_ids.push(id);
-      addedMsgs.push(`『${lb}』も担当エージェントに共有するね！`);
+  // 3) 追加（文字列ラベルのみ保持）
+  const added = [];
+  for (const lb of (mw.must_have || [])) {
+    if (!s.status.must_have.includes(lb)) {
+      s.status.must_have.push(lb);
+      added.push(lb);
     }
-  } else {
+  }
+  // ※ must_have_ids は使わない
+  if (!added.length) {
     s.status.memo.must_have_raw ??= [];
     s.status.memo.must_have_raw.push(text);
   }
 
-  // 原文からもIDを抽出
-  try {
-    const rawIdsHave = matchTagIdsInText(text);
-    for (const rid of rawIdsHave) {
-      if (rid != null && !s.status.must_have_ids.includes(rid)) {
-        s.status.must_have_ids.push(rid);
-      }
-    }
-  } catch {}
-
-  const emp = await generateEmpathy(text || "", s);
   const tail = "他にも『これは必須でほしい！』はある？（なければ「ない」って返してね）";
+  const head = added.length ? `『${added.join("』『")}』も担当エージェントに共有するね！` : "";
   return res.json(withMeta({
-    response: joinEmp(emp, (addedMsgs.length ? addedMsgs.join("\n")+"\n" : "") + tail),
+    response: joinEmp(emp, [head, tail].filter(Boolean).join("\n")),
     step: 6, status: s.status, isNumberConfirmed: true,
     candidateNumber: s.status.number, debug: debugState(s)
   }, 6));
