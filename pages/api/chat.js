@@ -1087,8 +1087,7 @@ s.step = 4;
 return res.json(withMeta({
   response: "はじめに、今回の転職理由を教えてほしいな。きっかけってどんなことだった？\nしんどいと思ったこと、これはもう無理って思ったこと、逆にこういうことに挑戦したい！って思ったこと、何でもOKだよ◎",
   step: 4, status: s.status, isNumberConfirmed: true, candidateNumber: s.status.number, debug: debugState(s)
-}, 4));
-  
+}, 4)); 
 }
 
  // ---- Step4：転職理由（LLM主導：共感＋要約＋ID候補＋次の深掘り） ----
