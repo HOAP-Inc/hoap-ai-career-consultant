@@ -302,7 +302,7 @@ html, body, #__next { height: 100%; }
   z-index: 40;                     /* 前面に出す（進捗/チャットより上） */
   display: flex;
   justify-content: flex-end;       /* 右寄せ（UI踏襲） */
-  padding: 0 32px;                 /* .input-inner と左右を揃える */
+  padding: 0 48px;                 /* .input-inner と左右を揃える */
   pointer-events: none;            /* クリックはバブル側のみ通す */
 }
 
