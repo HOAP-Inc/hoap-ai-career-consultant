@@ -1344,6 +1344,7 @@ if (s.step === 4) {
         step: 4, status: s.status, isNumberConfirmed: true,
         candidateNumber: s.status.number, debug: debugState(s)
       }, 4));
+    }
 
     // --- 3回目の入力（count===2）：確定 or 選択肢提示（最大3） ---
   if (s.drill.count === 2) {
