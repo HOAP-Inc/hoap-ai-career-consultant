@@ -1992,4 +1992,4 @@ function getIdsForOfficialLicense(label = "") {
     if (!best || sim > best.sim) best = { id: t.id, sim };
   }
   return best ? [best.id] : [];
- } 
+} 
