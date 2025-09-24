@@ -31,7 +31,7 @@ export default function Home() {
     const st = resp?.status ?? {};
 
     const joinIds = (arr) =>
-      Array.isArray(arr) && arr.length ? `ID:${arr.join(",")}` : "未入力";
+  Array.isArray(arr) && arr.length ? `ID:${arr.join(",")}` : "未入力";
 
     return {
       求職者ID: st?.number ? `ID:${st.number}` : "未入力",
