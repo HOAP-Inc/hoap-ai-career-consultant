@@ -1400,7 +1400,6 @@ if (s.step === 4) {
       s.drill.awaitingChoice = true;
       s.drill.options = options;
 
-            {
         const empathy3Safe = sanitizeEmpathy(empathy3);
         return res.json(withMeta({
           response: joinEmp(empathy3Safe, `この中だとどれが一番近い？『${options.map(x=>`［${x}］`).join("／")}』`),
@@ -1421,7 +1420,6 @@ if (s.step === 4) {
       resetDrill(s);
       s.step = 5;
 
-            {
         const empathy3Safe = sanitizeEmpathy(empathy3);
         return res.json(withMeta({
           response: joinEmp(empathy3Safe, mustIntroText()),
