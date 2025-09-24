@@ -1989,7 +1989,7 @@ function getIdsForOfficialLicense(label = "") {
     const hit = needles.some(nd => nt.includes(nd) || nd.includes(nt));
     if (!hit) continue;
     const sim = scoreSimilarity(nt, normalize(label));
-    if (!best || sim > best.sim) best = { id: t.id, sim };
+  if (!best || sim > best.sim) best = { id: t.id, sim };
   }
   return best ? [best.id] : [];
 } 
