@@ -1322,7 +1322,7 @@ return res.json(withMeta({
 }, 4));
   }
 
-  // --- 3回目の入力（count===2）：確定 or 選択肢提示（最大3） ---
+    // --- 3回目の入力（count===2）：確定 or 選択肢提示（最大3） ---
   if (s.drill.count === 2) {
     s.drill.reasonBuf.push(text || "");
     const joined = s.drill.reasonBuf.join(" ");
@@ -1379,26 +1379,26 @@ return res.json(withMeta({
       }, 4));
     }
 
+    // それでも未決 → paraphraseテキストで確定してStep5へ
     // ルール：IDが確定できない場合は、LLMのparaphrase（<=30字）をステータスにテキストのまま保持し、必ずStep5へ進める。
     {
-      // llm3.paraphrase を第一候補、なければ前回保持、最後にjoinedの先頭30字をフォールバック
       const p1 = String(llm3?.paraphrase || "").trim();
       const p2 = String(s.drill?.flags?.last_llm_summary || "").trim();
       const p3 = String(joined || "").slice(0, 30);
       const finalParaphrase = (p1 || p2 || p3) || "理由（テキスト）";
 
       s.status.reason_tag = finalParaphrase; // ステータスバーにはテキストをそのまま表示
-      s.status.reason_ids = [];              // IDは確定できていないので空
+      s.status.reason_ids = [];              // IDは未確定なので空
       resetDrill(s);
       s.step = 5;
 
       return res.json(withMeta({
-        // 共感 + Step5導入（既存mustIntroTextのまま）。転職の強要や提案はしない。
-        response: joinEmp(empathy3, mustIntroText()),
+        response: joinEmp(empathy3, mustIntroText()), // 共感＋Step5導入のみ
         step: 5, status: s.status, isNumberConfirmed: true,
         candidateNumber: s.status.number, debug: debugState(s)
       }, 5));
     }
+  }
 
   // フォールバック
   const empF = await generateEmpathy(text || "", s);
@@ -1407,9 +1407,8 @@ return res.json(withMeta({
     step: 4, status: s.status, isNumberConfirmed: true,
     candidateNumber: s.status.number, debug: debugState(s)
   }, 4));
-}
-  
-  
+} // ← if (s.step === 4) の終わり
+
   // ---- Step5：絶対NG（Must NG） ----
 if (s.step === 5) {
   // 1) なし宣言 → 次へ
