@@ -35,13 +35,11 @@ export default function Home() {
 
     return {
       求職者ID: st?.number ? `ID:${st.number}` : "未入力",
-      職種: joinIds(st?.role_ids),
-      現職: joinIds(st?.place_ids),
-
-      転職目的: joinIds(st?.reason_ids),
+      職種: joinIds(st?.role_ids) || (st?.role || "未入力"),
+      現職: joinIds(st?.place_ids) || (st?.place || "未入力"),
+      転職目的: joinIds(st?.reason_ids) || (st?.reason || "未入力"),
       Must_NG: joinIds(st?.must_ng_ids),
       Must_have: joinIds(st?.must_have_ids),
-
       Want: st?.want_text ? String(st.want_text) : "未入力",
       Can: st?.can ? String(st.can) : "未入力",
       Will: st?.will ? String(st.will) : "未入力",
