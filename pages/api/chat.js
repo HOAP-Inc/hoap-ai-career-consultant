@@ -1625,6 +1625,8 @@ if (s.step === 10) {
 
 // ==== 共感生成（自然な会話風） ====
 // ←この関数を丸ごと置換
+// ==== 共感生成（自然な会話風） ====
+// ←この関数を丸ごと置換
 async function generateEmpathy(userText, s){
   const key = process.env.OPENAI_API_KEY;
   const fallback = "今の話、ちゃんと受け取ったよ。";
@@ -1640,12 +1642,13 @@ async function generateEmpathy(userText, s){
     const client = new OpenAI({ apiKey: key });
 
     const system = [
-  "あなたは日本語で自然に寄り添う会話を返すAI。",
-  "決まり文句やお祈り文句は禁止。",
-  "命令・説教・断定の押し付けは禁止。",
-  "文体ルール：『です・ます調』や敬語の終止は禁止（常体寄りの素直な口語）。",
-  "共感文は必ず 2〜3文／100〜180字。疑問符で終わらせない。"
-].join("\\n");
+      "あなたは日本語で自然に寄り添う会話を返すAI。",
+      "決まり文句やお祈り文句は禁止。",
+      "命令・説教・断定の押し付けは禁止。",
+      "文体ルール：『です・ます調』や敬語の終止は禁止（常体寄りの素直な口語）。",
+      "共感文は必ず 2〜3文／100〜180字。",
+      "質問文を作らない。疑問符（？/?) を含めない。句点（。）で終える。"
+    ].join("\\n");
 
     const user = [
       `直近の発話: ${recent || "なし"}`,
@@ -1660,20 +1663,47 @@ async function generateEmpathy(userText, s){
 
     const rsp = await client.chat.completions.create({
       model: "gpt-4o-mini",
-      temperature: 0.7,
-      top_p: 0.9,
+      temperature: 0.2,
+      max_tokens: 220,
       messages: [
         { role: "system", content: system },
         { role: "user", content: user }
       ],
-      max_tokens: 220,
     });
 
     let txt = rsp?.choices?.[0]?.message?.content?.trim() || "";
-    // 後処理（軽整形＋終端調整）
+
+    // ---- 後処理：疑問文は“文ごと削除”。?→。の置換はしない ----
+    // 1) 軽整形
     txt = txt.replace(/\"/g, "").replace(/\s+\n/g, "\n").replace(/\n{3,}/g, "\n\n").trim();
-    txt = enforcePlainEnding(txt);
-    return txt || fallback;
+
+    // 2) 文分割（。．！! ？?）→ 末尾が ?/？ の文は除外
+    const parts = txt.split(/(?<=[。．！!？?])\s*/).filter(Boolean);
+    const kept = parts.filter(p => !/[？?]\s*$/.test(p));
+
+    // 3) 句点で整える（感嘆は尊重）。重複句点も整理。
+    let out = kept.map(p => {
+      let t = String(p || "").trim();
+      if (!t) return "";
+      if (/[。．！!]$/.test(t)) t = t.replace(/．$/, "。");
+      else t = t.replace(/[？?]+$/, "") + "。";
+      return t;
+    }).filter(Boolean).join("").replace(/。。+/g, "。").trim();
+
+    // 4) 全文が疑問で落ちた場合の保険：? を除去し句点で締める
+    if (!out) {
+      out = String(txt || fallback).replace(/[？?]+/g, "").trim();
+      if (out && !/[。！!]$/.test(out)) out += "。";
+    }
+
+    // 5) 文字数ガード（長すぎる場合は2〜3文に丸める）
+    if (out.length > 180) {
+      const sents = out.split(/(?<=。|！|!)/).filter(Boolean);
+      out = sents.slice(0, 3).join("").trim();
+      if (out.length > 180) out = out.slice(0, 178) + "。";
+    }
+
+    return out || fallback;
   } catch {
     return fallback;
   }
