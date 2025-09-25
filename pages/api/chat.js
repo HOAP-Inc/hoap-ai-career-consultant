@@ -445,9 +445,8 @@ function _sanitizeReasonLLM(obj) {
   return out;
 }
 
-// LLM呼び出し：共感＋要約（paraphrase）＋候補ID＋次の深掘り（JSONで返す）
-// ←この関数を丸ごと置換
-async function analyzeReasonWithLLM(userText = "", s) {
+// LLM呼び出し：共感＋要約＋候補ID＋次の深掘り（JSONで返す）
+async function analyzeReasonWithLLM(userText = "", s, opts = {}) {
   const key = process.env.OPENAI_API_KEY;
   if (!key) return { empathy: "", paraphrase: "", suggested_question: "", candidates: [] };
 
@@ -458,11 +457,19 @@ async function analyzeReasonWithLLM(userText = "", s) {
   const place   = s?.status?.place || "未入力";
   const recent  = Array.isArray(s?.drill?.reasonBuf) ? s.drill.reasonBuf.slice(-3).join(" / ") : "";
   const lastAsk = s?.drill?.flags?.last_ask || "";
+  const forceNew = !!opts.forceNewAngle;  // ★追加
 
   const system = [
     "あなたは日本語で自然に寄り添うキャリアエージェントAI。",
-    "出力は必ずJSONのみ。前置きや説明は書かない。"
-  ].join("\\n");
+    "出力は必ずJSONのみ。前置きや説明は書かない。",
+    // ★ここから追記（固定化を避ける制約を明記）
+    "- empathy は質問禁止。句点（。）で終わる平叙文で1〜2文。",
+    "- suggested_question は必ず疑問文（？/? で終わる）。直前の質問と同義不可。",
+    "- 切り口は前回と変えること（仕事内容／人間関係／労働時間／待遇・制度／評価・成長 など）。",
+    forceNew
+      ? "- 直前の問いの言い換えや同義は禁止。必ず“別の切り口”で1つ作る。"
+      : ""
+  ].join("\n");
 
   const catalog = REASON_ID_LABELS.map(x => `${x.id}:${x.label}`).join(", ");
 
@@ -478,12 +485,15 @@ async function analyzeReasonWithLLM(userText = "", s) {
     "",
     "要件：JSONのみで返す。形式は：",
     `{
-      "empathy": "2〜3文／100〜180字。疑問で終わらせない。命令・説教・決めつけNG。常体〜軽い口語。ですます調・敬語は禁止。",
+      "empathy": "2〜3文／100〜180字。疑問で終わらせない。命令・説教・決めつけNG。常体〜口語ベース（です・ます調は使わない）。",
       "paraphrase": "保存用の短い言い換え（30字以内・評価語は避ける）",
       "candidates": [{"id": 数値（上のidのみ）, "confidence": 0〜1}],
-      "ask_next": "次の一言（<=80字）。疑問符で終わらせない。直前の問いとかぶらない表現。"
-    }`
-  ].join("\\n");
+      "ask_next": "次の一言（<=80字）。必ず疑問文で、直前と同義不可。"
+    }`,
+    // ★追記：履歴を渡して“同じ方向”を避けさせる
+    `last_ask: 「${s.drill?.flags?.last_ask || ""}」`,
+    `history_summary: 「${s.drill?.flags?.last_llm_summary || ""}」`
+  ].join("\n");
 
   const rsp = await client.chat.completions.create({
     model: "gpt-4o-mini",
@@ -491,7 +501,7 @@ async function analyzeReasonWithLLM(userText = "", s) {
     max_tokens: 500,
     messages: [
       { role: "system", content: system },
-      { role: "user", content: user }
+      { role: "user",   content: user }
     ]
   });
 
@@ -1243,9 +1253,25 @@ if (s.step === 4) {
 
     // 重複抑止：前ターンと同義なら今回は出さない（共感のみ返す）
     if (isSamePrompt(nextQ, s.drill?.flags?.last_ask || "")) {
-      nextQ = "";
-    }
+  // まず LLM に別角度で作り直しを依頼
+  const basis = Array.isArray(s?.drill?.reasonBuf) && s.drill.reasonBuf.length
+    ? s.drill.reasonBuf.slice(-3).join(" / ")
+    : (text || "");
+  const redo = await analyzeReasonWithLLM(basis, s, { forceNewAngle: true });
+  const altQ = redo?.suggested_question || "";
 
+  if (altQ && !isSamePrompt(altQ, s.drill?.flags?.last_ask || "")) {
+    nextQ = altQ;
+  } else {
+    // それでもダメな時だけ固定フォールバック
+    const alts = [
+      "直近で一番つらかった具体的な場面は？",
+      "その中で“絶対に避けたいこと”を一つ挙げると？",
+      "改善されると一気に楽になるポイントはどこ？"
+    ];
+    nextQ = alts[(s.drill?.count ?? 0) % alts.length];
+  }
+}
     s.drill.count = 1;
     s.drill.phase = "reason-llm-ask2";
     s.drill.awaitingChoice = false;
@@ -1308,8 +1334,25 @@ if (s.step === 4) {
       const empathy2Safe = sanitizeEmpathy(empathy2);
 
       if (isSamePrompt(nextQ, s.drill?.flags?.last_ask || "")) {
-        nextQ = "";
-      }
+  // まず LLM に別角度で作り直しを依頼
+  const basis = Array.isArray(s?.drill?.reasonBuf) && s.drill.reasonBuf.length
+    ? s.drill.reasonBuf.slice(-3).join(" / ")
+    : (text || "");
+  const redo = await analyzeReasonWithLLM(basis, s, { forceNewAngle: true });
+  const altQ = redo?.suggested_question || "";
+
+  if (altQ && !isSamePrompt(altQ, s.drill?.flags?.last_ask || "")) {
+    nextQ = altQ;
+  } else {
+    // それでもダメな時だけ固定フォールバック
+    const alts = [
+      "直近で一番つらかった具体的な場面は？",
+      "その中で“絶対に避けたいこと”を一つ挙げると？",
+      "改善されると一気に楽になるポイントはどこ？"
+    ];
+    nextQ = alts[(s.drill?.count ?? 0) % alts.length];
+  }
+}
 
       s.drill.count = 2;
       s.drill.phase = "reason-llm-ask3";
@@ -1329,9 +1372,25 @@ if (s.step === 4) {
       const empathy2Safe = sanitizeEmpathy(empathy2);
 
       if (isSamePrompt(nextQ, s.drill?.flags?.last_ask || "")) {
-        nextQ = "";
-      }
+  // まず LLM に別角度で作り直しを依頼
+  const basis = Array.isArray(s?.drill?.reasonBuf) && s.drill.reasonBuf.length
+    ? s.drill.reasonBuf.slice(-3).join(" / ")
+    : (text || "");
+  const redo = await analyzeReasonWithLLM(basis, s, { forceNewAngle: true });
+  const altQ = redo?.suggested_question || "";
 
+  if (altQ && !isSamePrompt(altQ, s.drill?.flags?.last_ask || "")) {
+    nextQ = altQ;
+  } else {
+    // それでもダメな時だけ固定フォールバック
+    const alts = [
+      "直近で一番つらかった具体的な場面は？",
+      "その中で“絶対に避けたいこと”を一つ挙げると？",
+      "改善されると一気に楽になるポイントはどこ？"
+    ];
+    nextQ = alts[(s.drill?.count ?? 0) % alts.length];
+  }
+}
       s.drill.count = 2;
       s.drill.phase = "reason-llm-ask3";
       s.drill.awaitingChoice = false;
@@ -1591,12 +1650,12 @@ async function generateEmpathy(userText, s){
     const client = new OpenAI({ apiKey: key });
 
     const system = [
-      "あなたは日本語で自然に寄り添う会話を返すAI。",
-      "決まり文句やお祈り文句は禁止。",
-      "丁寧すぎず崩しすぎない口調。敬語に寄りすぎない。",
-      "命令・説教・断定の押し付けは禁止。",
-      "共感文は必ず 2〜3文／100〜180字。疑問符で終わらせない。"
-    ].join("\\n");
+  "あなたは日本語で自然に寄り添う会話を返すAI。",
+  "決まり文句やお祈り文句は禁止。",
+  "命令・説教・断定の押し付けは禁止。",
+  "文体ルール：『です・ます調』や敬語の終止は禁止（常体寄りの素直な口語）。",
+  "共感文は必ず 2〜3文／100〜180字。疑問符で終わらせない。"
+].join("\\n");
 
     const user = [
       `直近の発話: ${recent || "なし"}`,
@@ -1606,7 +1665,7 @@ async function generateEmpathy(userText, s){
       "",
       `今回の発話: ${userText || "（内容なし）"}`,
       "",
-      "避ける言い回し例: ありがとう 大切 寄り添う わかる そうだよね 安心して 頑張ろう 大丈夫 受け止めた 整理しよう"
+      "避ける言い回し例: ありがとう ありがとうございます 大切 寄り添う わかる そうだよね 安心して 頑張ろう 大丈夫 受け止めた 整理しよう 〜です 〜ます 〜でしょう 〜ですね 〜ですよね"
     ].join("\\n");
 
     const rsp = await client.chat.completions.create({
@@ -1678,47 +1737,50 @@ function enforcePlainEnding(text = '') {
   return t;
 }
 
+// 共感と質問は触らず、空行で結ぶだけ
 function joinEmp(a, b) {
-  const left  = String(a || "").trimEnd();           // 共感文の末尾を整える
-  const right = String(b || "").replace(/^\n+/, ""); // 定型文の先頭改行は削る
-  return `${left}\n\n${right}`;                      // 空行1つでつなぐ
+  const emp = String(a || "").trim();
+  const q   = String(b || "").trim();
+  return q ? `${emp}\n\n${q}` : emp;
 }
 
-// === LLM出力サニタイズ（共感文） ===
-// ・疑問符で終わらせない（enforcePlainEnding で実施）
-// ・丁寧語（です/ます調）が混ざった場合は、軽い常体に寄せる簡易置換
-//   ※言い回しは最小限。強い断定や命令形へは変換しない。
-function sanitizeEmpathy(text = "") {
-  let t = String(text || "").trim();
+/* === LLM出力サニタイズ（共感文） === */
+// 疑問文は丸ごと落として、残りを平叙文に整える
+function sanitizeEmpathy(s){
+  const raw = String(s || "").trim();
+  if (!raw) return "";
 
-  // 句読点・疑問符の最終処理
-  t = enforcePlainEnding(t);
+  // 文終端で分割（。．！! ？?）
+  const parts = raw.split(/(?<=[。．！!？?])\s*/).filter(Boolean);
 
-  // 丁寧語ベースの簡易ゆる和らげ（“です/ます”終止が続く時のみ）
-  // - 例: 「〜だと思います。」→「〜だと思う。」
-  // - 例: 「〜に感じます。」→「〜に感じる。」
-  // - 例: 「〜ですよね。」→「〜だよね。」
-  t = t
-    .replace(/(?<=だと|と思|と感じ|に感じ|に思)(います)(。|！|！|)$/, "う$2")
-    .replace(/(ですよね)(。|！|！|)$/g, "だよね$2")
-    .replace(/(でしょう)(。|！|！|)$/g, "だろう$2")
-    .replace(/(です)(。|！|！|)$/g, "。")
-    .replace(/(ます)(。|！|！|)$/g, "。")
-    .replace(/。。+$/g, "。"); // 句点の重複を1つに
+  // 疑問文（? / ？が末尾）の文は除外
+  const kept = parts.filter(p => !/[？?]\s*$/.test(p));
 
-  // 再度終端調整（置換で句点が飛ぶケースをカバー）
-  t = enforcePlainEnding(t);
-  return t;
+  // 句点で終えて、重複句点は1つに
+  const out = kept.map(p => {
+    let t = String(p || "").trim();
+    if (!t) return "";
+    // 末尾を句点に寄せる（感嘆は尊重）
+    if (/[。．！!]$/.test(t)) t = t.replace(/．$/, "。");
+    else t = t.replace(/[？?]+$/, "") + "。";
+    return t;
+  }).filter(Boolean).join("").replace(/。。+/g, "。").trim();
+
+  // すべて疑問文だった等で空になった場合の保険
+  return out || raw.replace(/[？?]+/g, "").trim();
 }
 
 // 「前ターンと同じ or ほぼ同じ促し」を避けるための簡易一致判定
-function isSamePrompt(a = "", b = "") {
-  const na = String(a || "").replace(/\s+/g, "").trim();
-  const nb = String(b || "").replace(/\s+/g, "").trim();
-  if (!na || !nb) return false;
-  if (na === nb) return true;
-  // 片方がもう一方を完全包含していれば同義とみなす（過剰誘導の連投防止）
-  return na.includes(nb) || nb.includes(na);
+function isSamePrompt(a, b){
+  const norm = s => String(s || "")
+    .toLowerCase()
+    .replace(/[ \t\r\n\u3000]/g, "")
+    .replace(/[。、，・…\.]/g, "")
+    .replace(/[「」『』（）()［］\[\]\{\}~～]/g, "")
+    .replace(/[！？!？?]/g, "");
+  const A = norm(a), B = norm(b);
+  if (!A || !B) return false;
+  return A === B || A.includes(B) || B.includes(A);
 }
 
 // ▼▼ buildStatusBar（置換 or 追加） ▼▼
