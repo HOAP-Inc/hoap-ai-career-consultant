@@ -1113,11 +1113,10 @@ if (s.step === 4) {
       resetDrill(s);
       s.step = 5;
 
-            const emp = await generateEmpathy(text, s);
-      const empSafe = sanitizeEmpathy(emp);
+      const emp = await generateEmpathy(text, s);
       const msg = "収入アップが主目的ってこと、把握したよ。担当エージェントに共有するね。";
       return res.json(withMeta({
-        response: joinEmp(empSafe, `${msg}\n\n${mustIntroText()}`),
+        response: joinEmp(emp, `${msg}\n\n${mustIntroText()}`),
 
         step: 5, status: s.status, isNumberConfirmed: true,
         candidateNumber: s.status.number, debug: debugState(s)
@@ -1167,10 +1166,9 @@ if (s.step === 4) {
     s.step = 5;
 
     const emp0 = await generateEmpathy(text, s);
-    const emp0Safe = sanitizeEmpathy(emp0);
     const fixed = "無理なく働ける職場を考えていこうね。";
     return res.json(withMeta({
-      response: joinEmp(emp0Safe, `${fixed}\n\n${mustIntroText()}`),
+      response: joinEmp(emp0, `${fixed}\n\n${mustIntroText()}`),
       step: 5, status: s.status, isNumberConfirmed: true,
       candidateNumber: s.status.number, debug: debugState(s)
     }, 5));
@@ -1188,10 +1186,8 @@ if (s.step === 4) {
       s.step = 5;
 
       const emp = await generateEmpathy(text, s);
-      const empSafe = sanitizeEmpathy(emp);
       return res.json(withMeta({
-        response: joinEmp(empSafe, `今回の転職理由は『${chosen}』ってところが大きそうだね！担当エージェントに伝えておくね。\n\n${mustIntroText()}`),
-
+        response: joinEmp(emp, `今回の転職理由は『${chosen}』ってところが大きそうだね！担当エージェントに伝えておくね。\n\n${mustIntroText()}`),
         step: 5, status: s.status, isNumberConfirmed: true,
         candidateNumber: s.status.number, debug: debugState(s)
       }, 5));
@@ -1246,7 +1242,6 @@ if (s.step === 4) {
         // --- LLM呼び出し（第1回）：共感＋要約＋次の深掘り ---
     const llm1 = await analyzeReasonWithLLM(text, s);
     const empathyRaw = llm1?.empathy || await generateEmpathy(text, s);
-    const empathySafe = sanitizeEmpathy(empathyRaw);
 
     let nextQ = (llm1?.suggested_question && llm1.suggested_question.trim())
       || "一番ひっかかる点はどこか、もう少しだけ教えてね。";
@@ -1282,7 +1277,7 @@ if (s.step === 4) {
     s.drill.flags.last_ask            = nextQ || ""; // 空なら上書き（＝“今回なし”の明示）
 
     return res.json(withMeta({
-      response: nextQ ? joinEmp(empathySafe, nextQ) : empathySafe,
+      response: nextQ ? joinEmp(empathyRaw, nextQ) : empathyRaw,
       step: 4, status: s.status, isNumberConfirmed: true,
       candidateNumber: s.status.number, debug: debugState(s)
     }, 4));
@@ -1331,8 +1326,7 @@ if (s.step === 4) {
 
         if (decision.status === "ambiguous") {
       let nextQ = llm2?.suggested_question || "具体的にどんな場面で一番強く感じたか、教えてね。";
-      const empathy2Safe = sanitizeEmpathy(empathy2);
-
+      
       if (isSamePrompt(nextQ, s.drill?.flags?.last_ask || "")) {
   // まず LLM に別角度で作り直しを依頼
   const basis = Array.isArray(s?.drill?.reasonBuf) && s.drill.reasonBuf.length
@@ -1362,15 +1356,14 @@ if (s.step === 4) {
       s.drill.flags.last_ask            = nextQ || "";
 
       return res.json(withMeta({
-        response: nextQ ? joinEmp(empathy2Safe, nextQ) : empathy2Safe,
+        response: nextQ ? joinEmp(empathy2, nextQ) : empathy2,
         step: 4, status: s.status, isNumberConfirmed: true,
         candidateNumber: s.status.number, debug: debugState(s)
       }, 4));
     }
         // 不確定：もう1ターン深掘り
       let nextQ = llm2?.suggested_question || "一番の根っこは何か、言葉にしてみてね。";
-      const empathy2Safe = sanitizeEmpathy(empathy2);
-
+      
       if (isSamePrompt(nextQ, s.drill?.flags?.last_ask || "")) {
   // まず LLM に別角度で作り直しを依頼
   const basis = Array.isArray(s?.drill?.reasonBuf) && s.drill.reasonBuf.length
@@ -1398,7 +1391,7 @@ if (s.step === 4) {
       s.drill.flags.last_ask = nextQ || "";
 
       return res.json(withMeta({
-        response: nextQ ? joinEmp(empathy2Safe, nextQ) : empathy2Safe,
+        response: nextQ ? joinEmp(empathy2, nextQ) : empathy2,
         step: 4, status: s.status, isNumberConfirmed: true,
         candidateNumber: s.status.number, debug: debugState(s)
       }, 4));
@@ -1437,9 +1430,8 @@ if (s.step === 4) {
       s.status.reason_ids = [id];
       resetDrill(s);
       s.step = 5;
-      const empathy3Safe = sanitizeEmpathy(empathy3);
       return res.json(withMeta({
-        response: joinEmp(empathy3Safe, `『${label}』だね！担当エージェントに伝えておくね。\n\n${mustIntroText()}`),
+        response: joinEmp(empathy3, `今回の転職理由は『${label}』ってところが大きそうだね！担当エージェントに伝えておくね。\n\n${mustIntroText()}`),
         step: 5, status: s.status, isNumberConfirmed: true,
         candidateNumber: s.status.number, debug: debugState(s)
       }, 5));
@@ -1455,9 +1447,8 @@ if (s.step === 4) {
       s.drill.awaitingChoice = true;
       s.drill.options = options;
 
-      const empathy3Safe = sanitizeEmpathy(empathy3);
       return res.json(withMeta({
-        response: joinEmp(empathy3Safe, `この中だとどれが一番近い？『${options.map(x=>`［${x}］`).join("／")}』`),
+        response: joinEmp(empathy3, `この中だとどれが一番近い？『${options.map(x=>`［${x}］`).join("／")}』`),
         step: 4, status: s.status, isNumberConfirmed: true,
         candidateNumber: s.status.number, debug: debugState(s)
       }, 4));
@@ -1474,9 +1465,8 @@ if (s.step === 4) {
     resetDrill(s);
     s.step = 5;
 
-    const empathy3Safe = sanitizeEmpathy(empathy3);
     return res.json(withMeta({
-      response: joinEmp(empathy3Safe, mustIntroText()),
+      response: joinEmp(empathy3, mustIntroText()),
       step: 5, status: s.status, isNumberConfirmed: true,
       candidateNumber: s.status.number, debug: debugState(s)
     }, 5));
@@ -1742,32 +1732,6 @@ function joinEmp(a, b) {
   const emp = String(a || "").trim();
   const q   = String(b || "").trim();
   return q ? `${emp}\n\n${q}` : emp;
-}
-
-/* === LLM出力サニタイズ（共感文） === */
-// 疑問文は丸ごと落として、残りを平叙文に整える
-function sanitizeEmpathy(s){
-  const raw = String(s || "").trim();
-  if (!raw) return "";
-
-  // 文終端で分割（。．！! ？?）
-  const parts = raw.split(/(?<=[。．！!？?])\s*/).filter(Boolean);
-
-  // 疑問文（? / ？が末尾）の文は除外
-  const kept = parts.filter(p => !/[？?]\s*$/.test(p));
-
-  // 句点で終えて、重複句点は1つに
-  const out = kept.map(p => {
-    let t = String(p || "").trim();
-    if (!t) return "";
-    // 末尾を句点に寄せる（感嘆は尊重）
-    if (/[。．！!]$/.test(t)) t = t.replace(/．$/, "。");
-    else t = t.replace(/[？?]+$/, "") + "。";
-    return t;
-  }).filter(Boolean).join("").replace(/。。+/g, "。").trim();
-
-  // すべて疑問文だった等で空になった場合の保険
-  return out || raw.replace(/[？?]+/g, "").trim();
 }
 
 // 「前ターンと同じ or ほぼ同じ促し」を避けるための簡易一致判定
