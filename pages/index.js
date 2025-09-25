@@ -26,25 +26,44 @@ export default function Home() {
   const [userEcho, setUserEcho] = useState("");  // 入力欄上のユーザー吹き出し用 文言
   const [choices, setChoices] = useState([]);
 
-  // ▼ バッジ整形：API応答をフロント表示用にマップ
-  function toBadges(resp) {
-    const st = resp?.status ?? {};
+  // ▼ バッジ整形：API応答をフロント表示用にマップ（ID優先／未マッチのみテキスト保持）
+function toBadges(resp, currStep) {
+  const st = resp?.status ?? {};
+  const step = Number(currStep ?? resp?.meta?.step ?? 0);
 
-    const joinIds = (arr) =>
-  Array.isArray(arr) && arr.length ? `ID:${arr.join(",")}` : "";
+  const joinIds = (arr) =>
+    Array.isArray(arr) && arr.length ? `ID:${arr.join(",")}` : "";
 
-    return {
-      求職者ID: st?.number ? `ID:${st.number}` : "未入力",
-      職種: joinIds(st?.role_ids) || (st?.role || "未入力"),
-      現職: joinIds(st?.place_ids) || (st?.place || "未入力"),
-      転職目的: joinIds(st?.reason_ids) || (st?.reason || "未入力"),
-      Must_NG: joinIds(st?.must_ng_ids),
-      Must_have: joinIds(st?.must_have_ids),
-      Want: st?.want_text ? String(st.want_text) : "未入力",
-      Can: st?.can ? String(st.can) : "未入力",
-      Will: st?.will ? String(st.will) : "未入力",
-    };
-  }
+  const joinTxt = (arr) =>
+    Array.isArray(arr) && arr.length ? arr.join("／") : "";
+
+  // 転職目的：Step4進行中は“仮テキスト”を出さない（チラつき防止）
+  // Step5以降になっても ID 未確定なら、そのときだけテキスト（reason_tag -> reason の順）を表示
+  const reasonBadge =
+    joinIds(st?.reason_ids) ||
+    (step >= 5
+      ? (st?.reason_tag || st?.reason || "未入力")
+      : ""); // ← Step4中は空表示
+
+  // Must系：IDがあればID、なければ“未マッチテキストのみ”を表示
+  // （labelsは表示しない。未マッチは memo.*_raw に入ってくる想定）
+  const mustNgBadge =
+    joinIds(st?.must_ng_ids) || joinTxt(st?.memo?.must_ng_raw) || "";
+  const mustHaveBadge =
+    joinIds(st?.must_have_ids) || joinTxt(st?.memo?.must_have_raw) || "";
+
+  return {
+    求職者ID: st?.number ? `ID:${st.number}` : "未入力",
+    職種: joinIds(st?.role_ids) || (st?.role || "未入力"),
+    現職: joinIds(st?.place_ids) || (st?.place || "未入力"),
+    転職目的: reasonBadge,
+    Must_NG: mustNgBadge,
+    Must_have: mustHaveBadge,
+    Want: st?.want_text ? String(st.want_text) : "未入力",
+    Can: st?.can ? String(st.can) : "未入力",
+    Will: st?.will ? String(st.will) : "未入力",
+  };
+}
 
   // バッジの表示（空/未入力は出さない）
   function displayBadgeValue(_key, val) {
@@ -146,8 +165,8 @@ const data = raw ? JSON.parse(raw) : null;
 
         // ▼ ステップ & バッジ
         const next = data?.meta?.step ?? 0;
-        setStep(next);
-        setStatus(toBadges(data)); // ← ここでバッジ整形
+        setStatus(toBadges(data, next));
+        setStatus(toBadges(data, nextStep));
 
         // ▼ 選択肢
         const inline = getInlineChoices(next, data.response, data.meta);
