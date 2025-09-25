@@ -1190,7 +1190,7 @@ if (s.step === 4) {
       const emp = await generateEmpathy(text, s);
       const empSafe = sanitizeEmpathy(emp);
       return res.json(withMeta({
-        response: joinEmp(empSafe, `『${chosen}』だね！担当エージェントに伝えておくね。\n\n${mustIntroText()}`),
+        response: joinEmp(empSafe, `今回の転職理由は『${chosen}』ってところが大きそうだね！担当エージェントに伝えておくね。\n\n${mustIntroText()}`),
 
         step: 5, status: s.status, isNumberConfirmed: true,
         candidateNumber: s.status.number, debug: debugState(s)
@@ -1304,7 +1304,7 @@ if (s.step === 4) {
         resetDrill(s);
         s.step = 5;
         return res.json(withMeta({
-          response: `『${sole}』だね！担当エージェントに伝えておくね。\n\n${mustIntroText()}`,
+          response: `今回の転職理由は『${sole}』ってところが大きそうだね！担当エージェントに伝えておくね。\n\n${mustIntroText()}`,
           step: 5, status: s.status, isNumberConfirmed: true,
           candidateNumber: s.status.number, debug: debugState(s)
         }, 5));
@@ -1419,7 +1419,7 @@ if (s.step === 4) {
         resetDrill(s);
         s.step = 5;
         return res.json(withMeta({
-          response: `『${sole}』だね！担当エージェントに伝えておくね。\n\n${mustIntroText()}`,
+          response: `今回の転職理由は『${sole}』ってところが大きそうだね！担当エージェントに伝えておくね。\n\n${mustIntroText()}`,
           step: 5, status: s.status, isNumberConfirmed: true,
           candidateNumber: s.status.number, debug: debugState(s)
         }, 5));
