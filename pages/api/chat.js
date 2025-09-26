@@ -1731,39 +1731,70 @@ async function generateEmpathy(userText, s){
 
     let txt = rsp?.choices?.[0]?.message?.content?.trim() || "";
 
-    // ---- 後処理：疑問文は“文ごと削除”。?→。の置換はしない ----
-    // 1) 軽整形
-    txt = txt.replace(/\"/g, "").replace(/\s+\n/g, "\n").replace(/\n{3,}/g, "\n\n").trim();
+     // ---- 後処理：疑問・依頼・提案・誘導を文単位で除去 ----
+    // 軽整形
+    txt = txt.replace(/\"/g, "")
+             .replace(/\s+\n/g, "\n")
+             .replace(/\n{3,}/g, "\n\n")
+             .trim();
 
-    // 2) 文分割（。．！! ？?）→ 末尾が ?/？ の文は除外
-    const parts = txt.split(/(?<=[。．！!？?])\s*/).filter(Boolean);
-    const kept = parts.filter(p => !/[？?]\s*$/.test(p));
+    // 文分割
+    const sentences = txt
+      .split(/(?<=[。．！!？?])\s*/).filter(Boolean)
+      .map(s => s.trim());
 
-    // 3) 句点で整える（感嘆は尊重）。重複句点も整理。
-    let out = kept.map(p => {
-      let t = String(p || "").trim();
-      if (!t) return "";
-      if (/[。．！!]$/.test(t)) t = t.replace(/．$/, "。");
-      else t = t.replace(/[？?]+$/, "") + "。";
-      return t;
-    }).filter(Boolean).join("").replace(/。。+/g, "。").trim();
+    // トリガ正規表現（疑問・依頼・提案・誘導）
+    const RE_QUESTION_MARK = /[？?]\s*$/;
+    const RE_QUESTION_WORD = /(どれ|どの|どっち|どんな|どう|なに|何|なぜ|いつ|どこ|理由|教えて|聞かせて)/;
+    const RE_REQUEST       = /(ください|下さい|お願い|お願いします|おしえて|教えて|伝えて|記入して|回答して|返答して|詳しく|具体的に)/;
+    const RE_IMPERATIVE    = /(して(?:ほしい|欲しい)|してください|してね|しよう|しましょう|してみよう|しなさい)/;
+    const RE_SUGGEST       = /(～?するといい|すると良い|だといい|だと良い|できるといい|できると良い|のほうがいい|の方がいい|が良さそう|がいいと思う|あるといい|あると良い)/;
+    const RE_LEADING       = /(一言で|一語で|教えて|挙げて|示して|書いて|答えて|共有して)/;
 
-    // 4) 全文が疑問で落ちた場合の保険：? を除去し句点で締める
-    if (!out) {
-      out = String(txt || fallback).replace(/[？?]+/g, "").trim();
-      if (out && !/[。！!]$/.test(out)) out += "。";
+    const isProbingLike = (s) => {
+      const t = String(s || "").trim();
+      if (!t) return false;
+      // 文末記号だけでなく語彙ベースも見る
+      return RE_QUESTION_MARK.test(t)
+          || RE_QUESTION_WORD.test(t)
+          || RE_REQUEST.test(t)
+          || RE_IMPERATIVE.test(t)
+          || RE_SUGGEST.test(t)
+          || RE_LEADING.test(t);
+    };
+
+    // 質問/依頼/提案/誘導に当たる文は落とす
+    let kept = sentences.filter(s => !isProbingLike(s));
+
+    // すべて落ちた場合の保険：疑問符を除去し、依頼/提案語を間引いた上で中立化
+    if (kept.length === 0 && sentences.length) {
+      kept = sentences.map(s => s
+        .replace(RE_QUESTION_MARK, "")
+        .replace(RE_REQUEST, "")
+        .replace(RE_IMPERATIVE, "")
+        .replace(RE_SUGGEST, "")
+        .replace(RE_LEADING, "")
+        .trim()
+      ).filter(Boolean);
     }
 
-    // 5) 文字数ガード（長すぎる場合は2〜3文に丸める）
+    // 句点で整える
+    let out = kept.map(p => {
+      let t = p.replace(/[？?]+$/,"").trim();
+      if (!/[。．！!]$/.test(t)) t += "。";
+      return t.replace(/．$/, "。");
+    }).filter(Boolean).join("").replace(/。。+/g, "。").trim();
+
+    // 長さ調整（2〜3文／最大180字目安）
     if (out.length > 180) {
       const sents = out.split(/(?<=。|！|!)/).filter(Boolean);
       out = sents.slice(0, 3).join("").trim();
       if (out.length > 180) out = out.slice(0, 178) + "。";
     }
 
-    return out || fallback;
-  } catch {
-    return fallback;
+    // 最終保険
+    if (!out) out = fallback;
+    return out;
   }
 }
 
