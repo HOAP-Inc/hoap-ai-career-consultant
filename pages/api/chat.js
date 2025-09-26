@@ -1795,6 +1795,8 @@ async function generateEmpathy(userText, s){
     // 最終保険
     if (!out) out = fallback;
     return out;
+  } catch (e) {                    // ← これを追加
+    return fallback;              // フェイルセーフ
   }
 }
 
