@@ -1574,39 +1574,47 @@ if (s.step === 5) {
     }, 6));
   }
 
-  // 2) LLM で抽出（タグ辞書・ID解決はしない）
-const mw  = await analyzeMWWithLLM(text, "ng", s);
-const emp = await generateEmpathy(text || "", s);
+  const { decideStep56, loadAvailablePurposes } = await import("../../lib/decideStep56.js");
+  const dec = await decideStep56({
+    userText: text,
+    mode: "must_ng",
+    recentTexts: Array.isArray(s?.drill?.reasonBuf) ? s.drill.reasonBuf.slice(-3) : [],
+    role: s?.status?.role || "",
+    place: s?.status?.place || "",
+    turnIndex: (s?.drill?.count ?? 0),
+  });
 
-  // 2.5) LLMが空なら即時ヒューリスティックで補完
-if (!mw.must_ng || mw.must_ng.length === 0) {
-　mw.must_ng = quickKeywordsToLabels(text, "ng");
-}
+  const emp = await generateEmpathy(text || "", s);
 
-// 3) 抽出語を tags.json で ID化（available_purposes は使わない）
-const mapped = mapFreeLabelsToTags(mw.must_ng || []); // → [{id, label}]
-const added  = [];
+  // LLM が返した ID 候補のみ採用（tags.json 全量を available_purposes として与えている）
+  const available = loadAvailablePurposes();
+  const picked = [];
+  if (Array.isArray(dec?.candidates)) {
+    for (const c of dec.candidates.slice(0, 3)) {
+      const idStr = String(c?.id ?? "");
+      const label = available[idStr];
+      if (label) {
+        const idNum = Number(idStr);
+        if (!s.status.must_ng_ids.includes(idNum)) s.status.must_ng_ids.push(idNum);
+        if (!s.status.must_ng.includes(label))     s.status.must_ng.push(label);
+        picked.push(label);
+      }
+    }
+  }
 
-for (const { id, label } of mapped) {
-  if (!s.status.must_ng_ids.includes(id))   s.status.must_ng_ids.push(id);
-  if (!s.status.must_ng.includes(label))    s.status.must_ng.push(label);
-  added.push(label);
-}
+  // unmatched は“ID化しないメモ”として保存
+  if (dec?.unmatched_title) {
+    s.status.memo.must_ng_raw ??= [];
+    s.status.memo.must_ng_raw.push(dec.unmatched_title);
+  }
 
-// 未ヒットはメモへ（UIで後処理可）
-const freeLeft = (mw.must_ng || []).filter(x => !mapped.some(m => m.label === x));
-if (freeLeft.length) {
-  s.status.memo.must_ng_raw ??= [];
-  s.status.memo.must_ng_raw.push(...freeLeft);
-}
-
-const tail = "他にも『これは絶対ダメ！』はある？（なければ「ない」と返してね）";
-const head = added.length ? `OK！『${added.join("』『")}』だね。担当エージェントに共有するね。` : "";
-return res.json(withMeta({
-  response: joinEmp(emp, [head, tail].filter(Boolean).join("\n")),
-  step: 5, status: s.status, isNumberConfirmed: true,
-  candidateNumber: s.status.number, debug: debugState(s)
-}, 5));
+  const tail = "他にも『これは絶対ダメ！』はある？（なければ「ない」と返してね）";
+  const head = picked.length ? `OK！『${picked.join("』『")}』だね。担当エージェントに共有するね。` : "";
+  return res.json(withMeta({
+    response: joinEmp(emp, [head, tail].filter(Boolean).join("\n")),
+    step: 5, status: s.status, isNumberConfirmed: true,
+    candidateNumber: s.status.number, debug: debugState(s)
+  }, 5));
 }
 
  // ---- Step6：絶対欲しい（Must Have） ----
@@ -1621,37 +1629,47 @@ if (s.step === 6) {
     }, 7));
   }
 
-  // 2) LLM で抽出（タグ辞書・ID解決はしない）
-const mw  = await analyzeMWWithLLM(text, "have", s);
-const emp = await generateEmpathy(text || "", s);
+  const { decideStep56, loadAvailablePurposes } = await import("../../lib/decideStep56.js");
+  const dec = await decideStep56({
+    userText: text,
+    mode: "must_have",
+    recentTexts: Array.isArray(s?.drill?.reasonBuf) ? s.drill.reasonBuf.slice(-3) : [],
+    role: s?.status?.role || "",
+    place: s?.status?.place || "",
+    turnIndex: (s?.drill?.count ?? 0),
+  });
 
-  // LLMが空なら即時ヒューリスティックで補完
-　if (!mw.must_have || mw.must_have.length === 0) {
-　mw.must_have = quickKeywordsToLabels(text, "have");
-}
+  const emp = await generateEmpathy(text || "", s);
 
-const mapped = mapFreeLabelsToTags(mw.must_have || []); // → [{id, label}]
-const added  = [];
+  // LLM が返した ID 候補のみ採用
+  const available = loadAvailablePurposes();
+  const picked = [];
+  if (Array.isArray(dec?.candidates)) {
+    for (const c of dec.candidates.slice(0, 3)) {
+      const idStr = String(c?.id ?? "");
+      const label = available[idStr];
+      if (label) {
+        const idNum = Number(idStr);
+        if (!s.status.must_have_ids.includes(idNum)) s.status.must_have_ids.push(idNum);
+        if (!s.status.must_have.includes(label))     s.status.must_have.push(label);
+        picked.push(label);
+      }
+    }
+  }
 
-for (const { id, label } of mapped) {
-  if (!s.status.must_have_ids.includes(id)) s.status.must_have_ids.push(id);
-  if (!s.status.must_have.includes(label))  s.status.must_have.push(label);
-  added.push(label);
-}
+  // unmatched は“ID化しないメモ”として保存
+  if (dec?.unmatched_title) {
+    s.status.memo.must_have_raw ??= [];
+    s.status.memo.must_have_raw.push(dec.unmatched_title);
+  }
 
-const freeLeft = (mw.must_have || []).filter(x => !mapped.some(m => m.label === x));
-if (freeLeft.length) {
-  s.status.memo.must_have_raw ??= [];
-  s.status.memo.must_have_raw.push(...freeLeft);
-}
-
-const tail = "他にも『これは必須でほしい！』はある？（なければ「ない」と返してね）";
-const head = added.length ? `『${added.join("』『")}』も担当エージェントに共有するね！` : "";
-return res.json(withMeta({
-  response: joinEmp(emp, [head, tail].filter(Boolean).join("\n")),
-  step: 6, status: s.status, isNumberConfirmed: true,
-  candidateNumber: s.status.number, debug: debugState(s)
-}, 6));
+  const tail = "他にも『これは必須でほしい！』はある？（なければ「ない」と返してね）";
+  const head = picked.length ? `『${picked.join("』『")}』も担当エージェントに共有するね！` : "";
+  return res.json(withMeta({
+    response: joinEmp(emp, [head, tail].filter(Boolean).join("\n")),
+    step: 6, status: s.status, isNumberConfirmed: true,
+    candidateNumber: s.status.number, debug: debugState(s)
+  }, 6));
 }
 
   // ---- Step7：あったら嬉しい（Want / 自由記述）----
