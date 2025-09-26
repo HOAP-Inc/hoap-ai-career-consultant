@@ -808,9 +808,6 @@ export default async function handler(req, res) {
   setCorsJson(res);
   const { s, method, safeBody } = bootstrapSessionFromReq(req);
 
-    // STEP5/6 用：今回のターンで使ってよいタグ集合を逆引きにしておく
-  const AVAIL = buildAvailableRevMap(safeBody?.available_purposes || {});
-
   // 非POSTは統一で 200 + JSON
   if (method !== "POST") {
     const greet = s.isNumberConfirmed
@@ -1552,33 +1549,33 @@ if (s.step === 5) {
   }
 
   // 2) LLM で抽出（タグ辞書・ID解決はしない）
-  const mw = await analyzeMWWithLLM(text, "ng", s);
-  const emp = await generateEmpathy(text || "", s);
+const mw  = await analyzeMWWithLLM(text, "ng", s);
+const emp = await generateEmpathy(text || "", s);
 
-    // 3) 追加（IDに解決できたものだけ受理）— 既存の AVAIL を使う
-const added = [];
-for (const lb of (mw.must_ng || [])) {
-  const id = AVAIL.resolveIdByLabel(lb);
-  if (id == null) continue;
-  const official = AVAIL.labelById.get(String(id)) || String(lb);
-  if (!s.status.must_ng_ids.includes(id)) s.status.must_ng_ids.push(id);
-  if (!s.status.must_ng.includes(official)) s.status.must_ng.push(official);
-  added.push(official);
+// 3) 抽出語を tags.json で ID化（available_purposes は使わない）
+const mapped = mapFreeLabelsToTags(mw.must_ng || []); // → [{id, label}]
+const added  = [];
+
+for (const { id, label } of mapped) {
+  if (!s.status.must_ng_ids.includes(id))   s.status.must_ng_ids.push(id);
+  if (!s.status.must_ng.includes(label))    s.status.must_ng.push(label);
+  added.push(label);
 }
 
-  // 未ヒットはメモへ積む（現行踏襲）
-  if (!added.length) {
-    s.status.memo.must_ng_raw ??= [];
-    s.status.memo.must_ng_raw.push(text);
-  }
+// 未ヒットはメモへ（UIで後処理可）
+const freeLeft = (mw.must_ng || []).filter(x => !mapped.some(m => m.label === x));
+if (freeLeft.length) {
+  s.status.memo.must_ng_raw ??= [];
+  s.status.memo.must_ng_raw.push(...freeLeft);
+}
 
-  const tail = "他にも『これは絶対ダメ！』はある？（なければ「ない」って返してね）";
-  const head = added.length ? `OK！『${added.join("』『")}』だね。担当エージェントに共有するね。` : "";
-  return res.json(withMeta({
-    response: joinEmp(emp, [head, tail].filter(Boolean).join("\n")),
-    step: 5, status: s.status, isNumberConfirmed: true,
-    candidateNumber: s.status.number, debug: debugState(s)
-  }, 5));
+const tail = "他にも『これは絶対ダメ！』はある？（なければ「ない」と返してね）";
+const head = added.length ? `OK！『${added.join("』『")}』だね。担当エージェントに共有するね。` : "";
+return res.json(withMeta({
+  response: joinEmp(emp, [head, tail].filter(Boolean).join("\n")),
+  step: 5, status: s.status, isNumberConfirmed: true,
+  candidateNumber: s.status.number, debug: debugState(s)
+}, 5));
 }
 
  // ---- Step6：絶対欲しい（Must Have） ----
@@ -1594,33 +1591,31 @@ if (s.step === 6) {
   }
 
   // 2) LLM で抽出（タグ辞書・ID解決はしない）
-  const mw = await analyzeMWWithLLM(text, "have", s);
-  const emp = await generateEmpathy(text || "", s);
+const mw  = await analyzeMWWithLLM(text, "have", s);
+const emp = await generateEmpathy(text || "", s);
 
-   // 3) 追加（IDに解決できたものだけ受理）— 既存の AVAIL を使う
-const added = [];
-for (const lb of (mw.must_have || [])) {
-  const id = AVAIL.resolveIdByLabel(lb);
-  if (id == null) continue;
-  const official = AVAIL.labelById.get(String(id)) || String(lb);
+const mapped = mapFreeLabelsToTags(mw.must_have || []); // → [{id, label}]
+const added  = [];
+
+for (const { id, label } of mapped) {
   if (!s.status.must_have_ids.includes(id)) s.status.must_have_ids.push(id);
-  if (!s.status.must_have.includes(official)) s.status.must_have.push(official);
-  added.push(official);
+  if (!s.status.must_have.includes(label))  s.status.must_have.push(label);
+  added.push(label);
 }
 
-  // 未ヒットはメモへ積む（現行踏襲）
-  if (!added.length) {
-    s.status.memo.must_have_raw ??= [];
-    s.status.memo.must_have_raw.push(text);
-  }
+const freeLeft = (mw.must_have || []).filter(x => !mapped.some(m => m.label === x));
+if (freeLeft.length) {
+  s.status.memo.must_have_raw ??= [];
+  s.status.memo.must_have_raw.push(...freeLeft);
+}
 
-  const tail = "他にも『これは必須でほしい！』はある？（なければ「ない」って返してね）";
-  const head = added.length ? `『${added.join("』『")}』も担当エージェントに共有するね！` : "";
-  return res.json(withMeta({
-    response: joinEmp(emp, [head, tail].filter(Boolean).join("\n")),
-    step: 6, status: s.status, isNumberConfirmed: true,
-    candidateNumber: s.status.number, debug: debugState(s)
-  }, 6));
+const tail = "他にも『これは必須でほしい！』はある？（なければ「ない」と返してね）";
+const head = added.length ? `『${added.join("』『")}』も担当エージェントに共有するね！` : "";
+return res.json(withMeta({
+  response: joinEmp(emp, [head, tail].filter(Boolean).join("\n")),
+  step: 6, status: s.status, isNumberConfirmed: true,
+  candidateNumber: s.status.number, debug: debugState(s)
+}, 6));
 }
 
   // ---- Step7：あったら嬉しい（Want / 自由記述）----
