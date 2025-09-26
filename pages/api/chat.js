@@ -157,7 +157,62 @@ try {
 } catch (e) {
   console.error("tagNameById 構築失敗:", e);
 }
-// ←ここに追記
+
+// === STEP5/6 用：available_purposes（ID→ラベル辞書）から逆引きマップを作る ===
+function buildAvailableRevMap(available) {
+  // available: { "<id>": "<label>", ... } という JSON オブジェクトを想定
+  const idByLabel = new Map();   // 正式ラベル（ゆらぎ許容）→ ID
+  const labelById = new Map();   // ID → 正式ラベル
+  const labelsSet = new Set();   // 重複防止
+
+  const toFW = (s) => String(s || "").replace(/\(/g, "（").replace(/\)/g, "）").replace(/~/g, "～");
+  const toHW = (s) => String(s || "").replace(/（/g, "(").replace(/）/g, ")").replace(/～/g, "~");
+  const scrub = (s) => String(s || "")
+    .toLowerCase()
+    .replace(/[ \t\r\n\u3000]/g, "")
+    .replace(/[、。・／\/＿\-–—~～!?！？。，．・]/g, "");
+  const norm  = (s) => scrub(toHW(toFW(s)));
+
+  // 入力がオブジェクトでない場合でも壊れないように防御
+  const entries = available && typeof available === "object"
+    ? Object.entries(available)
+    : [];
+
+  for (const [idRaw, labelRaw] of entries) {
+    const id    = String(idRaw);          // ID はそのまま（数値/文字列どちらも可）
+    const label = String(labelRaw || ""); // ラベルは文字列へ
+    if (!label) continue;
+
+    // 公式ラベルを保持
+    labelById.set(id, label);
+
+    // ゆらぎ登録：そのまま / 全角化 / 半角化 / 正規化キー
+    const variants = new Set([label, toFW(label), toHW(label)]);
+    for (const v of variants) {
+      // 1) 元の表記
+      if (!idByLabel.has(v)) idByLabel.set(v, id);
+      // 2) 正規化キー（空白・全半角ゆらぎ除去）
+      const key = norm(v);
+      if (key && !idByLabel.has(key)) idByLabel.set(key, id);
+    }
+
+    // 公式ラベル集合（未使用なら将来のバリデーション用）
+    labelsSet.add(label);
+  }
+
+  // 逆引き：lookup ラッパ
+  function resolveIdByLabel(inputLabel = "") {
+    const raw = String(inputLabel || "");
+    if (!raw) return null;
+    const key1 = raw;
+    const key2 = norm(raw);
+    // そのまま命中 or 正規化キー命中
+    return idByLabel.get(key1) ?? idByLabel.get(key2) ?? null;
+  }
+
+  return { idByLabel, labelById, resolveIdByLabel, norm };
+}
+
 // === STEP3専用：tags.jsonから「サービス形態」だけを使うためのサブセット ===
 const serviceFormTagList = (Array.isArray(tagList) ? tagList : []).filter(
   t => t?.category === "サービス形態"
@@ -752,6 +807,9 @@ function setCorsJson(res){
 export default async function handler(req, res) {
   setCorsJson(res);
   const { s, method, safeBody } = bootstrapSessionFromReq(req);
+
+    // STEP5/6 用：今回のターンで使ってよいタグ集合を逆引きにしておく
+  const AVAIL = buildAvailableRevMap(safeBody?.available_purposes || {});
 
   // 非POSTは統一で 200 + JSON
   if (method !== "POST") {
@@ -1497,18 +1555,17 @@ if (s.step === 5) {
   const mw = await analyzeMWWithLLM(text, "ng", s);
   const emp = await generateEmpathy(text || "", s);
 
-    // 3) 追加（IDに解決できたものだけ受理）
-  const available = safeBody?.available_purposes || {};
-  const rev = buildAvailableRevMap(available);
-  const added = [];
-  for (const lb of (mw.must_ng || [])) {
-    const id = rev.get(String(lb));
-    const official = id ? available[id] : null;
-    if (!id || !official) continue; // available_purposesに無い語は採用しない
-    if (!s.status.must_ng_ids.includes(id)) s.status.must_ng_ids.push(id);
-    if (!s.status.must_ng.includes(official)) s.status.must_ng.push(official); // 表示用
-    added.push(official);
-  }
+    // 3) 追加（IDに解決できたものだけ受理）— 既存の AVAIL を使う
+const added = [];
+for (const lb of (mw.must_ng || [])) {
+  const id = AVAIL.resolveIdByLabel(lb);
+  if (id == null) continue;
+  const official = AVAIL.labelById.get(String(id)) || String(lb);
+  if (!s.status.must_ng_ids.includes(id)) s.status.must_ng_ids.push(id);
+  if (!s.status.must_ng.includes(official)) s.status.must_ng.push(official);
+  added.push(official);
+}
+
   // 未ヒットはメモへ積む（現行踏襲）
   if (!added.length) {
     s.status.memo.must_ng_raw ??= [];
@@ -1540,18 +1597,17 @@ if (s.step === 6) {
   const mw = await analyzeMWWithLLM(text, "have", s);
   const emp = await generateEmpathy(text || "", s);
 
-    // 3) 追加（IDに解決できたものだけ受理）
-  const available = safeBody?.available_purposes || {};
-  const rev = buildAvailableRevMap(available);
-  const added = [];
-  for (const lb of (mw.must_have || [])) {
-    const id = rev.get(String(lb));
-    const official = id ? available[id] : null;
-    if (!id || !official) continue;
-    if (!s.status.must_have_ids.includes(id)) s.status.must_have_ids.push(id);
-    if (!s.status.must_have.includes(official)) s.status.must_have.push(official);
-    added.push(official);
-  }
+   // 3) 追加（IDに解決できたものだけ受理）— 既存の AVAIL を使う
+const added = [];
+for (const lb of (mw.must_have || [])) {
+  const id = AVAIL.resolveIdByLabel(lb);
+  if (id == null) continue;
+  const official = AVAIL.labelById.get(String(id)) || String(lb);
+  if (!s.status.must_have_ids.includes(id)) s.status.must_have_ids.push(id);
+  if (!s.status.must_have.includes(official)) s.status.must_have.push(official);
+  added.push(official);
+}
+
   // 未ヒットはメモへ積む（現行踏襲）
   if (!added.length) {
     s.status.memo.must_have_raw ??= [];
