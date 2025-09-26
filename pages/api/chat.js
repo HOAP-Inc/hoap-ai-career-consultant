@@ -1497,16 +1497,19 @@ if (s.step === 5) {
   const mw = await analyzeMWWithLLM(text, "ng", s);
   const emp = await generateEmpathy(text || "", s);
 
-  // 3) 追加（文字列ラベルのみ保持）
+    // 3) 追加（IDに解決できたものだけ受理）
+  const available = safeBody?.available_purposes || {};
+  const rev = buildAvailableRevMap(available);
   const added = [];
   for (const lb of (mw.must_ng || [])) {
-    if (!s.status.must_ng.includes(lb)) {
-      s.status.must_ng.push(lb);
-      added.push(lb);
-    }
+    const id = rev.get(String(lb));
+    const official = id ? available[id] : null;
+    if (!id || !official) continue; // available_purposesに無い語は採用しない
+    if (!s.status.must_ng_ids.includes(id)) s.status.must_ng_ids.push(id);
+    if (!s.status.must_ng.includes(official)) s.status.must_ng.push(official); // 表示用
+    added.push(official);
   }
-  // ※ must_ng_ids は使わない（タグ辞書排除のため更新しない）
-  // 　未ヒットはメモに積む
+  // 未ヒットはメモへ積む（現行踏襲）
   if (!added.length) {
     s.status.memo.must_ng_raw ??= [];
     s.status.memo.must_ng_raw.push(text);
@@ -1537,15 +1540,19 @@ if (s.step === 6) {
   const mw = await analyzeMWWithLLM(text, "have", s);
   const emp = await generateEmpathy(text || "", s);
 
-  // 3) 追加（文字列ラベルのみ保持）
+    // 3) 追加（IDに解決できたものだけ受理）
+  const available = safeBody?.available_purposes || {};
+  const rev = buildAvailableRevMap(available);
   const added = [];
   for (const lb of (mw.must_have || [])) {
-    if (!s.status.must_have.includes(lb)) {
-      s.status.must_have.push(lb);
-      added.push(lb);
-    }
+    const id = rev.get(String(lb));
+    const official = id ? available[id] : null;
+    if (!id || !official) continue;
+    if (!s.status.must_have_ids.includes(id)) s.status.must_have_ids.push(id);
+    if (!s.status.must_have.includes(official)) s.status.must_have.push(official);
+    added.push(official);
   }
-  // ※ must_have_ids は使わない
+  // 未ヒットはメモへ積む（現行踏襲）
   if (!added.length) {
     s.status.memo.must_have_raw ??= [];
     s.status.memo.must_have_raw.push(text);
@@ -1977,6 +1984,63 @@ function matchTagIdsInText(text = "") {
     }
   }
   return Array.from(out);
+}
+
+// === 自由語ラベル群を tags.json の正式タグ（ID/正式名）へ正規化する共通ヘルパ ===
+function mapFreeLabelsToTags(freeLabels = []) {
+  const results = [];
+  const seenIds = new Set();
+
+  const toFW = (s) => String(s || "").replace(/\(/g, "（").replace(/\)/g, "）").replace(/~/g, "～");
+  const toHW = (s) => String(s || "").replace(/（/g, "(").replace(/）/g, ")").replace(/～/g, "~");
+  const scrub = (s) =>
+    String(s || "").toLowerCase()
+      .replace(/[ \t\r\n\u3000、。・／\/＿\-–—~～!?！？。、，．・]/g, "");
+  const norm = (s) => scrub(toHW(toFW(s)));
+
+  for (const raw of (freeLabels || [])) {
+    const q = String(raw || "").trim();
+    if (!q) continue;
+
+    // 1) 厳密一致（全角半角ゆらぎ含む）
+    let id =
+          tagIdByName.get(q)
+       || tagIdByName.get(toFW(q))
+       || tagIdByName.get(toHW(q));
+
+    // 2) 双方向の部分一致
+    if (id == null) {
+      const nq = norm(q);
+      for (const t of (Array.isArray(tagList) ? tagList : [])) {
+        const name = String(t?.name ?? "");
+        const tid  = t?.id;
+        if (!name || tid == null) continue;
+        const nt = norm(name);
+        if (!nt) continue;
+        if (nq.includes(nt) || nt.includes(nq)) { id = tid; break; }
+      }
+    }
+
+    // 3) ファジー（2-gram Jaccard）
+    if (id == null) {
+      let best = null, bestScore = 0;
+      for (const t of (Array.isArray(tagList) ? tagList : [])) {
+        const name = String(t?.name ?? "");
+        const tid  = t?.id;
+        if (!name || tid == null) continue;
+        const s = scoreSimilarity(name, q);
+        if (s > bestScore) { bestScore = s; best = { id: tid, name }; }
+      }
+      if (best && bestScore >= 0.35) id = best.id;
+    }
+
+    if (id != null && !seenIds.has(id)) {
+      seenIds.add(id);
+      results.push({ id, label: tagNameById.get(id) || String(q) });
+    }
+  }
+
+  return results; // [{id, label}] 正式IDと正式ラベル（tags.json準拠）
 }
 
 // === 所有資格（qualifications.json）用：正式ラベルからID配列を引く ===
