@@ -515,16 +515,19 @@ async function analyzeReasonWithLLM(userText = "", s, opts = {}) {
   const forceNew = !!opts.forceNewAngle;  // ★追加
 
   const system = [
-    "あなたは日本語で自然に寄り添うキャリアエージェントAI。",
-    "出力は必ずJSONのみ。前置きや説明は書かない。",
-    // ★ここから追記（固定化を避ける制約を明記）
-    "- empathy は質問禁止。句点（。）で終わる平叙文で1〜2文。",
-    "- suggested_question は必ず疑問文（？/? で終わる）。直前の質問と同義不可。",
-    "- 切り口は前回と変えること（仕事内容／人間関係／労働時間／待遇・制度／評価・成長 など）。",
-    forceNew
-      ? "- 直前の問いの言い換えや同義は禁止。必ず“別の切り口”で1つ作る。"
-      : ""
-  ].join("\n");
+  "あなたは日本語で自然に寄り添うキャリアエージェントAI。",
+  "出力は必ずJSONのみ。前置きや説明は書かない。",
+  // ★ここから追記（固定化を避ける制約を明記）
+  "- empathy は質問禁止。句点（。）で終わる平叙文で1〜2文。",
+  "- suggested_question は必ず疑問文（？/? で終わる）。直前の質問と同義不可。",
+  "- 切り口は前回と変えること（仕事内容／人間関係／労働時間／待遇・制度／評価・成長 など）。",
+  forceNew
+    ? "- 直前の問いの言い換えや同義は禁止。必ず“別の切り口”で1つ作る。"
+    : "",
+  "- 根拠のない人間関係への誘導を禁止。boss_issue 等の根拠語が無い限り、人間関係は選ばない。",
+  "- ask_next は【カテゴリ知識（angles）】を参照し、user_text / recent_texts に現れた語の根拠があるカテゴリから1つだけ選ぶ。",
+  "- 体質・健康（例：猫/花粉/アレルギー）や勤務形態（夜勤/オンコール/シフト）、制度・評価・通勤距離などは、人間関係よりも仕事内容/労働条件/環境/評価を優先する。"
+].join("\n");
 
   const catalog = REASON_ID_LABELS.map(x => `${x.id}:${x.label}`).join(", ");
 
@@ -1301,6 +1304,14 @@ if (s.step === 4) {
     let nextQ = (llm1?.suggested_question && llm1.suggested_question.trim())
       || "一番ひっかかる点はどこか、もう少しだけ教えてね。";
 
+    // [GUARD] 人間関係ask禁止（根拠なし）
+{
+  const joinedBuf = (s.drill?.reasonBuf || [text || ""]).join(" ");
+  if (isHumanRelationPrompt(nextQ) && !hasBossIssueHint(joinedBuf)) {
+    nextQ = pickAngleFallback(joinedBuf, "人間関係");
+  }
+}
+
     // 重複抑止：前ターンと同義なら今回は出さない（共感のみ返す）
     if (isSamePrompt(nextQ, s.drill?.flags?.last_ask || "")) {
   // まず LLM に別角度で作り直しを依頼
@@ -1381,6 +1392,14 @@ if (s.step === 4) {
 
         if (decision.status === "ambiguous") {
       let nextQ = llm2?.suggested_question || "具体的にどんな場面で一番強く感じたか、教えてね。";
+
+          // [GUARD] 人間関係ask禁止（根拠なし）
+{
+  const joinedBuf = (s.drill?.reasonBuf || [text || ""]).join(" ");
+  if (isHumanRelationPrompt(nextQ) && !hasBossIssueHint(joinedBuf)) {
+    nextQ = pickAngleFallback(joinedBuf, "人間関係");
+  }
+}
       
       if (isSamePrompt(nextQ, s.drill?.flags?.last_ask || "")) {
   // まず LLM に別角度で作り直しを依頼
@@ -1418,7 +1437,14 @@ if (s.step === 4) {
     }
         // 不確定：もう1ターン深掘り
       let nextQ = llm2?.suggested_question || "一番の根っこは何か、言葉にしてみてね。";
-      
+
+    // [GUARD] 人間関係ask禁止（根拠なし）
+{
+  const joinedBuf = (s.drill?.reasonBuf || [text || ""]).join(" ");
+  if (isHumanRelationPrompt(nextQ) && !hasBossIssueHint(joinedBuf)) {
+    nextQ = pickAngleFallback(joinedBuf, "人間関係");
+  }
+}     
       if (isSamePrompt(nextQ, s.drill?.flags?.last_ask || "")) {
   // まず LLM に別角度で作り直しを依頼
   const basis = Array.isArray(s?.drill?.reasonBuf) && s.drill.reasonBuf.length
@@ -1552,6 +1578,11 @@ if (s.step === 5) {
 const mw  = await analyzeMWWithLLM(text, "ng", s);
 const emp = await generateEmpathy(text || "", s);
 
+  // 2.5) LLMが空なら即時ヒューリスティックで補完
+if (!mw.must_ng || mw.must_ng.length === 0) {
+　mw.must_ng = quickKeywordsToLabels(text, "ng");
+}
+
 // 3) 抽出語を tags.json で ID化（available_purposes は使わない）
 const mapped = mapFreeLabelsToTags(mw.must_ng || []); // → [{id, label}]
 const added  = [];
@@ -1593,6 +1624,11 @@ if (s.step === 6) {
   // 2) LLM で抽出（タグ辞書・ID解決はしない）
 const mw  = await analyzeMWWithLLM(text, "have", s);
 const emp = await generateEmpathy(text || "", s);
+
+  // LLMが空なら即時ヒューリスティックで補完
+　if (!mw.must_have || mw.must_have.length === 0) {
+　mw.must_have = quickKeywordsToLabels(text, "have");
+}
 
 const mapped = mapFreeLabelsToTags(mw.must_have || []); // → [{id, label}]
 const added  = [];
@@ -1868,6 +1904,34 @@ function isSamePrompt(a, b){
   return A === B || A.includes(B) || B.includes(A);
 }
 
+// --- 人間関係バイアス抑止ヘルパ ---
+function isHumanRelationPrompt(s){
+  const t = String(s || "");
+  return /(人間関係|職場の雰囲気|上司|先輩|同僚|チームワーク)/.test(t);
+}
+function hasBossIssueHint(text=""){
+  const t = String(text || "");
+  return /(上司|管理者|師長|部長|課長|リーダー|陰口|高圧|マウント|パワハラ|理不尽)/.test(t);
+}
+
+// --- 角度フォールバック（人間関係以外へ切り替え） ---
+function pickAngleFallback(buf="", excludeCategory=""){
+  const t = String(buf || "");
+
+  // 優先規則（軽量・決め打ち）
+  if (/(動物|アレルギ|花粉|体質|喘息)/.test(t)) return "環境や業務で避けたい条件を一語で添えると要件が固まる。";
+  if (/(夜勤|夜番|オンコール|ｵﾝｺｰﾙ|コール番|呼び出し)/i.test(t)) return "時間帯や呼び出し有無など勤務条件で一番避けたい点を一つ挙げると整理が進む。";
+  if (/(残業|シフト|連勤|休憩|有給|直行直帰|朝礼|日報|定時)/.test(t)) return "時間面か制度面かを一語で補足できると候補が安定する。";
+  if (/(評価|昇給|昇格|査定|反映|不公平|公平|基準)/.test(t)) return "評価や昇給のどこが気になるか要点を一つだけ添えると精度が上がる。";
+  if (/(通勤|距離|移動|直行|直帰|訪問)/.test(t)) return "日々の動き方で負担が大きい点を一つに絞って書けると整理が進む。";
+
+  // 既定の非・人間関係角度
+  if (excludeCategory === "人間関係") {
+    return "直近で一番つらかった具体場面を一つだけ短く添えると方向が絞れる。";
+  }
+  return "一番負担が大きい条件を一つに絞って書けると整理が進む。";
+}
+
 // ▼▼ buildStatusBar（置換 or 追加） ▼▼
 function buildStatusBar(st = {}, currentStep = 0) {
   const maxStep = 10;
@@ -2067,6 +2131,27 @@ function matchTagIdsInText(text = "") {
       if (s >= 0.35) out.add(id);
     }
   }
+  return Array.from(out);
+}
+
+// ★追加：簡易ヒューリスティック（同義語→tags.jsonラベル）
+function quickKeywordsToLabels(text = "", mode = "ng") {
+  const t = String(text || "").toLowerCase();
+
+  const out = new Set();
+
+  // ボーナス → 賞与
+  if (/(ﾎﾞｰﾅｽ|ボーナス|bonus)/.test(t)) out.add("賞与");
+
+  // 有給/有休 → 有給消化率ほぼ100%
+  if (/(有給|有休)/.test(t)) out.add("有給消化率ほぼ100%");
+
+  // 残業 → 残業0 / 残業月20時間以内（NGなら強めに0を優先、HAVEなら20hも候補）
+  if (/残業|定時|ｻﾋﾞ残|サビ残/.test(t)) {
+    out.add("残業0");
+    if (mode === "have") out.add("残業月20時間以内");
+  }
+
   return Array.from(out);
 }
 
