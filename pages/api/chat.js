@@ -250,6 +250,12 @@ function matchServicePlacesInText(text = '') {
   const norm  = s => scrub(toHW(toFW(s)));
   const normText = norm(raw);
 
+  // ★ガード: ID=41（口腔外科系）は“完全一致入力”のときのみ候補に残す
+const ORAL_SURGERY_ID = 41;
+const ALLOWED_ORAL_SURGERY_KEYS = ['口腔外科', '歯科口腔外科'].map(norm);
+const oralLabel = serviceTagNameById.get(ORAL_SURGERY_ID);
+const isAllowedOralSurgeryInput = () => ALLOWED_ORAL_SURGERY_KEYS.includes(norm(raw));
+
   const out = new Set();
 
   // 0) 厳密一致 → 正式ラベル
@@ -302,6 +308,9 @@ function matchServicePlacesInText(text = '') {
     }
   }
 
+  // ★適用
+if (oralLabel && !isAllowedOralSurgeryInput()) out.delete(oralLabel);
+
   return Array.from(out);
 }
 
@@ -316,6 +325,11 @@ function matchServiceTagIdsInText(text = '') {
       .replace(/[ \t\r\n\u3000、。・／\/＿\-–—~～!?！？。、，．・]/g,'');
   const norm = s => scrub(toHW(toFW(s)));
   const normText = norm(raw);
+  // ★ID=41（口腔外科系）は“完全一致入力”のときのみ返す
+const ORAL_SURGERY_ID = 41;
+const ALLOWED_ORAL_SURGERY_KEYS = ['口腔外科', '歯科口腔外科'].map(norm);
+const isAllowedOralSurgeryInput = () => ALLOWED_ORAL_SURGERY_KEYS.includes(norm(raw));
+
 
   const out = new Set();
 
@@ -364,6 +378,8 @@ function matchServiceTagIdsInText(text = '') {
       if (s >= 0.35) out.add(id);
     }
   }
+
+  if (!isAllowedOralSurgeryInput()) out.delete(ORAL_SURGERY_ID);
 
   return Array.from(out);
 }
