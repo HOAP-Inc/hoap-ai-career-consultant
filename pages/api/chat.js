@@ -474,6 +474,53 @@ const REASON_ID_LABELS = (Array.isArray(reasonMaster) ? reasonMaster : [])
   .map(t => ({ id: t?.id, label: String(t?.tag_label ?? t?.name ?? "") }))
   .filter(x => x.id != null && x.label);
 
+function pickTop3ReasonOptions(userText = "") {
+  const t = String(userText || "").toLowerCase();
+  const buckets = [
+    // 労働時間・シフト系
+    { keys: ["残業", "夜勤", "シフト", "オンコール", "当直", "定時"], picked: [] },
+    // 給与・待遇系
+    { keys: ["給与", "給料", "年収", "月収", "賞与", "ボーナス", "昇給", "待遇"], picked: [] },
+    // 通勤・勤務地・働き方動線
+    { keys: ["通勤", "近い", "自宅", "直行直帰", "移動", "訪問"], picked: [] },
+    // 仕事内容・キャリア
+    { keys: ["業務", "負担", "スキル", "成長", "経験", "キャリア", "専門"], picked: [] },
+    // 休暇・休み
+    { keys: ["休日", "休み", "有給", "連休", "土日"], picked: [] },
+    // 人間関係・組織
+    { keys: ["人間関係", "上司", "同僚", "雰囲気", "チーム"], picked: [] },
+  ];
+
+  const labelPool = REASON_ID_LABELS.map(x => String(x.label || ""));
+  const used = new Set();
+  const out = [];
+
+  const includesAny = (label, keys) => keys.some(k => label.includes(k));
+
+  for (const b of buckets) {
+    for (const label of labelPool) {
+      if (out.length >= 3) break;
+      if (used.has(label)) continue;
+      if (includesAny(label, b.keys)) {
+        out.push(label);
+        used.add(label);
+      }
+    }
+    if (out.length >= 3) break;
+  }
+
+  if (out.length < 3) {
+    for (const label of labelPool) {
+      if (out.length >= 3) break;
+      if (!used.has(label)) {
+        out.push(label);
+        used.add(label);
+      }
+    }
+  }
+  return out.slice(0, 3);
+}
+
 // --- 推測抑止：辞書を持たず、ラベル本文から自動抽出した「証拠語」でゲートする ---
 const STRICT_REASON_MODE = true;
 
@@ -1412,7 +1459,23 @@ const empathyRaw = (llm1?.empathy && llm1.empathy.trim()) || await generateEmpat
 let nextQ = (llm1?.suggested_question && llm1.suggested_question.trim())
   || "一番ひっかかる点はどこか、もう少しだけ教えてね。";
 
-    // [GUARD] 人間関係ask禁止（根拠なし）
+const catHits = countCategoryHits(text);
+if (catHits === 0) {
+  const options = pickTop3ReasonOptions(text);
+  if (options.length) {
+    s.drill.phase = "reason-llm-choice";
+    s.drill.awaitingChoice = true;
+    s.drill.options = options;
+    s.drill.count = 0; // まだ1ターン目
+
+    return res.json(withMeta({
+      response: joinEmp(empathyRaw, `この中だとどれが一番近い？『${options.map(x=>`［${x}］`).join("／")}』`),
+      step: 4, status: s.status, isNumberConfirmed: true,
+      candidateNumber: s.status.number, debug: debugState(s)
+    }, 4));
+  }
+}
+
 {
   const joinedBuf = (s.drill?.reasonBuf || [text || ""]).join(" ");
   if (isHumanRelationPrompt(nextQ) && !hasBossIssueHint(joinedBuf)) {
@@ -1420,9 +1483,8 @@ let nextQ = (llm1?.suggested_question && llm1.suggested_question.trim())
   }
 }
 
-    // 重複抑止：前ターンと同義なら今回は出さない（共感のみ返す）
     if (isSamePrompt(nextQ, s.drill?.flags?.last_ask || "")) {
-  // まず LLM に別角度で作り直しを依頼
+ 
   const basis = Array.isArray(s?.drill?.reasonBuf) && s.drill.reasonBuf.length
     ? s.drill.reasonBuf.slice(-3).join(" / ")
     : (text || "");
@@ -1432,7 +1494,6 @@ let nextQ = (llm1?.suggested_question && llm1.suggested_question.trim())
   if (altQ && !isSamePrompt(altQ, s.drill?.flags?.last_ask || "")) {
     nextQ = altQ;
   } else {
-    // それでもダメな時だけ固定フォールバック
     const alts = [
       "直近で一番つらかった具体的な場面は？",
       "その中で“絶対に避けたいこと”を一つ挙げると？",
