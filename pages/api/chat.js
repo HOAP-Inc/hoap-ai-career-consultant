@@ -528,20 +528,20 @@ async function analyzeReasonWithLLM(userText = "", s, opts = {}) {
   const place   = s?.status?.place || "未入力";
   const recent  = Array.isArray(s?.drill?.reasonBuf) ? s.drill.reasonBuf.slice(-3).join(" / ") : "";
   const lastAsk = s?.drill?.flags?.last_ask || "";
-  const forceNew = !!opts.forceNewAngle;  // ★追加
+  const forceNew = !!opts.forceNewAngle;
 
- const system = [
-  "あなたは日本語で自然に寄り添うキャリアエージェントAI。",
-  "出力は必ずJSONのみ。前置きや説明は書かない。",
-  "- empathy は質問禁止。句点（。）で終わる平叙文で1〜2文。",
-  "- suggested_question は必ず疑問文（？/? で終わる）。直前の質問と同義不可。",
-  "- 切り口は前回と変えること（仕事内容／人間関係／労働時間／待遇・制度／評価・成長 など）。",
-  forceNew ? "- 直前の問いの言い換えや同義は禁止。必ず“別の切り口”で1つ作る。" : "",
-  "- 根拠のない人間関係への誘導を禁止。boss_issue 等の根拠語が無い限り、人間関係は選ばない。",
-  "- 評価制度を切り口にするのは『評価』『査定』『昇給』『等級』『人事考課』等の根拠語がある場合だけ。",
-  "- 『在宅』は原則として訪問系（訪問看護／訪問介護／在宅医療）の文脈として解釈し、『在宅勤務／リモート／テレワーク』等がある場合のみ勤務形態として扱う。",
-  "- ask_next は【カテゴリ知識】の angles に沿って、user_text / recent_texts に現れた語の根拠があるカテゴリから1つだけ選ぶ。"
-].join("\n");
+  const system = [
+    "あなたは日本語で自然に寄り添うキャリアエージェントAI。",
+    "出力は必ずJSONのみ。前置きや説明は書かない。",
+    "- empathy は質問禁止。句点（。）で終わる平叙文で1〜2文。",
+    "- suggested_question は必ず疑問文（？/? で終わる）。直前の質問と同義不可。",
+    "- 切り口は前回と変えること（仕事内容／人間関係／労働時間／待遇・制度／評価・成長 など）。",
+    forceNew ? "- 直前の問いの言い換えや同義は禁止。必ず“別の切り口”で1つ作る。" : "",
+    "- 根拠のない人間関係への誘導を禁止。boss_issue 等の根拠語が無い限り、人間関係は選ばない。",
+    "- 評価制度を切り口にするのは『評価』『査定』『昇給』『等級』『人事考課』等の根拠語がある場合だけ。",
+    "- 『在宅』は原則として訪問系（訪問看護／訪問介護／在宅医療）の文脈として解釈し、『在宅勤務／リモート／テレワーク』等がある場合のみ勤務形態として扱う。",
+    "- ask_next は【カテゴリ知識】の angles に沿って、user_text / recent_texts に現れた語の根拠があるカテゴリから1つだけ選ぶ。"
+  ].join("\n");
 
   const catalog = REASON_ID_LABELS.map(x => `${x.id}:${x.label}`).join(", ");
 
@@ -562,24 +562,28 @@ async function analyzeReasonWithLLM(userText = "", s, opts = {}) {
       "candidates": [{"id": 数値（上のidのみ）, "confidence": 0〜1}],
       "ask_next": "次の一言（<=80字）。必ず疑問文で、直前と同義不可。"
     }`,
-    // ★追記：履歴を渡して“同じ方向”を避けさせる
     `last_ask: 「${s.drill?.flags?.last_ask || ""}」`,
     `history_summary: 「${s.drill?.flags?.last_llm_summary || ""}」`
   ].join("\n");
 
-  const rsp = await client.chat.completions.create({
-    model: "gpt-4o-mini",
-    temperature: 0.2,
-    max_tokens: 500,
-    messages: [
-      { role: "system", content: system },
-      { role: "user",   content: user }
-    ]
-  });
+  try {
+    const rsp = await client.chat.completions.create({
+      model: "gpt-4o-mini",
+      temperature: 0.2,
+      max_tokens: 500,
+      messages: [
+        { role: "system", content: system },
+        { role: "user",   content: user }
+      ]
+    });
 
-  const txt = rsp?.choices?.[0]?.message?.content || "";
-  const obj = _extractJsonBlock(txt);
-  return _sanitizeReasonLLM(obj);
+    const txt = rsp?.choices?.[0]?.message?.content || "";
+    const obj = _extractJsonBlock(txt);
+    return _sanitizeReasonLLM(obj);
+  } catch {
+    // 失敗時は無音で前進できる最小構成を返す
+    return { empathy: "", paraphrase: "", suggested_question: "", candidates: [] };
+  }
 }
 
 // ==== STEP5/6 LLM 用：Must NG / Must Have を抽出（JSONで返す。IDは扱わない） ====
@@ -657,7 +661,7 @@ function decideReasonFromCandidates(cands = []) {
   const top = cands?.[0], second = cands?.[1];
   if (!top) return { status: "uncertain" };
   const gap = second ? (top.confidence - second.confidence) : Infinity;
-  if (top.confidence >= 0.82 && gap >= 0.12) {
+  if (top.confidence >= 0.85 && gap >= 0.10) {
     return { status: "confirm", id: top.id };
   }
   const options = (cands || []).slice(0, 3).map(c => reasonNameById.get(c.id)).filter(Boolean);
@@ -1312,11 +1316,10 @@ if (s.step === 4) {
     }
 
         // --- LLM呼び出し（第1回）：共感＋要約＋次の深掘り ---
-    const llm1 = await analyzeReasonWithLLM(text, s);
-    const empathyRaw = llm1?.empathy || await generateEmpathy(text, s);
-
-    let nextQ = (llm1?.suggested_question && llm1.suggested_question.trim())
-      || "一番ひっかかる点はどこか、もう少しだけ教えてね。";
+const llm1 = await analyzeReasonWithLLM(text, s);
+const empathyRaw = (llm1?.empathy && llm1.empathy.trim()) || await generateEmpathy(text, s);
+let nextQ = (llm1?.suggested_question && llm1.suggested_question.trim())
+  || "一番ひっかかる点はどこか、もう少しだけ教えてね。";
 
     // [GUARD] 人間関係ask禁止（根拠なし）
 {
