@@ -1462,23 +1462,6 @@ let nextQ = (llm1?.suggested_question && llm1.suggested_question.trim())
     s.drill.reasonBuf.push(text || "");
     const joined = s.drill.reasonBuf.join(" ");
 
-    // 強制分岐の再チェック
-    const forced1 = shouldForcePrivate(s) ? forcePrivateOncallNight(joined) : null;
-    if (forced1) {
-      const sole = forced1.options?.length === 1 ? forced1.options[0] : null;
-      if (sole) {
-        s.status.reason_tag = sole;
-        const rid = reasonIdByName.get(sole);
-        s.status.reason_ids = Array.isArray(rid) ? rid : (rid != null ? [rid] : []);
-        resetDrill(s);
-        s.step = 5;
-        return res.json(withMeta({
-          response: `今回の転職理由は『${sole}』ってところが大きそうだね！担当エージェントに伝えておくね。\n\n${mustIntroText()}`,
-          step: 5, status: s.status, isNumberConfirmed: true,
-          candidateNumber: s.status.number, debug: debugState(s)
-        }, 5));
-      }
-    }
     // --- LLM呼び出し（第2回）：候補で確定判定 ---
     const llm2 = await analyzeReasonWithLLM(joined, s);
 
@@ -1595,24 +1578,6 @@ const decision = decideReasonFromCandidates(filtered2);
   if (s.drill.count === 2) {
     s.drill.reasonBuf.push(text || "");
     const joined = s.drill.reasonBuf.join(" ");
-
-    const forced2 = shouldForcePrivate(s) ? forcePrivateOncallNight(joined) : null;
-    if (forced2) {
-      const sole = forced2.options?.length === 1 ? forced2.options[0] : null;
-      if (sole) {
-        s.status.reason_tag = sole;
-        const rid = reasonIdByName.get(sole);
-        s.status.reason_ids = Array.isArray(rid) ? rid : (rid != null ? [rid] : []);
-        resetDrill(s);
-        s.step = 5;
-        return res.json(withMeta({
-          response: `今回の転職理由は『${sole}』ってところが大きそうだね！担当エージェントに伝えておくね。\n\n${mustIntroText()}`,
-          step: 5, status: s.status, isNumberConfirmed: true,
-          candidateNumber: s.status.number, debug: debugState(s)
-        }, 5));
-      }
-    }
-
     const llm3 = await analyzeReasonWithLLM(joined, s);
 
 // ★ 証拠語でゲート（推測候補を除外）
