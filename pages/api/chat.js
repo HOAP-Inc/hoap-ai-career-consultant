@@ -474,6 +474,97 @@ const REASON_ID_LABELS = (Array.isArray(reasonMaster) ? reasonMaster : [])
   .map(t => ({ id: t?.id, label: String(t?.tag_label ?? t?.name ?? "") }))
   .filter(x => x.id != null && x.label);
 
+// --- 推測抑止：辞書を持たず、ラベル本文から自動抽出した「証拠語」でゲートする ---
+const STRICT_REASON_MODE = true;
+
+// 全角/半角・空白・記号ゆらぎを落として比較
+function _normKeyJP(s=""){
+  return String(s||"")
+    .toLowerCase()
+    .replace(/[ \t\r\n\u3000]/g,"")
+    .replace(/[（）\(\)［\]\[\]／\/・,，。．\.\-–—~～!?！？:：]/g,"")
+    .replace(/直行直帰できる?/g,"直行直帰")  // 代表的ゆらぎの軽整形
+    .replace(/職場で働きたい$/,"")
+    .replace(/で働きたい$/,"")
+    .replace(/がほしい$/,"")
+    .replace(/がある$/,"")
+    .replace(/できる$/,"")
+    .trim();
+}
+
+// ラベルから「核」を自動抽出（末尾の定型を剥がし、核語とその分割候補を返す）
+function extractEvidenceKeysFromLabel(label=""){
+  const raw = String(label||"").trim();
+  if (!raw) return [];
+
+  // 末尾の定型フレーズを削る
+  let core = raw
+    .replace(/の?職場で働きたい$/,"")
+    .replace(/が欲しい$/,"")
+    .replace(/がほしい$/,"")
+    .replace(/があると良い$/,"")
+    .replace(/がある$/,"")
+    .replace(/(を)?重視したい$/,"")
+    .replace(/を避けたい$/,"")
+    .replace(/したい$/,"")
+    .trim();
+
+  // そのまま核語
+  const keys = new Set();
+  if (core) keys.add(core);
+
+  // 分割候補（・／、で区切った語、助詞は除外気味）
+  const parts = core.split(/[・／\/、]/g).map(s=>s.trim()).filter(Boolean);
+  for (const p of parts) {
+    if (p.length >= 2) keys.add(p);
+  }
+
+  // よくある冗語の除去（“職場”“環境”“体制”などは証拠になりにくい）
+  const stop = new Set(["職場","環境","体制","制度","条件","勤務","働き方","理解","機会","基準","評価","残業時間"]);
+  for (const k of Array.from(keys)) {
+    const clean = k.replace(/(な|に|を|が|と|も|の)$/,"");
+    if (!stop.has(clean)) keys.add(clean);
+  }
+
+  // 正規化キーも用意
+  const expanded = new Set();
+  for (const k of keys) {
+    expanded.add(k);
+    expanded.add(_normKeyJP(k));
+  }
+  // 例外的に代表的同義を軽く補強（汎用・公開OKな最小限）
+  const txt = core;
+  if (/近い|自宅|家/.test(txt)) { expanded.add("近い"); expanded.add("自宅から近い"); expanded.add("家から近い"); }
+  if (/残業/.test(txt)) { expanded.add("残業"); }
+  if (/有給|有休/.test(txt)) { expanded.add("有給"); expanded.add("有休"); }
+  if (/夜勤/.test(txt)) { expanded.add("夜勤"); }
+  if (/直行直帰/.test(txt)) { expanded.add("直行直帰"); }
+
+  // 1〜2文字しか残らないノイズは落とす
+  return Array.from(expanded).filter(k => String(k||"").trim().length >= 2);
+}
+
+// 候補をユーザ発話の「明示語」だけでゲート
+function gateCandidatesByEvidence(cands = [], userText = ""){
+  if (!STRICT_REASON_MODE) return cands || [];
+  const T = _normKeyJP(userText || "");
+  if (!T) return [];
+
+  const passed = [];
+  for (const c of (Array.isArray(cands) ? cands : [])) {
+    const label = reasonNameById.get(c.id) || "";
+    const keys = extractEvidenceKeysFromLabel(label);
+    // ラベル由来の核語のいずれかがテキストに“そのまま”か正規化で現れているか
+    const ok = keys.some(k => {
+      const nk = _normKeyJP(k);
+      return (k && userText.includes(k)) || (nk && T.includes(nk));
+    });
+    if (ok) passed.push(c);
+  }
+  return passed;
+}
+
+
 // モデル出力のJSONを抽出（```json ... ``` でも、生テキスト内 {...} でもOKにする）
 function _extractJsonBlock(s = "") {
   const t = String(s || "");
@@ -1390,8 +1481,13 @@ let nextQ = (llm1?.suggested_question && llm1.suggested_question.trim())
     }
     // --- LLM呼び出し（第2回）：候補で確定判定 ---
     const llm2 = await analyzeReasonWithLLM(joined, s);
-    const empathy2 = llm2?.empathy || await generateEmpathy(text, s);
-    const decision = decideReasonFromCandidates(llm2?.candidates || []);
+
+// ★ 証拠語でゲート（推測候補を除外）
+const filtered2 = gateCandidatesByEvidence(llm2?.candidates || [], joined);
+llm2.candidates = filtered2;
+
+const empathy2 = llm2?.empathy || await generateEmpathy(text, s);
+const decision = decideReasonFromCandidates(filtered2);
 
     if (decision.status === "confirm") {
       const id = decision.id;
@@ -1518,8 +1614,13 @@ let nextQ = (llm1?.suggested_question && llm1.suggested_question.trim())
     }
 
     const llm3 = await analyzeReasonWithLLM(joined, s);
-    const empathy3 = llm3?.empathy || await generateEmpathy(text, s);
-    const decision = decideReasonFromCandidates(llm3?.candidates || []);
+
+// ★ 証拠語でゲート（推測候補を除外）
+const filtered3 = gateCandidatesByEvidence(llm3?.candidates || [], joined);
+llm3.candidates = filtered3;
+
+const empathy3 = llm3?.empathy || await generateEmpathy(text, s);
+const decision = decideReasonFromCandidates(filtered3);
 
     if (decision.status === "confirm") {
       const id = decision.id;
