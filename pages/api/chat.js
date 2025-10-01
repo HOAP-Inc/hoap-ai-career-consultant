@@ -19,7 +19,6 @@ function scoreSimilarity(a, b) {
 let tagList = [];
 try {
   const raw = require("../../tags.json");
-  // raw が { tags: [...] } でも、[...] 直でも両方受ける
   tagList = Array.isArray(raw?.tags) ? raw.tags : (Array.isArray(raw) ? raw : []);
 } catch (e) {
   console.error("tags.json 読み込み失敗:", e);
@@ -33,7 +32,6 @@ try {
   licenses = {};
 }
 
-// 所有資格の ID マスタ（qualifications.json）を読む
 let licenseTagList = [];
 try {
   const raw = require("../../qualifications.json"); // ルート直下
@@ -52,7 +50,6 @@ try {
   licenseTagList = [];
 }
 
-// 「所有資格」名称 → ID のマップ
 const licenseTagIdByName = new Map();
 const licenseTagNameById = new Map();
 try {
@@ -70,7 +67,6 @@ try {
   console.error("licenseTagIdByName 構築失敗:", e);
 }
 
-// 所有資格の「別名→候補ラベル複数」マップを構築
 const licenseMap = new Map(); // Map<string, string[]>
 
 try {
@@ -80,7 +76,6 @@ try {
       const label = typeof item === "string" ? item : item?.label;
       if (!label) continue;
 
-      // ある別名に複数ラベルをぶら下げる
       const put = (alias, l) => {
         if (!alias) return;
         const curr = licenseMap.get(alias) || [];
@@ -88,16 +83,13 @@ try {
         licenseMap.set(alias, curr);
       };
 
-      // ラベル自体
       put(label, label);
 
-      // 全角/半角ゆらぎ
       const fwLabel = label.replace(/\(/g, "（").replace(/\)/g, "）").replace(/~/g, "～");
       const hwLabel = label.replace(/（/g, "(").replace(/）/g, ")").replace(/～/g, "~");
       put(fwLabel, label);
       put(hwLabel, label);
 
-      // 別名
       const aliases = (typeof item === "object" && Array.isArray(item.aliases)) ? item.aliases : [];
       for (const a of aliases) {
         if (!a) continue;
@@ -113,10 +105,8 @@ try {
   console.error("licenseMap 構築に失敗:", e);
 }
 
-// 追加：公式資格ラベル集合（STEP2の整合判定に使う）
 const OFFICIAL_LICENSES = new Set();
 try {
-  // licenses.json から（"文字列" or {label}）を拾う
   for (const [, arr] of Object.entries(licenses || {})) {
     if (!Array.isArray(arr)) continue;
     for (const item of arr) {
@@ -124,14 +114,12 @@ try {
       if (label) OFFICIAL_LICENSES.add(label);
     }
   }
-  // 念のため、licenseMapの値（= 正式ラベル群）も取り込む
   for (const [, labels] of licenseMap.entries()) {
     if (!Array.isArray(labels)) continue;
     for (const l of labels) if (l) OFFICIAL_LICENSES.add(l);
   }
 } catch {}
 
-// 「名称 → ID」のマップを両表記で作る
 const tagIdByName = new Map();
 try {
   for (const t of (Array.isArray(tagList) ? tagList : [])) {
@@ -146,7 +134,6 @@ try {
 } catch (e) {
   console.error("tagIdByName 構築失敗:", e);
 }
-// ★追加：ID → 正式名称
 const tagNameById = new Map();
 try {
   for (const t of (Array.isArray(tagList) ? tagList : [])) {
@@ -158,12 +145,10 @@ try {
   console.error("tagNameById 構築失敗:", e);
 }
 
-// === STEP5/6 用：available_purposes（ID→ラベル辞書）から逆引きマップを作る ===
 function buildAvailableRevMap(available) {
-  // available: { "<id>": "<label>", ... } という JSON オブジェクトを想定
-  const idByLabel = new Map();   // 正式ラベル（ゆらぎ許容）→ ID
-  const labelById = new Map();   // ID → 正式ラベル
-  const labelsSet = new Set();   // 重複防止
+  const idByLabel = new Map(); 
+  const labelById = new Map(); 
+  const labelsSet = new Set(); 
 
   const toFW = (s) => String(s || "").replace(/\(/g, "（").replace(/\)/g, "）").replace(/~/g, "～");
   const toHW = (s) => String(s || "").replace(/（/g, "(").replace(/）/g, ")").replace(/～/g, "~");
@@ -173,52 +158,42 @@ function buildAvailableRevMap(available) {
     .replace(/[、。・／\/＿\-–—~～!?！？。，．・]/g, "");
   const norm  = (s) => scrub(toHW(toFW(s)));
 
-  // 入力がオブジェクトでない場合でも壊れないように防御
   const entries = available && typeof available === "object"
     ? Object.entries(available)
     : [];
 
   for (const [idRaw, labelRaw] of entries) {
-    const id    = String(idRaw);          // ID はそのまま（数値/文字列どちらも可）
-    const label = String(labelRaw || ""); // ラベルは文字列へ
+    const id    = String(idRaw); 
+    const label = String(labelRaw || ""); 
     if (!label) continue;
 
-    // 公式ラベルを保持
     labelById.set(id, label);
 
-    // ゆらぎ登録：そのまま / 全角化 / 半角化 / 正規化キー
     const variants = new Set([label, toFW(label), toHW(label)]);
     for (const v of variants) {
-      // 1) 元の表記
       if (!idByLabel.has(v)) idByLabel.set(v, id);
-      // 2) 正規化キー（空白・全半角ゆらぎ除去）
       const key = norm(v);
       if (key && !idByLabel.has(key)) idByLabel.set(key, id);
     }
 
-    // 公式ラベル集合（未使用なら将来のバリデーション用）
     labelsSet.add(label);
   }
 
-  // 逆引き：lookup ラッパ
   function resolveIdByLabel(inputLabel = "") {
     const raw = String(inputLabel || "");
     if (!raw) return null;
     const key1 = raw;
     const key2 = norm(raw);
-    // そのまま命中 or 正規化キー命中
     return idByLabel.get(key1) ?? idByLabel.get(key2) ?? null;
   }
 
   return { idByLabel, labelById, resolveIdByLabel, norm };
 }
 
-// === STEP3専用：tags.jsonから「サービス形態」だけを使うためのサブセット ===
 const serviceFormTagList = (Array.isArray(tagList) ? tagList : []).filter(
   t => t?.category === "サービス形態"
 );
 
-// 「サービス形態」専用：名称→ID / ID→名称
 const serviceTagIdByName = new Map();
 const serviceTagNameById = new Map();
 try {
@@ -236,8 +211,6 @@ try {
   console.error("serviceTag maps 構築失敗:", e);
 }
 
-// === サービス形態 専用マッチャ（ラベル候補 / ID候補）===
-// 依存: serviceFormTagList, serviceTagIdByName, serviceTagNameById, PLACE_ALIASES
 function matchServicePlacesInText(text = '') {
   const raw = String(text || '').trim();
   if (!raw) return [];
@@ -250,7 +223,6 @@ function matchServicePlacesInText(text = '') {
   const norm  = s => scrub(toHW(toFW(s)));
   const normText = norm(raw);
 
-  // ★ガード: ID=41（口腔外科系）は“完全一致入力”のときのみ候補に残す
 const ORAL_SURGERY_ID = 41;
 const ALLOWED_ORAL_SURGERY_KEYS = ['口腔外科', '歯科口腔外科'].map(norm);
 const oralLabel = serviceTagNameById.get(ORAL_SURGERY_ID);
@@ -258,7 +230,6 @@ const isAllowedOralSurgeryInput = () => ALLOWED_ORAL_SURGERY_KEYS.includes(norm(
 
   const out = new Set();
 
-  // 0) 厳密一致 → 正式ラベル
   const byExact =
         serviceTagIdByName.get(raw)
      || serviceTagIdByName.get(toFW(raw))
@@ -268,7 +239,6 @@ const isAllowedOralSurgeryInput = () => ALLOWED_ORAL_SURGERY_KEYS.includes(norm(
     if (name) out.add(name);
   }
 
-  // 1) エイリアス命中 → 正式ラベル
   for (const [alias, label] of Object.entries(PLACE_ALIASES || {})) {
     if (!alias || !label) continue;
     if (normText.includes(norm(alias))) {
@@ -283,7 +253,6 @@ const isAllowedOralSurgeryInput = () => ALLOWED_ORAL_SURGERY_KEYS.includes(norm(
     }
   }
 
-  // 2) 双方向部分一致
   const normalize = s => (s ? norm(s) : '');
   for (const t of (Array.isArray(serviceFormTagList) ? serviceFormTagList : [])) {
     const name = String(t?.name ?? '');
@@ -293,7 +262,6 @@ const isAllowedOralSurgeryInput = () => ALLOWED_ORAL_SURGERY_KEYS.includes(norm(
     if (normText.includes(nTag) || nTag.includes(normText)) out.add(name);
   }
 
-  // 3) ファジー補完
   if (out.size === 0) {
     const pool = [];
     for (const t of (Array.isArray(serviceFormTagList) ? serviceFormTagList : [])) {
@@ -308,7 +276,6 @@ const isAllowedOralSurgeryInput = () => ALLOWED_ORAL_SURGERY_KEYS.includes(norm(
     }
   }
 
-  // ★適用
 if (oralLabel && !isAllowedOralSurgeryInput()) out.delete(oralLabel);
 
   return Array.from(out);
@@ -325,22 +292,18 @@ function matchServiceTagIdsInText(text = '') {
       .replace(/[ \t\r\n\u3000、。・／\/＿\-–—~～!?！？。、，．・]/g,'');
   const norm = s => scrub(toHW(toFW(s)));
   const normText = norm(raw);
-  // ★ID=41（口腔外科系）は“完全一致入力”のときのみ返す
 const ORAL_SURGERY_ID = 41;
 const ALLOWED_ORAL_SURGERY_KEYS = ['口腔外科', '歯科口腔外科'].map(norm);
 const isAllowedOralSurgeryInput = () => ALLOWED_ORAL_SURGERY_KEYS.includes(norm(raw));
 
 
   const out = new Set();
-
-  // 0) 厳密一致
   const direct =
         serviceTagIdByName.get(raw)
      || serviceTagIdByName.get(toFW(raw))
      || serviceTagIdByName.get(toHW(raw));
   if (direct != null) out.add(direct);
 
-  // 1) エイリアス → 正式ラベル → ID
   for (const [alias, label] of Object.entries(PLACE_ALIASES || {})) {
     if (!alias || !label) continue;
     if (normText.includes(norm(alias))) {
@@ -352,7 +315,6 @@ const isAllowedOralSurgeryInput = () => ALLOWED_ORAL_SURGERY_KEYS.includes(norm(
     }
   }
 
-  // 2) 双方向部分一致
   const normalize = s => (s ? norm(s) : '');
   for (const t of (Array.isArray(serviceFormTagList) ? serviceFormTagList : [])) {
     const name = String(t?.name ?? '');
@@ -363,7 +325,6 @@ const isAllowedOralSurgeryInput = () => ALLOWED_ORAL_SURGERY_KEYS.includes(norm(
     if (normText.includes(nTag) || nTag.includes(normText)) out.add(id);
   }
 
-  // 3) ファジー補完
   if (out.size === 0) {
     const scored = [];
     for (const t of (Array.isArray(serviceFormTagList) ? serviceFormTagList : [])) {
@@ -427,10 +388,9 @@ const PLACE_ALIASES = {
   "病棟": "一般病院",
 };
 
-// ---- 転職理由の名称→ID マップ（job_change_purposes.json）----
 let reasonMaster = [];
 try {
-  const raw = require("../../job_change_purposes.json");  // tags.json と同じ階層
+  const raw = require("../../job_change_purposes.json"); 
   if (Array.isArray(raw))              reasonMaster = raw;
   else if (Array.isArray(raw?.items))  reasonMaster = raw.items;
   else if (Array.isArray(raw?.tags))   reasonMaster = raw.tags;
@@ -441,15 +401,13 @@ try {
 }
 
 const reasonIdByName = new Map();
-const reasonNameById = new Map(); // 逆引きも作っておく
+const reasonNameById = new Map();
 try {
   for (const t of (Array.isArray(reasonMaster) ? reasonMaster : [])) {
-    // 旧name互換も見るが、基本は tag_label を使う
     const label = String(t?.tag_label ?? t?.name ?? "");
     const id    = t?.id;
     if (!label || id == null) continue;
 
-    // 全角/半角ゆらぎも両方登録
     const fw = label.replace(/\(/g, "（").replace(/\)/g, "）").replace(/~/g, "～");
     const hw = label.replace(/（/g, "(").replace(/）/g, ")").replace(/～/g, "~");
 
@@ -463,7 +421,6 @@ try {
   console.error("reasonIdByName 構築失敗:", e);
 }
 
-// ==== STEP4 LLM 用：理由IDカタログ・サニタイズ・判定 ====
 const REASON_ID_SET = new Set(
   (Array.isArray(reasonMaster) ? reasonMaster : [])
     .map(t => t?.id)
@@ -521,16 +478,14 @@ function pickTop3ReasonOptions(userText = "") {
   return out.slice(0, 3);
 }
 
-// --- 推測抑止：辞書を持たず、ラベル本文から自動抽出した「証拠語」でゲートする ---
 const STRICT_REASON_MODE = true;
 
-// 全角/半角・空白・記号ゆらぎを落として比較
 function _normKeyJP(s=""){
   return String(s||"")
     .toLowerCase()
     .replace(/[ \t\r\n\u3000]/g,"")
     .replace(/[（）\(\)［\]\[\]／\/・,，。．\.\-–—~～!?！？:：]/g,"")
-    .replace(/直行直帰できる?/g,"直行直帰")  // 代表的ゆらぎの軽整形
+    .replace(/直行直帰できる?/g,"直行直帰") 
     .replace(/職場で働きたい$/,"")
     .replace(/で働きたい$/,"")
     .replace(/がほしい$/,"")
@@ -539,12 +494,10 @@ function _normKeyJP(s=""){
     .trim();
 }
 
-// ラベルから「核」を自動抽出（末尾の定型を剥がし、核語とその分割候補を返す）
 function extractEvidenceKeysFromLabel(label=""){
   const raw = String(label||"").trim();
   if (!raw) return [];
 
-  // 末尾の定型フレーズを削る
   let core = raw
     .replace(/の?職場で働きたい$/,"")
     .replace(/が欲しい$/,"")
@@ -556,30 +509,26 @@ function extractEvidenceKeysFromLabel(label=""){
     .replace(/したい$/,"")
     .trim();
 
-  // そのまま核語
   const keys = new Set();
   if (core) keys.add(core);
 
-  // 分割候補（・／、で区切った語、助詞は除外気味）
   const parts = core.split(/[・／\/、]/g).map(s=>s.trim()).filter(Boolean);
   for (const p of parts) {
     if (p.length >= 2) keys.add(p);
   }
 
-  // よくある冗語の除去（“職場”“環境”“体制”などは証拠になりにくい）
   const stop = new Set(["職場","環境","体制","制度","条件","勤務","働き方","理解","機会","基準","評価","残業時間"]);
   for (const k of Array.from(keys)) {
     const clean = k.replace(/(な|に|を|が|と|も|の)$/,"");
     if (!stop.has(clean)) keys.add(clean);
   }
 
-  // 正規化キーも用意
   const expanded = new Set();
   for (const k of keys) {
     expanded.add(k);
     expanded.add(_normKeyJP(k));
   }
-  // 例外的に代表的同義を軽く補強（汎用・公開OKな最小限）
+
   const txt = core;
   if (/近い|自宅|家/.test(txt)) { expanded.add("近い"); expanded.add("自宅から近い"); expanded.add("家から近い"); }
   if (/残業/.test(txt)) { expanded.add("残業"); }
@@ -587,11 +536,9 @@ function extractEvidenceKeysFromLabel(label=""){
   if (/夜勤/.test(txt)) { expanded.add("夜勤"); }
   if (/直行直帰/.test(txt)) { expanded.add("直行直帰"); }
 
-  // 1〜2文字しか残らないノイズは落とす
   return Array.from(expanded).filter(k => String(k||"").trim().length >= 2);
 }
 
-// 候補をユーザ発話の「明示語」だけでゲート
 function gateCandidatesByEvidence(cands = [], userText = ""){
   if (!STRICT_REASON_MODE) return cands || [];
   const T = _normKeyJP(userText || "");
@@ -601,7 +548,6 @@ function gateCandidatesByEvidence(cands = [], userText = ""){
   for (const c of (Array.isArray(cands) ? cands : [])) {
     const label = reasonNameById.get(c.id) || "";
     const keys = extractEvidenceKeysFromLabel(label);
-    // ラベル由来の核語のいずれかがテキストに“そのまま”か正規化で現れているか
     const ok = keys.some(k => {
       const nk = _normKeyJP(k);
       return (k && userText.includes(k)) || (nk && T.includes(nk));
@@ -611,15 +557,12 @@ function gateCandidatesByEvidence(cands = [], userText = ""){
   return passed;
 }
 
-
-// モデル出力のJSONを抽出（```json ... ``` でも、生テキスト内 {...} でもOKにする）
 function _extractJsonBlock(s = "") {
   const t = String(s || "");
   const code = t.match(/```json\s*([\s\S]*?)```/i)?.[1]
             || t.match(/```[\s\S]*?```/i)?.[0]?.replace(/```/g, "")
             || null;
   const raw = code || t;
-  // 最初の { から最後の } までを強引に拾って parse を試みる
   const i = raw.indexOf("{");
   const j = raw.lastIndexOf("}");
   if (i >= 0 && j > i) {
@@ -630,7 +573,6 @@ function _extractJsonBlock(s = "") {
   return null;
 }
 
-// 構造チェック＋正規化
 function _sanitizeReasonLLM(obj) {
   const out = { empathy: "", paraphrase: "", suggested_question: "", candidates: [] };
   if (!obj || typeof obj !== "object") return out;
@@ -654,7 +596,6 @@ function _sanitizeReasonLLM(obj) {
   return out;
 }
 
-// LLM呼び出し：共感＋要約＋候補ID＋次の深掘り（JSONで返す）
 async function analyzeReasonWithLLM(userText = "", s, opts = {}) {
   const key = process.env.OPENAI_API_KEY;
   if (!key) return { empathy: "", paraphrase: "", suggested_question: "", candidates: [] };
@@ -719,12 +660,10 @@ async function analyzeReasonWithLLM(userText = "", s, opts = {}) {
     const obj = _extractJsonBlock(txt);
     return _sanitizeReasonLLM(obj);
   } catch {
-    // 失敗時は無音で前進できる最小構成を返す
     return { empathy: "", paraphrase: "", suggested_question: "", candidates: [] };
   }
 }
 
-// ==== STEP5/6 LLM 用：Must NG / Must Have を抽出（JSONで返す。IDは扱わない） ====
 function _sanitizeMWLLM(obj){
   const out = { must_ng: [], must_have: [], summary: "", ask_next: "" };
   if (!obj || typeof obj !== "object") return out;
@@ -793,8 +732,6 @@ async function analyzeMWWithLLM(userText = "", mode /* 'ng' | 'have' */, s){
   return _sanitizeMWLLM(obj);
 }
 
-
-// 候補から「確定/あいまい/不明」を決める
 function decideReasonFromCandidates(cands = []) {
   const top = cands?.[0], second = cands?.[1];
   if (!top) return { status: "uncertain" };
@@ -806,7 +743,6 @@ function decideReasonFromCandidates(cands = []) {
   return options.length ? { status: "ambiguous", options } : { status: "uncertain" };
 }
 
-// ---- Step ラベル（UI用） ----
 const STEP_LABELS = {
   1: "求職者ID",
   2: "職種",
@@ -820,8 +756,6 @@ const STEP_LABELS = {
   10: "完了",
 };
 
-
-// ---- 深掘りの汎用質問（カテゴリ推定が弱い場合の保険） ----
 const GENERIC_REASON_Q = {
   deep1: [
     "一番ストレスだったのは、仕事内容・人間関係・労働時間のどれに近い？できれば具体例があれば教えて！",
@@ -831,8 +765,6 @@ const GENERIC_REASON_Q = {
   ],
 };
 
-// >>> SALARY: helpers (after classifyMotivation)
-// --- STEP4用：給与ワード検知ヘルパー ---
 function detectSalaryIssue(text=""){
   return /(給料|給与|年収|月収|手取り|ボーナス|賞与|昇給|お金|安い|低い|上がらない)/i.test(String(text||""));
 }
@@ -842,9 +774,7 @@ function isPeerComparisonSalary(text=""){
 function isValueMismatchSalary(text=""){
   return /(見合わない|割に合わない|評価|人事考課|等級|査定|フィードバック|昇給|昇格|不公平|公平|基準|成果|反映)/i.test(String(text||""));
 }
-// <<< SALARY: helpers
 
-// ---- セッション ----
 const sessions = Object.create(null);
 function initSession() {
   return {
@@ -854,39 +784,35 @@ function initSession() {
     status: {
       number: "",
       role: "",
-      role_ids: [],        // 職種（資格）の tags.json ID
+      role_ids: [],   
       place: "",
-      place_ids: [],       // 現職（施設/形態など）の tags.json ID
-      place_id: null,       // ★互換用（単一ID）。STEP3で常に同期させる
+      place_ids: [],     
+      place_id: null,   
       reason: "",
       reason_tag: "",
       reason_ids: [],
 
-      // ▼ Must を2系統に分離
-      must_ng: [],         // 絶対NG（Must NG）…ラベル配列
-      must_have: [],       // 絶対欲しい（Must Have）…ラベル配列
-      must_ng_ids: [],     // tags.json ID 配列
-      must_have_ids: [],   // tags.json ID 配列
+      must_ng: [],  
+      must_have: [],    
+      must_ng_ids: [],   
+      must_have_ids: [],  
 
-      // ▼ Want/Can/Will はテキスト保持
       want_text: "",
       can: "",
       will: "",
 
       licenses: [],
 
-      // ▼ メモ（未ヒット語句の保持先を分離）
       memo: {
         role_raw: "",
         reason_raw: "",
-        must_ng_raw: [],      // STEP5の未ヒット自由記述
-        must_have_raw: [],    // STEP6の未ヒット自由記述
+        must_ng_raw: [],  
+        must_have_raw: [],  
       },
     },
   };
 }
 
-// --- セッション互換初期化：ここだけが初期化の単一箇所 ---
 function normalizeSession(s){
   s.step ??= 1;
   s.isNumberConfirmed ??= false;
@@ -922,7 +848,6 @@ function normalizeSession(s){
   return s;
 }
 
-// --- リクエストからセッションを一度だけ確定 ---
 function bootstrapSessionFromReq(req){
   const method   = (req.method || "GET").toUpperCase();
   const safeBody = (typeof req.body === "object" && req.body) ? req.body : {};
@@ -940,7 +865,6 @@ function bootstrapSessionFromReq(req){
   return { s, sessionId, method, safeBody };
 }
 
-// ★追加：Step4の選択状態を完全に終了させる
 function resetDrill(s) {
   s.drill = {
     phase: null,
@@ -953,7 +877,6 @@ function resetDrill(s) {
   };
 }
 
-// --- 共通: CORS/JSON をまとめる ---
 function setCorsJson(res){
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Vary", "Origin");
@@ -967,7 +890,6 @@ export default async function handler(req, res) {
   setCorsJson(res);
   const { s, method, safeBody } = bootstrapSessionFromReq(req);
 
-  // 非POSTは統一で 200 + JSON
   if (method !== "POST") {
     const greet = s.isNumberConfirmed
       ? nextAfterId(s)
@@ -983,23 +905,17 @@ export default async function handler(req, res) {
     }, s.step));
   }
 
-
-  // ========== ここから通常の会話処理（POST） ==========
-
-// ここで関数スコープに変数を確保（Step1以降でも使えるように var を使用）
 var text = "";
 var idDigits = "";
 var looksId = false;
 
 try {
-  const { message = "" } = safeBody;  // ← req.body じゃなく safeBody を使う
+  const { message = "" } = safeBody; 
   text = String(message || "").trim();
 
-  // IDフォーマット判定（10〜20桁の数字を許容。ハイフン/空白など混在OK）
-  idDigits = String(text || "").replace(/\D/g, ""); // 数字だけ抽出
+  idDigits = String(text || "").replace(/\D/g, ""); 
   looksId = idDigits.length >= 10 && idDigits.length <= 20;
 
-  // 既にID確認済みで、さらにIDっぽい入力が来たら「次へ進む」案内を返す
   if (s.isNumberConfirmed && looksId) {
     return res.json(withMeta({
       response: nextAfterId(s),
@@ -1040,18 +956,14 @@ try {
 
   // ---- Step2：職種（所有資格） ----
 if (s.step === 2) {
-  // ユーザーの元発話を保存（ID化失敗時はこの文字列をそのまま表示）
 if (!s.drill.awaitingChoice) {
   s.status.memo.role_raw = text || "";
 }
-  // すでに選択肢を出している場合の応答
   if (s.drill.phase === "license" && s.drill.awaitingChoice && s.drill.options?.length) {
     const pick = normalizePick(text);
-    // まずはラベル名そのまま一致
    let chosen = s.drill.options.find(o => o === pick);
-    // だめなら別名→正規ラベル解決（例：実務者 → 実務者研修）
    if (!chosen) {
-   const resolved = matchLicensesInText(pick); // 別名でもOK
+   const resolved = matchLicensesInText(pick);
    if (resolved.length) {
    chosen = resolved.find(label => s.drill.options.includes(label)) || null;
   }
@@ -1059,7 +971,7 @@ if (!s.drill.awaitingChoice) {
     if (chosen) {
   s.status.role = chosen;
   s.status.licenses = [chosen];
-  s.status.role_ids = []; // ← tags.json由来のID取得フローを廃止
+  s.status.role_ids = [];
       s.status.role_ids = getIdsForOfficialLicense(chosen);
   s.drill = {
   phase: null,
@@ -1076,16 +988,13 @@ if (!s.drill.awaitingChoice) {
     step: 3, status: s.status, isNumberConfirmed: true, candidateNumber: s.status.number, debug: debugState(s)
   }, 3));
 }
-    // 再提示
     return res.json(withMeta({
       response: `ごめん、もう一度教えて！この中だとどれが一番近い？『${s.drill.options.map(x=>`［${x}］`).join("／")}』`,
       step: 2, status: s.status, isNumberConfirmed: true, candidateNumber: s.status.number, debug: debugState(s)
     }, 2));
   }
 
-    const found = matchLicensesInText(text); // 候補を全部拾う
-
-  // 完全一致（全角/半角ゆらぎ・空白除去込み）を最優先で自動確定
+  const found = matchLicensesInText(text); 
   const raw = String(text || "").trim();
   const toFW = (s) => s.replace(/\(/g, "（").replace(/\)/g, "）").replace(/~/g, "～");
   const toHW = (s) => s.replace(/（/g, "(").replace(/）/g, ")").replace(/～/g, "~");
@@ -1104,7 +1013,6 @@ if (!s.drill.awaitingChoice) {
     }, 3));
   }
 
-  // 候補が1件だけなら自動確定
   if (found.length === 1) {
     s.status.role = found[0];
     s.status.licenses = [found[0]];
@@ -1117,7 +1025,6 @@ if (!s.drill.awaitingChoice) {
     }, 3));
   }
 
-  // 候補ゼロ：公式マスタからのID解決をまず試す（成功したら正式名に正規化）
 if (found.length === 0) {
   const ids = getIdsForOfficialLicense(text);
   if (ids.length) {
@@ -1136,7 +1043,6 @@ if (found.length === 0) {
   }, 3));
 }
 
-  // 複数候補：選択肢を提示
   const options = found.slice(0, 6);
   s.drill.phase = "license";
   s.drill.awaitingChoice = true;
@@ -1150,13 +1056,10 @@ if (found.length === 0) {
   
   // ---- Step3：現職 ----
 if (s.step === 3) {
-  // すでに選択肢提示中なら、ユーザーの選択を確定
   if (s.drill.phase === "place" && s.drill.awaitingChoice && s.drill.options?.length) {
     const pick = normalizePick(text);
-    // まずはそのまま一致
     let chosen = s.drill.options.find(o => o === pick);
 
-    // ゆらぎ対策（全角/半角・空白除去）
     if (!chosen) {
       const toFW = (x) => x.replace(/\(/g,"（").replace(/\)/g,"）").replace(/~/g,"～");
       const toHW = (x) => x.replace(/（/g,"(").replace(/）/g,")").replace(/～/g,"~");
@@ -1167,7 +1070,6 @@ if (s.step === 3) {
     if (chosen) {
       s.status.place = chosen;
 
-            // ラベル→ID（サービス形態限定：厳密一致→限定ファジー）＋ 正式名称へ正規化
       const id =
             serviceTagIdByName.get(chosen)
          || serviceTagIdByName.get(chosen.replace(/\(/g,'（').replace(/\)/g,'）').replace(/~/g,'～'))
@@ -1175,25 +1077,24 @@ if (s.step === 3) {
 
       if (id != null) {
         s.status.place_ids = [id];
-        s.status.place_id  = id; // 追加
+        s.status.place_id  = id; 
         const official = serviceTagNameById.get(id);
         if (official) s.status.place = official;
       } else {
-        // サービス形態限定のフォールバック
+      
         const ids = matchServiceTagIdsInText(chosen);
         if (Array.isArray(ids) && ids.length) {
           s.status.place_ids = [ids[0]];
-          s.status.place_id  = ids[0]; // 追加
+          s.status.place_id  = ids[0]; 
           const official = serviceTagNameById.get(ids[0]);
           if (official) s.status.place = official;
         } else {
-          // サービス形態外はIDを付与しない（placeは保持、place_idsは空）
+
           s.status.place_ids = [];
-          s.status.place_id  = null;   // 追加
+          s.status.place_id  = null; 
         }
       }
 
-      // 次ステップへ
       s.drill = {
         phase: "reason",
         count: 0,
@@ -1205,28 +1106,25 @@ if (s.step === 3) {
       };
       s.step = 4;
       return res.json(withMeta({
-        response: "はじめに、今回の転職理由を教えてほしいな。きっかけってどんなことだった？\nしんどいと思ったこと、これはもう無理って思ったこと、逆にこういうことに挑戦したい！って思ったこと、何でもOKだよ◎",
+        response: "はじめに、今回の転職理由を教えてほしいな。きっかけってどんなことだった？\nしんどいと思ったこと、これはもう無理って思ったこと、逆にこういうことに挑戦したい！って思ったこと、何でもOKだよ🤖",
         step: 4, status: s.status, isNumberConfirmed: true, candidateNumber: s.status.number, debug: debugState(s)
       }, 4));
     }
 
-    // 再提示
     return res.json(withMeta({
       response: `ごめん、もう一度教えて！この中だとどれが一番近い？『${s.drill.options.map(x=>`［${x}］`).join("／")}』`,
       step: 3, status: s.status, isNumberConfirmed: true, candidateNumber: s.status.number, debug: debugState(s)
     }, 3));
   }
-// 初回入力：候補抽出
-const foundLabels = matchServicePlacesInText(text); // サービス形態限定のラベル配列
+
+const foundLabels = matchServicePlacesInText(text);
 const raw = String(text || "").trim();
 
-// 完全一致を最優先で自動確定
 const toFW = (x) => x.replace(/\(/g,'（').replace(/\)/g,'）').replace(/~/g,'～');
 const toHW = (x) => x.replace(/（/g,'(').replace(/）/g,')').replace(/～/g,'~');
 const normalize = (x) => toHW(toFW(String(x||""))).replace(/[ \t\r\n\u3000]/g,"");
 const exact = foundLabels.find(l => normalize(l) === normalize(raw));
 
-// サービス形態のみ：ラベル→ID 解決（厳密一致→サービス形態限定フォールバック）
 const finalize = (label) => {
   s.status.place = label;
 
@@ -1239,22 +1137,20 @@ const finalize = (label) => {
     s.status.place_ids = [id];
     s.status.place_id  = id; // 追加                    
     const official = serviceTagNameById.get(id);
-    if (official) s.status.place = official; // 正式名称で上書き
+    if (official) s.status.place = official;
   } else {
-    const ids = matchServiceTagIdsInText(label); // サービス形態限定フォールバック
+    const ids = matchServiceTagIdsInText(label); 
     if (Array.isArray(ids) && ids.length) {
       s.status.place_ids = [ids[0]];
-      s.status.place_id  = ids[0]; // 追加
+      s.status.place_id  = ids[0]; 
       const official = serviceTagNameById.get(ids[0]);
       if (official) s.status.place = official;
     } else {
-      // サービス形態外はIDを付与しない（placeは保持、place_idsは空）
       s.status.place_ids = [];
-      s.status.place_id  = null;   // 追加
-    }
+      s.status.place_id  = null;  
   }
-
-  // 次へ（Step4）
+ }
+ 
   s.drill = {
     phase: "reason",
     count: 0,
@@ -1267,21 +1163,18 @@ const finalize = (label) => {
   s.step = 4;
 
   return res.json(withMeta({
-    response: "はじめに、今回の転職理由を教えてほしいな。きっかけってどんなことだった？\nしんどいと思ったこと、これはもう無理って思ったこと、逆にこういうことに挑戦したい！って思ったこと、何でもOKだよ◎",
+    response: "はじめに、今回の転職理由を教えてほしいな。きっかけってどんなことだった？\nしんどいと思ったこと、これはもう無理って思ったこと、逆にこういうことに挑戦したい！って思ったこと、何でもOKだよ🤖",
     step: 4, status: s.status, isNumberConfirmed: true, candidateNumber: s.status.number, debug: debugState(s)
   }, 4));
 };
 
 if (exact) {
-  // ① 入力と完全一致があれば即確定
   return finalize(exact);
 }
 if (foundLabels.length === 1) {
-  // ② 候補が1つなら自動確定
   return finalize(foundLabels[0]);
 }
 if (foundLabels.length >= 2) {
-  // ③ 複数候補 → 選択肢提示（最大6）
   const options = foundLabels.slice(0, 6);
   s.drill.phase = "place";
   s.drill.awaitingChoice = true;
@@ -1292,12 +1185,10 @@ if (foundLabels.length >= 2) {
   }, 3));
 }
 
-// ④ 候補ゼロ：ユーザーの文字列をそのまま保持し、IDは付与しない
 s.status.place = raw;
-s.status.place_ids = [];   // サービス形態以外はIDを付与しない
-s.status.place_id  = null; // 追加
+s.status.place_ids = []; 
+s.status.place_id  = null;
 
-// 次へ（Step4）
 s.drill = {
   phase: "reason",
   count: 0,
@@ -1309,7 +1200,7 @@ s.drill = {
 };
 s.step = 4;
 return res.json(withMeta({
-  response: "はじめに、今回の転職理由を教えてほしいな。きっかけってどんなことだった？\nしんどいと思ったこと、これはもう無理って思ったこと、逆にこういうことに挑戦したい！って思ったこと、何でもOKだよ◎",
+  response: "はじめに、今回の転職理由を教えてほしいな。きっかけってどんなことだった？\nしんどいと思ったこと、これはもう無理って思ったこと、逆にこういうことに挑戦したい！って思ったこと、何でもOKだよ🤖",
   step: 4, status: s.status, isNumberConfirmed: true, candidateNumber: s.status.number, debug: debugState(s)
 }, 4)); 
 }
@@ -1317,7 +1208,6 @@ return res.json(withMeta({
  // ---- Step4：転職理由（LLM主導：共感＋要約＋ID候補＋次の深掘り） ----
 if (s.step === 4) {
 
-  // --- 既存：給与トリアージ（最優先） ---
   if (s.drill.phase === "salary-triage" && s.drill.awaitingChoice) {
     s.drill.reasonBuf.push(text || "");
 
@@ -1352,12 +1242,10 @@ if (s.step === 4) {
       }, 4));
     }
 
-    // 判定つかない → 通常LLMルートへ合流
     s.drill.awaitingChoice = false;
     s.drill.count = 1;
   }
 
-  // --- 既存：オンコール/夜勤のプライベート強制（確認フロー） ---
   if (s.drill.phase === "private-confirm" && s.drill.awaitingChoice) {
     if (isYes(text)) {
       const tag = "家庭との両立に理解のある職場で働きたい";
@@ -1372,7 +1260,6 @@ if (s.step === 4) {
         candidateNumber: s.status.number, debug: debugState(s)
       }, 5));
     }
-    // Yes以外 → 固定文で未マッチ扱い
     s.drill.flags.privateDeclined = true;
     resetDrill(s);
     s.status.reason_tag = "";
@@ -1388,7 +1275,6 @@ if (s.step === 4) {
     }, 5));
   }
 
-  // --- 新規：LLM提示の選択肢に対する回答（最大3つから1つ） ---
   if (s.drill.phase === "reason-llm-choice" && s.drill.awaitingChoice && s.drill.options?.length) {
     const pick = normalizePick(text);
     const chosen = s.drill.options.find(o => o === pick);
@@ -1406,7 +1292,7 @@ if (s.step === 4) {
         candidateNumber: s.status.number, debug: debugState(s)
       }, 5));
     }
-    // 再提示
+   
     return res.json(withMeta({
       response: `ごめん、もう一度どれが近いか教えて！『${s.drill.options.map(x=>`［${x}］`).join("／")}』`,
       step: 4, status: s.status, isNumberConfirmed: true,
@@ -1414,14 +1300,11 @@ if (s.step === 4) {
     }, 4));
   }
 
-  // --- 入口：1回目の入力（count===0） ---
   if (s.drill.count === 0) {
-    // ID未確定テキストを保持（未マッチ時に使う）
     s.status.reason = text || "";
     s.status.memo.reason_raw = text || "";
     s.drill.reasonBuf = [text || ""];
 
-    // 最優先：オンコール/夜勤の強制判定
     const forced0 = shouldForcePrivate(s) ? forcePrivateOncallNight(text) : null;
     if (forced0) {
       s.drill.category = forced0.category;
@@ -1438,7 +1321,6 @@ if (s.step === 4) {
       }, 4));
     }
 
-    // 給与トリアージのエントリチェック（既存ロジック）
     if (detectSalaryIssue(text)) {
       s.drill.phase = "salary-triage";
       s.drill.awaitingChoice = true;
@@ -1453,7 +1335,6 @@ if (s.step === 4) {
       }, 4));
     }
 
-        // --- LLM呼び出し（第1回）：共感＋要約＋次の深掘り ---
 const llm1 = await analyzeReasonWithLLM(text, s);
 const empathyRaw = (llm1?.empathy && llm1.empathy.trim()) || await generateEmpathy(text, s);
 let nextQ = (llm1?.suggested_question && llm1.suggested_question.trim())
@@ -1466,7 +1347,7 @@ if (catHits === 0) {
     s.drill.phase = "reason-llm-choice";
     s.drill.awaitingChoice = true;
     s.drill.options = options;
-    s.drill.count = 0; // まだ1ターン目
+    s.drill.count = 0; 
 
     return res.json(withMeta({
       response: joinEmp(empathyRaw, `この中だとどれが一番近い？『${options.map(x=>`［${x}］`).join("／")}』`),
@@ -1509,7 +1390,7 @@ if (catHits === 0) {
     // 内部用メモ（返却しない）
     s.drill.flags.last_llm_candidates = llm1?.candidates || [];
     s.drill.flags.last_llm_summary    = llm1?.paraphrase || "";
-    s.drill.flags.last_ask            = nextQ || ""; // 空なら上書き（＝“今回なし”の明示）
+    s.drill.flags.last_ask            = nextQ || "";
 
     return res.json(withMeta({
       response: nextQ ? joinEmp(empathyRaw, nextQ) : empathyRaw,
@@ -1518,15 +1399,11 @@ if (catHits === 0) {
     }, 4));
   }
 
-  // --- 2回目の入力（count===1）：確定/もう1ターン判断 ---
   if (s.drill.count === 1) {
     s.drill.reasonBuf.push(text || "");
     const joined = s.drill.reasonBuf.join(" ");
-
-    // --- LLM呼び出し（第2回）：候補で確定判定 ---
     const llm2 = await analyzeReasonWithLLM(joined, s);
 
-// ★ 証拠語でゲート（推測候補を除外）
 const filtered2 = gateCandidatesByEvidence(llm2?.candidates || [], joined);
 llm2.candidates = filtered2;
 
@@ -1550,16 +1427,14 @@ const decision = decideReasonFromCandidates(filtered2);
         if (decision.status === "ambiguous") {
       let nextQ = llm2?.suggested_question || "具体的にどんな場面で一番強く感じたか、教えてね。";
 
-          // [GUARD] 人間関係ask禁止（根拠なし）
 {
   const joinedBuf = (s.drill?.reasonBuf || [text || ""]).join(" ");
   if (isHumanRelationPrompt(nextQ) && !hasBossIssueHint(joinedBuf)) {
     nextQ = pickAngleFallback(joinedBuf, "人間関係");
   }
-}
-      
+}  
       if (isSamePrompt(nextQ, s.drill?.flags?.last_ask || "")) {
-  // まず LLM に別角度で作り直しを依頼
+
   const basis = Array.isArray(s?.drill?.reasonBuf) && s.drill.reasonBuf.length
     ? s.drill.reasonBuf.slice(-3).join(" / ")
     : (text || "");
@@ -1569,7 +1444,6 @@ const decision = decideReasonFromCandidates(filtered2);
   if (altQ && !isSamePrompt(altQ, s.drill?.flags?.last_ask || "")) {
     nextQ = altQ;
   } else {
-    // それでもダメな時だけ固定フォールバック
     const alts = [
       "直近で一番つらかった具体的な場面は？",
       "その中で“絶対に避けたいこと”を一つ挙げると？",
@@ -1592,10 +1466,9 @@ const decision = decideReasonFromCandidates(filtered2);
         candidateNumber: s.status.number, debug: debugState(s)
       }, 4));
     }
-        // 不確定：もう1ターン深掘り
+      
       let nextQ = llm2?.suggested_question || "一番の根っこは何か、言葉にしてみてね。";
 
-    // [GUARD] 人間関係ask禁止（根拠なし）
 {
   const joinedBuf = (s.drill?.reasonBuf || [text || ""]).join(" ");
   if (isHumanRelationPrompt(nextQ) && !hasBossIssueHint(joinedBuf)) {
@@ -1603,7 +1476,6 @@ const decision = decideReasonFromCandidates(filtered2);
   }
 }     
       if (isSamePrompt(nextQ, s.drill?.flags?.last_ask || "")) {
-  // まず LLM に別角度で作り直しを依頼
   const basis = Array.isArray(s?.drill?.reasonBuf) && s.drill.reasonBuf.length
     ? s.drill.reasonBuf.slice(-3).join(" / ")
     : (text || "");
@@ -1613,7 +1485,6 @@ const decision = decideReasonFromCandidates(filtered2);
   if (altQ && !isSamePrompt(altQ, s.drill?.flags?.last_ask || "")) {
     nextQ = altQ;
   } else {
-    // それでもダメな時だけ固定フォールバック
     const alts = [
       "直近で一番つらかった具体的な場面は？",
       "その中で“絶対に避けたいこと”を一つ挙げると？",
@@ -1635,13 +1506,11 @@ const decision = decideReasonFromCandidates(filtered2);
       }, 4));
     }
 
-    // --- 3回目の入力（count===2）：確定 or 選択肢提示（最大3） ---
   if (s.drill.count === 2) {
     s.drill.reasonBuf.push(text || "");
     const joined = s.drill.reasonBuf.join(" ");
     const llm3 = await analyzeReasonWithLLM(joined, s);
 
-// ★ 証拠語でゲート（推測候補を除外）
 const filtered3 = gateCandidatesByEvidence(llm3?.candidates || [], joined);
 llm3.candidates = filtered3;
 
@@ -1662,7 +1531,6 @@ const decision = decideReasonFromCandidates(filtered3);
       }, 5));
     }
 
-    // まだ曖昧 → 最大3つの選択肢を提示（確定済みなら出さない）
     const options = (decision.status === "ambiguous" ? decision.options : [])
       .filter(Boolean)
       .slice(0, 3);
@@ -1679,7 +1547,6 @@ const decision = decideReasonFromCandidates(filtered3);
       }, 4));
     }
 
-    // それでも未決 → paraphraseテキストで確定してStep5へ
     const p1 = String(llm3?.paraphrase || "").trim();
     const p2 = String(s.drill?.flags?.last_llm_summary || "").trim();
     const p3 = String(joined || "").slice(0, 30);
@@ -1695,20 +1562,18 @@ const decision = decideReasonFromCandidates(filtered3);
       step: 5, status: s.status, isNumberConfirmed: true,
       candidateNumber: s.status.number, debug: debugState(s)
     }, 5));
-  } // ← この閉じかっこが抜けてた！
+  } 
 
-  // フォールバック
   const empF = await generateEmpathy(text || "", s);
   return res.json(withMeta({
     response: joinEmp(empF, "もう少しだけ詳しく教えて！"),
     step: 4, status: s.status, isNumberConfirmed: true,
     candidateNumber: s.status.number, debug: debugState(s)
   }, 4));
-} // ← if (s.step === 4) の終わり
+} 
 
   // ---- Step5：絶対NG（Must NG） ----
 if (s.step === 5) {
-  // 1) なし宣言 → 次へ
   if (isNone(text)) {
     s.step = 6;
     return res.json(withMeta({
@@ -1729,8 +1594,6 @@ if (s.step === 5) {
   });
 
   const emp = await generateEmpathy(text || "", s);
-
-  // LLM が返した ID 候補のみ採用（tags.json 全量を available_purposes として与えている）
   const available = loadAvailablePurposes();
   const picked = [];
   if (Array.isArray(dec?.candidates)) {
@@ -1746,7 +1609,6 @@ if (s.step === 5) {
     }
   }
 
-  // unmatched は“ID化しないメモ”として保存
   if (dec?.unmatched_title) {
     s.status.memo.must_ng_raw ??= [];
     s.status.memo.must_ng_raw.push(dec.unmatched_title);
@@ -1763,7 +1625,6 @@ if (s.step === 5) {
 
  // ---- Step6：絶対欲しい（Must Have） ----
 if (s.step === 6) {
-  // 1) なし宣言 → 次へ
   if (isNone(text)) {
     s.step = 7;
     return res.json(withMeta({
@@ -1784,8 +1645,6 @@ if (s.step === 6) {
   });
 
   const emp = await generateEmpathy(text || "", s);
-
-  // LLM が返した ID 候補のみ採用
   const available = loadAvailablePurposes();
   const picked = [];
   if (Array.isArray(dec?.candidates)) {
@@ -1801,7 +1660,6 @@ if (s.step === 6) {
     }
   }
 
-  // unmatched は“ID化しないメモ”として保存
   if (dec?.unmatched_title) {
     s.status.memo.must_have_raw ??= [];
     s.status.memo.must_have_raw.push(dec.unmatched_title);
@@ -1865,8 +1723,6 @@ if (s.step === 10) {
   }, 10));
 }
 
-
-  // 想定外フォールバック
   return res.json(withMeta({
     response: "（内部エラー）",
     step: s.step,
@@ -1877,12 +1733,7 @@ if (s.step === 10) {
   }, s.step));
 }
  
-// ---- 入口 ここまで ----
 
-// ==== 共感生成（自然な会話風） ====
-// ←この関数を丸ごと置換
-// ==== 共感生成（自然な会話風） ====
-// ←この関数を丸ごと置換
 async function generateEmpathy(userText, s){
   const key = process.env.OPENAI_API_KEY;
   const fallback = "今の話、ちゃんと受け取ったよ。";
@@ -1928,20 +1779,15 @@ async function generateEmpathy(userText, s){
     });
 
     let txt = rsp?.choices?.[0]?.message?.content?.trim() || "";
-
-     // ---- 後処理：疑問・依頼・提案・誘導を文単位で除去 ----
-    // 軽整形
     txt = txt.replace(/\"/g, "")
              .replace(/\s+\n/g, "\n")
              .replace(/\n{3,}/g, "\n\n")
              .trim();
 
-    // 文分割
     const sentences = txt
       .split(/(?<=[。．！!？?])\s*/).filter(Boolean)
       .map(s => s.trim());
 
-    // トリガ正規表現（疑問・依頼・提案・誘導）
     const RE_QUESTION_MARK = /[？?]\s*$/;
     const RE_QUESTION_WORD = /(どれ|どの|どっち|どんな|どう|なに|何|なぜ|いつ|どこ|理由|教えて|聞かせて)/;
     const RE_REQUEST       = /(ください|下さい|お願い|お願いします|おしえて|教えて|伝えて|記入して|回答して|返答して|詳しく|具体的に)/;
@@ -1952,7 +1798,6 @@ async function generateEmpathy(userText, s){
     const isProbingLike = (s) => {
       const t = String(s || "").trim();
       if (!t) return false;
-      // 文末記号だけでなく語彙ベースも見る
       return RE_QUESTION_MARK.test(t)
           || RE_QUESTION_WORD.test(t)
           || RE_REQUEST.test(t)
@@ -1961,10 +1806,8 @@ async function generateEmpathy(userText, s){
           || RE_LEADING.test(t);
     };
 
-    // 質問/依頼/提案/誘導に当たる文は落とす
     let kept = sentences.filter(s => !isProbingLike(s));
 
-    // すべて落ちた場合の保険：疑問符を除去し、依頼/提案語を間引いた上で中立化
     if (kept.length === 0 && sentences.length) {
       kept = sentences.map(s => s
         .replace(RE_QUESTION_MARK, "")
@@ -1976,31 +1819,25 @@ async function generateEmpathy(userText, s){
       ).filter(Boolean);
     }
 
-    // 句点で整える
     let out = kept.map(p => {
       let t = p.replace(/[？?]+$/,"").trim();
       if (!/[。．！!]$/.test(t)) t += "。";
       return t.replace(/．$/, "。");
     }).filter(Boolean).join("").replace(/。。+/g, "。").trim();
 
-    // 長さ調整（2〜3文／最大180字目安）
     if (out.length > 180) {
       const sents = out.split(/(?<=。|！|!)/).filter(Boolean);
       out = sents.slice(0, 3).join("").trim();
       if (out.length > 180) out = out.slice(0, 178) + "。";
     }
 
-    // 最終保険
     if (!out) out = fallback;
     return out;
-  } catch (e) {                    // ← これを追加
-    return fallback;              // フェイルセーフ
+  } catch (e) {  
+    return fallback; 
   }
 }
 
-// ==== 類似度＆共感用ヘルパ ====
-
-// 全角↔半角のゆらぎ吸収＆区切り削除
 function _toFW(s){ return String(s||"").replace(/\(/g,"（").replace(/\)/g,"）").replace(/~/g,"～"); }
 function _toHW(s){ return String(s||"").replace(/（/g,"(").replace(/）/g,")").replace(/～/g,"~"); }
 function _scrub(s){ return String(s||"").replace(/[ \t\r\n\u3000、。・／\/＿\u2013\u2014\-~～!?！？。、，．・]/g,""); }
@@ -2018,7 +1855,6 @@ function forcePrivateOncallNight(userText = "") {
 }
 
 function shouldForcePrivate(s){
-  // 「プライベート(両立)ではない」と否定されたら、以後は強制をかけない
   return !(s && s.drill && s.drill.flags && s.drill.flags.privateDeclined);
 }
 
@@ -2029,31 +1865,22 @@ function isYes(text = "") {
   return /^(はい|うん|そう|ok|了解|そのとおり|そんな感じ|お願いします|それで|求めてる)/i.test(String(text || "").trim());
 }
 
-// ---- ヘルパ ----
-
-// 疑問で終わらせないフィルタ（←この関数を丸ごと置換）
 function enforcePlainEnding(text = '') {
   let t = String(text).trim();
   if (!t) return t;
 
   t = t.replace(/\s+\n/g, '\n').replace(/\n{3,}/g, '\n\n');
 
-  // 末尾が ? / ？ のときは句点に置換
-  t = t.replace(/[？?]+$/,'。');
-
-  // 終端に句読点等がなければ句点を付与
   if (!/[。！？!？＞）)\]]$/.test(t)) t += '。';
   return t;
 }
 
-// 共感と質問は触らず、空行で結ぶだけ
 function joinEmp(a, b) {
   const emp = String(a || "").trim();
   const q   = String(b || "").trim();
   return q ? `${emp}\n\n${q}` : emp;
 }
 
-// 「前ターンと同じ or ほぼ同じ促し」を避けるための簡易一致判定
 function isSamePrompt(a, b){
   const norm = s => String(s || "")
     .toLowerCase()
@@ -2066,7 +1893,6 @@ function isSamePrompt(a, b){
   return A === B || A.includes(B) || B.includes(A);
 }
 
-// --- 人間関係バイアス抑止ヘルパ ---
 function isHumanRelationPrompt(s){
   const t = String(s || "");
   return /(人間関係|職場の雰囲気|上司|先輩|同僚|チームワーク)/.test(t);
@@ -2076,25 +1902,21 @@ function hasBossIssueHint(text=""){
   return /(上司|管理者|師長|部長|課長|リーダー|陰口|高圧|マウント|パワハラ|理不尽)/.test(t);
 }
 
-// --- 角度フォールバック（人間関係以外へ切り替え） ---
 function pickAngleFallback(buf="", excludeCategory=""){
   const t = String(buf || "");
 
-  // 優先規則（軽量・決め打ち）
   if (/(動物|アレルギ|花粉|体質|喘息)/.test(t)) return "環境や業務で避けたい条件を一語で添えると要件が固まる。";
   if (/(夜勤|夜番|オンコール|ｵﾝｺｰﾙ|コール番|呼び出し)/i.test(t)) return "時間帯や呼び出し有無など勤務条件で一番避けたい点を一つ挙げると整理が進む。";
   if (/(残業|シフト|連勤|休憩|有給|直行直帰|朝礼|日報|定時)/.test(t)) return "時間面か制度面かを一語で補足できると候補が安定する。";
   if (/(評価|昇給|昇格|査定|反映|不公平|公平|基準)/.test(t)) return "評価や昇給のどこが気になるか要点を一つだけ添えると精度が上がる。";
   if (/(通勤|距離|移動|直行|直帰|訪問)/.test(t)) return "日々の動き方で負担が大きい点を一つに絞って書けると整理が進む。";
 
-  // 既定の非・人間関係角度
   if (excludeCategory === "人間関係") {
     return "直近で一番つらかった具体場面を一つだけ短く添えると方向が絞れる。";
   }
   return "一番負担が大きい条件を一つに絞って書けると整理が進む。";
 }
 
-// ▼▼ buildStatusBar（置換 or 追加） ▼▼
 function buildStatusBar(st = {}, currentStep = 0) {
   const maxStep = 10;
   const steps = [];
@@ -2122,8 +1944,6 @@ function buildStatusBar(st = {}, currentStep = 0) {
     number: String(st?.number || ""),
   };
 }
-// ▲▲ ここまで ▲▲
-
 
 function withMeta(payload, step) {
   const statusBar = buildStatusBar(payload.status, step);
@@ -2145,12 +1965,11 @@ function debugState(s) {
     reasonCategory: s.drill.category,
     awaitingChoice: s.drill.awaitingChoice,
     reasonTag: s.status.reason_tag,
-    mustCount: (s.status.must_ng || []).length,     // 修正：must_ng配列を使用
-    wantCount: (s.status.want_text || "").length,   // 修正：want_textの文字数
+    mustCount: (s.status.must_ng || []).length, 
+    wantCount: (s.status.want_text || "").length, 
   };
 } 
 
-// 0.5 を使わない進行に合わせた文言
 function nextAfterId(s) {
   switch (s.step) {
     case 2:
@@ -2158,14 +1977,13 @@ function nextAfterId(s) {
     case 3:
       return "IDは確認済だよ！次に【今どこで働いてる？】を教えてね。\n（例）○○病院 外来／△△クリニック";
     case 4:
-      return "IDは確認済だよ！\nはじめに、今回の転職理由を教えてほしいな。きっかけってどんなことだった？\nしんどいと思ったこと、これはもう無理って思ったこと、逆にこういうことに挑戦したい！って思ったこと、何でもOKだよ◎";
+      return "IDは確認済だよ！\nはじめに、今回の転職理由を教えてほしいな。きっかけってどんなことだった？\nしんどいと思ったこと、これはもう無理って思ったこと、逆にこういうことに挑戦したい！って思ったこと、何でもOKだよ🤖";
     default:
       return "IDは確認済だよ！";
   }
 }
 
 function mustIntroText() {
-  // STEP5の導入は Must NG 用に変更
   return "OK！ここから条件の整理に入るね。\n\n" +
          "まずは【絶対NG】の条件を教えてほしい。\n" +
          "仕事内容でも制度でもOKで、これは無理！ってやつ。\n\n" +
@@ -2175,7 +1993,6 @@ function mustIntroText() {
          "「長時間の残業は嫌だ！」\n\n" +
          "次に『絶対ないと困るもの』を聞くから、今は“NG”だけ教えてね。";
 }
-
 
 function noOptionCategory(cat) {
   return cat === "職場環境・設備" || cat === "職場の安定性" || cat === "給与・待遇";
@@ -2209,8 +2026,6 @@ function isNone(text) {
   return /^(ない|特にない|無し|なし|no)$/i.test(t);
 }
 
-// 入力に含まれる資格ラベル候補をすべて返す（同一ラベルは重複排除）
-// ★正規化して部分一致するように改善版
 function matchLicensesInText(text = "") {
   const toFW = (s) => String(s || "").replace(/\(/g,"（").replace(/\)/g,"）").replace(/~/g,"～");
   const toHW = (s) => String(s || "").replace(/（/g,"(").replace(/）/g,")").replace(/～/g,"~");
@@ -2233,7 +2048,6 @@ function matchLicensesInText(text = "") {
   return Array.from(out);
 }
 
-// これで既存の matchTagIdsInText を“丸ごと置き換え”
 function matchTagIdsInText(text = "") {
   const raw = String(text || "").trim();
   if (!raw) return [];
@@ -2247,15 +2061,12 @@ function matchTagIdsInText(text = "") {
 
   const normText = norm(raw);
   const out = new Set();
-
-  // 0) 厳密一致（全角/半角ゆらぎも）
   const direct =
       tagIdByName.get(raw)
    || tagIdByName.get(toFW(raw))
    || tagIdByName.get(toHW(raw));
   if (direct != null) out.add(direct);
 
-  // 1) エイリアス → 正式ラベル → ID
   for (const [alias, label] of Object.entries(PLACE_ALIASES || {})) {
     if (!alias || !label) continue;
     if (normText.includes(norm(alias))) {
@@ -2267,7 +2078,6 @@ function matchTagIdsInText(text = "") {
     }
   }
 
-  // 2) 双方向の部分一致（タグ名 ⊂ 入力 / 入力 ⊂ タグ名）
   const normalize = (s) => (s ? norm(s) : "");
   for (const t of (Array.isArray(tagList) ? tagList : [])) {
     const name = String(t?.name ?? "");
@@ -2278,7 +2088,6 @@ function matchTagIdsInText(text = "") {
     if (normText.includes(nTag) || nTag.includes(normText)) out.add(id);
   }
 
-  // 3) まだ空ならファジー（2-gram Jaccard）で上位を補完
   if (out.size === 0) {
     const scored = [];
     for (const t of (Array.isArray(tagList) ? tagList : [])) {
@@ -2296,19 +2105,13 @@ function matchTagIdsInText(text = "") {
   return Array.from(out);
 }
 
-// ★追加：簡易ヒューリスティック（同義語→tags.jsonラベル）
 function quickKeywordsToLabels(text = "", mode = "ng") {
   const t = String(text || "").toLowerCase();
 
   const out = new Set();
 
-  // ボーナス → 賞与
   if (/(ﾎﾞｰﾅｽ|ボーナス|bonus)/.test(t)) out.add("賞与");
-
-  // 有給/有休 → 有給消化率ほぼ100%
   if (/(有給|有休)/.test(t)) out.add("有給消化率ほぼ100%");
-
-  // 残業 → 残業0 / 残業月20時間以内（NGなら強めに0を優先、HAVEなら20hも候補）
   if (/残業|定時|ｻﾋﾞ残|サビ残/.test(t)) {
     out.add("残業0");
     if (mode === "have") out.add("残業月20時間以内");
@@ -2317,7 +2120,6 @@ function quickKeywordsToLabels(text = "", mode = "ng") {
   return Array.from(out);
 }
 
-// === 自由語ラベル群を tags.json の正式タグ（ID/正式名）へ正規化する共通ヘルパ ===
 function mapFreeLabelsToTags(freeLabels = []) {
   const results = [];
   const seenIds = new Set();
@@ -2332,14 +2134,11 @@ function mapFreeLabelsToTags(freeLabels = []) {
   for (const raw of (freeLabels || [])) {
     const q = String(raw || "").trim();
     if (!q) continue;
-
-    // 1) 厳密一致（全角半角ゆらぎ含む）
     let id =
           tagIdByName.get(q)
        || tagIdByName.get(toFW(q))
        || tagIdByName.get(toHW(q));
 
-    // 2) 双方向の部分一致
     if (id == null) {
       const nq = norm(q);
       for (const t of (Array.isArray(tagList) ? tagList : [])) {
@@ -2352,7 +2151,6 @@ function mapFreeLabelsToTags(freeLabels = []) {
       }
     }
 
-    // 3) ファジー（2-gram Jaccard）
     if (id == null) {
       let best = null, bestScore = 0;
       for (const t of (Array.isArray(tagList) ? tagList : [])) {
@@ -2374,9 +2172,6 @@ function mapFreeLabelsToTags(freeLabels = []) {
   return results; // [{id, label}] 正式IDと正式ラベル（tags.json準拠）
 }
 
-// === 所有資格（qualifications.json）用：正式ラベルからID配列を引く ===
-// 仕様：まず「ラベルそのもの」の厳密一致のみを最優先（単一IDで返す）。
-//       見つからない場合のみ、別名や部分一致にフォールバックして最も近い1件に絞る。
 function getIdsForOfficialLicense(label = "") {
   if (!label) return [];
 
@@ -2385,15 +2180,12 @@ function getIdsForOfficialLicense(label = "") {
   const scrub = (s) => String(s || "").trim().toLowerCase()
     .replace(/[ \t\r\n\u3000、。・／\/＿\u2013\u2014\-~～!?！？。、，．・]/g, "");
   const normalize = (s) => scrub(toHW(toFW(s)));
-
-  // 1) 「ラベルそのもの」だけで厳密一致（全角/半角ゆらぎは見るが、ここではエイリアスは見ない）
   const exactByLabel =
       licenseTagIdByName.get(label)
    || licenseTagIdByName.get(toFW(label))
    || licenseTagIdByName.get(toHW(label));
   if (exactByLabel != null) return [exactByLabel];
 
-  // 2) ここからフォールバック：ラベル＋その別名を候補語にして、最も近い1件に絞る
   const needleSet = new Set([label, toFW(label), toHW(label)]);
   for (const [alias, labels] of licenseMap.entries()) {
     if (Array.isArray(labels) && labels.includes(label)) {
@@ -2403,7 +2195,6 @@ function getIdsForOfficialLicense(label = "") {
     }
   }
 
-  // 2-1) 候補語での厳密一致が複数出たら、「候補名の正規名称」と元ラベルの近さで1件に絞る
   const exactCandidates = [];
   for (const n of needleSet) {
     const id = licenseTagIdByName.get(n);
@@ -2420,7 +2211,6 @@ function getIdsForOfficialLicense(label = "") {
     return [exactCandidates[0].id];
   }
 
-  // 2-2) それでも無ければ、qualifications.json 全体を双方向部分一致で探索し、最も近い1件
   const needles = Array.from(needleSet).map(normalize).filter(Boolean);
   let best = null;
   for (const t of (Array.isArray(licenseTagList) ? licenseTagList : [])) {
