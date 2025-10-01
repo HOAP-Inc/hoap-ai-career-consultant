@@ -493,6 +493,37 @@ function _normKeyJP(s=""){
     .replace(/できる$/,"")
     .trim();
 }
+function countCategoryHits(userText = "") {
+  const T = _normKeyJP(userText || "");
+  if (!T) return 0;
+  const CATS = {
+    "労働時間・シフト": [
+      /夜勤/, /ｵﾝｺｰﾙ|オンコール|当直/, /残業|定時/, /シフト|連勤/, /直行直帰/, /休憩/
+    ],
+    "仕事内容・キャリア": [
+      /業務量|負担|忙しさ|多忙/, /急性期|重症|救急/, /記録|書類|事務/, /成長|経験|スキル|専門/
+    ],
+    "給与・待遇": [
+      /給料|給与|年収|月収|手取り|賞与|ﾎﾞｰﾅｽ|ボーナス|昇給|待遇/, /安い|低い|上がらない/
+    ],
+    "通勤・勤務地・動線": [
+      /通勤|距離|移動|近い|遠い/, /訪問|直行直帰/
+    ],
+    "休暇・休み": [
+      /休日|休み|有給|有休|連休|土日|祝日/
+    ],
+    "人間関係・組織": [
+      /人間関係|上司|同僚|師長|部長|雰囲気|チーム/
+    ],
+  };
+
+  let hitCats = 0;
+  for (const regs of Object.values(CATS)) {
+    const matched = regs.some(re => re.test(T));
+    if (matched) hitCats++;
+  }
+  return hitCats; 
+}
 
 function extractEvidenceKeysFromLabel(label=""){
   const raw = String(label||"").trim();
