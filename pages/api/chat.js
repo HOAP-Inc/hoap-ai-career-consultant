@@ -1239,6 +1239,30 @@ return res.json(withMeta({
  // ---- Step4：転職理由（LLM主導：共感＋要約＋ID候補＋次の深掘り） ----
 if (s.step === 4) {
 
+   if (s.drill.phase === "reason-category-choice" && s.drill.awaitingChoice && Array.isArray(s.drill.options) && s.drill.options.length) {
+    const pick = normalizePick(text);
+    const chosen = s.drill.options.find(o => o === pick);
+
+    if (chosen) {
+      s.drill.category = chosen;
+      s.drill.awaitingChoice = false;
+      s.drill.count = 1;
+
+      const emp = await generateEmpathy(text, s);
+      return res.json(withMeta({
+        response: emp, // 選択後は共感のみ。誘導文は出さない。
+        step: 4, status: s.status, isNumberConfirmed: true,
+        candidateNumber: s.status.number, debug: debugState(s)
+      }, 4));
+    }
+
+    return res.json(withMeta({
+      response: `ごめん、もう一度どれが近いか教えて！『${s.drill.options.map(x=>`［${x}］`).join("／")}』`,
+      step: 4, status: s.status, isNumberConfirmed: true,
+      candidateNumber: s.status.number, debug: debugState(s)
+    }, 4));
+  }
+
   if (s.drill.phase === "salary-triage" && s.drill.awaitingChoice) {
     s.drill.reasonBuf.push(text || "");
 
@@ -1373,19 +1397,18 @@ let nextQ = (llm1?.suggested_question && llm1.suggested_question.trim())
 
 const catHits = countCategoryHits(text);
 if (catHits === 0) {
-  const options = pickTop3ReasonOptions(text);
-  if (options.length) {
-    s.drill.phase = "reason-llm-choice";
-    s.drill.awaitingChoice = true;
-    s.drill.options = options;
-    s.drill.count = 0; 
+  const options = ["人間関係", "労働条件", "仕事内容・キャリア"];
+  s.drill.phase = "reason-category-choice";
+  s.drill.awaitingChoice = true;
+  s.drill.options = options;
+  s.drill.count = 0;
 
-    return res.json(withMeta({
-      response: joinEmp(empathyRaw, `この中だとどれが一番近い？『${options.map(x=>`［${x}］`).join("／")}』`),
-      step: 4, status: s.status, isNumberConfirmed: true,
-      candidateNumber: s.status.number, debug: debugState(s)
-    }, 4));
-  }
+  return res.json(withMeta({
+    response: joinEmp(empathyRaw, `どれが一番近い？『${options.map(x=>`［${x}］`).join("／")}』`),
+    step: 4, status: s.status, isNumberConfirmed: true,
+    candidateNumber: s.status.number, debug: debugState(s)
+  }, 4));
+}
 }
 
 {
