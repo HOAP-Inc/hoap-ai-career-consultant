@@ -1437,7 +1437,6 @@ if (catHits === 0) {
     candidateNumber: s.status.number, debug: debugState(s)
   }, 4));
 }
-}
 
 {
   const joinedBuf = (s.drill?.reasonBuf || [text || ""]).join(" ");
