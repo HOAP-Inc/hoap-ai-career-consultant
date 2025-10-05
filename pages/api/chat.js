@@ -1210,58 +1210,6 @@ return res.json(withMeta({
  // ---- Step4：転職理由（LLM主導：共感＋要約＋ID候補＋次の深掘り） ----
 if (s.step === 4) {
 
-if (s.drill.phase === "reason-category-choice" && s.drill.awaitingChoice && Array.isArray(s.drill.options) && s.drill.options.length) {
-  const pick = normalizePick(text);
-  const chosen = s.drill.options.find(o => o === pick);
-
-  if (chosen) {
-    s.drill.category = chosen;
-    s.drill.awaitingChoice = false;
-
-    const basis = Array.isArray(s?.drill?.reasonBuf) && s.drill.reasonBuf.length
-      ? s.drill.reasonBuf.slice(-3).join(" / ")
-      : (s.status.memo?.reason_raw || "");
-
-    const llm1 = await analyzeReasonWithLLM(basis, s);
-    const empathy = (llm1?.empathy && llm1.empathy.trim()) || await generateEmpathy(text, s);
-
-    let nextQ = (llm1?.suggested_question && llm1.suggested_question.trim()) || "もう少しだけ詳しく教えて！";
-
-    if (isSamePrompt(nextQ, s.drill?.flags?.last_ask || "")) {
-      const redo = await analyzeReasonWithLLM(basis, s, { forceNewAngle: true });
-      const altQ = redo?.suggested_question || "";
-      if (altQ && !isSamePrompt(altQ, s.drill?.flags?.last_ask || "")) {
-        nextQ = altQ;
-      } else {
-        const alts = [
-          "直近で一番つらかった具体的な場面は？",
-          "その中で“絶対に避けたいこと”を一つ挙げると？",
-          "改善されると一気に楽になるポイントはどこ？"
-        ];
-        nextQ = alts[(s.drill?.count ?? 0) % alts.length];
-      }
-    }
-
-    s.drill.count = 1;
-    s.drill.phase = "reason-llm-ask2";
-    s.drill.flags.last_llm_candidates = llm1?.candidates || [];
-    s.drill.flags.last_llm_summary    = llm1?.paraphrase || "";
-    s.drill.flags.last_ask            = nextQ || "";
-
-    return res.json(withMeta({
-      response: nextQ ? joinEmp(empathy, nextQ) : empathy,
-      step: 4, status: s.status, isNumberConfirmed: true,
-      candidateNumber: s.status.number, debug: debugState(s)
-    }, 4));
-  }
-
-  return res.json(withMeta({
-    response: `ごめん、もう一度どれが近いか教えて！『${s.drill.options.map(x=>`［${x}］`).join("／")}』`,
-    step: 4, status: s.status, isNumberConfirmed: true,
-    candidateNumber: s.status.number, debug: debugState(s)
-  }, 4));
-}
-
   if (s.drill.phase === "salary-triage" && s.drill.awaitingChoice) {
     s.drill.reasonBuf.push(text || "");
 
