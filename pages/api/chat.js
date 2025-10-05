@@ -583,7 +583,7 @@ function _sanitizeReasonLLM(obj) {
 
 async function analyzeReasonWithLLM(userText = "", s, opts = {}) {
   const key = process.env.OPENAI_API_KEY;
-  if (!key) return { empathy: "", paraphrase: "", suggested_question: "", candidates: [] };
+  if (!key) return { empathy: "", paraphrase: "", asks: [], candidates: [] };
 
   const { default: OpenAI } = await import("openai");
   const client = new OpenAI({ apiKey: key });
@@ -595,34 +595,15 @@ async function analyzeReasonWithLLM(userText = "", s, opts = {}) {
   const forceNew = !!opts.forceNewAngle;
 
   const system = [
-  "あなたは日本語で自然に寄り添うキャリアエージェントAI。",
-  "出力は必ずJSONのみ。前置きや説明は書かない。",
-  "",
-  "- empathy：共感のみ。2〜3文／100字程度。疑問・依頼・誘導・提案を含めない。語尾に『？』を置かない。常体（です・ます禁止）。",
-  "",
-  "- ask_next：1文（<=80字）。**深掘りはID化のためだけ**に行う。",
-  "- **解決策・改善策・方法論を一切聞かない／提案しない**（例：『どうしたら〜できる？』『改善するには？』『どんな工夫が必要？』等は**禁止**）。",
-  "- **許可される深掘りの観点は“事実の特定”のみ**：原因（何のせい）／主体（誰・どの層）／運用（規定・承認・シフト等）／頻度・継続期間／直近の具体場面。",
-  "- 質問形は**許可する**が、上記“事実の特定”だけに限定。結論誘導や解決志向は禁止。",
-  "- 直前の ask と**同義回避**（語彙が違っても観点が同じなら出し直す）。",
-  "- 曖昧初期（カテゴリ不明）以外で『人間関係』へ**無根拠で誘導しない**。",
-  "",
-  "- candidates は user_text に**直接現れた語句**またはその**明示的な因果の結果側**にのみ対応するものを出す。",
-  "- **因果がある場合は“結果側”を優先**（例：『直行直帰のせいで連携不足』→“連携・一体感”系を優先。原因の働き方キーワード単体では出さない）。",
-  "- 辞書外IDは出さない。信頼度は0〜1で整合的に並べる。",
-  "- 根拠語がない『評価制度』『人間関係』などのカテゴリは出さない。",
-  "",
-  "- テーマが不明瞭なときのみ、弁別のための中立的な一問に留める（人間関係／労働条件／仕事内容・キャリアの三者への**誘導表現は禁止**。単に事実軸を尋ねる）。",
-  "",
-  "JSON形式：",
-  "{",
-  '  "empathy": "2〜3文（100字程度）。疑問符なし・常体。",',
-  '  "paraphrase": "保存用30字以内の簡潔な言い換え（評価語なし）",',
-  '  "candidates": [{"id": 数値（渡した候補一覧のidのみ）, "confidence": 0〜1}],',
-  '  "ask_next": "1文（<=80字）。“事実の特定”のみ。解決策・改善策NG。"',
-  "}"
-].join("\n");
-
+    "あなたは日本語で自然に寄り添うキャリアエージェントAI。",
+    "出力は必ずJSONのみ。前置きや説明は書かない。",
+    "- empathy：共感のみ。2〜3文／100字程度。疑問・依頼・誘導・提案を含めない。語尾に『？』を置かない。常体（です・ます禁止）。",
+    "- asks：次の深掘り候補を**1〜3個**の配列で返す。全て疑問文。改善策・方法論を問うのは厳禁。事実特定の観点のみ（原因/主体/運用/頻度/期間/具体場面 など）。",
+    "- 直前のaskと**同義回避**（語彙が違っても観点が同じなら別観点を出す）。forceNewAngleがtrueなら特に角度を変えること。",
+    "- candidates は user_text に直接現れた語句や因果の“結果側”に整合するものだけ。",
+    "- 辞書外IDは出さない。信頼度は0〜1で並べる。",
+    "JSON形式：{ \"empathy\": \"...\", \"paraphrase\": \"...\", \"asks\": [\"?\", \"?\"], \"candidates\": [{\"id\": 数値, \"confidence\": 0〜1}] }"
+  ].join("\n");
 
   const catalog = REASON_ID_LABELS.map(x => `${x.id}:${x.label}`).join(", ");
 
@@ -636,22 +617,55 @@ async function analyzeReasonWithLLM(userText = "", s, opts = {}) {
     "job_change_purposes の候補一覧（id:label）:",
     catalog,
     "",
-    "要件：JSONのみで返す。形式は：",
-    `{
-      "empathy": "2〜3文／100字程度。疑問・質問・問いかけで終わらせない。命令・説教・決めつけNG。常体〜口語ベース（です・ます調は使わない）。",
-      "paraphrase": "保存用の短い言い換え（30字以内・評価語は避ける）",
-      "candidates": [{"id": 数値（上のidのみ）, "confidence": 0〜1}],
-      "ask_next": "次の一言（<=80字）。必ず疑問文で、原因・主体・結果の特定に限定。改善・解決の方法を問う表現は禁止。直前と同義不可"
-    }`,
-    `last_ask: 「${s.drill?.flags?.last_ask || ""}」`,
-    `history_summary: 「${s.drill?.flags?.last_llm_summary || ""}」`
+    `forceNewAngle: ${forceNew ? "true" : "false"}`,
+    "出力は上記フォーマットのJSONのみ。"
   ].join("\n");
+
+  function _extractJsonBlock(s = "") {
+    const t = String(s || "");
+    const code = t.match(/```json\s*([\s\S]*?)```/i)?.[1]
+              || t.match(/```[\s\S]*?```/i)?.[0]?.replace(/```/g, "")
+              || null;
+    const raw = code || t;
+    const i = raw.indexOf("{");
+    const j = raw.lastIndexOf("}");
+    if (i >= 0 && j > i) {
+      const slice = raw.slice(i, j + 1);
+      try { return JSON.parse(slice); } catch {}
+    }
+    try { return JSON.parse(raw); } catch {}
+    return null;
+  }
+
+  function _sanitize(obj) {
+    const out = { empathy: "", paraphrase: "", asks: [], candidates: [] };
+    if (!obj || typeof obj !== "object") return out;
+
+    out.empathy    = String(obj.empathy || "");
+    out.paraphrase = String(obj.paraphrase || obj.summary || "");
+    const asksArr  = Array.isArray(obj.asks) ? obj.asks : (obj.ask_next ? [String(obj.ask_next)] : []);
+    out.asks       = asksArr.filter(x => typeof x === "string" && x.trim()).slice(0, 3);
+
+    const list = Array.isArray(obj.candidates) ? obj.candidates : [];
+    const norm = [];
+    for (const c of list) {
+      const id = Number(c?.id);
+      let conf = Number(c?.confidence);
+      if (!Number.isFinite(id) || !REASON_ID_SET.has(id)) continue;
+      if (!Number.isFinite(conf)) conf = 0;
+      if (conf < 0) conf = 0; if (conf > 1) conf = 1;
+      norm.push({ id, confidence: conf });
+    }
+    norm.sort((a,b)=> b.confidence - a.confidence);
+    out.candidates = norm.slice(0, 3);
+    return out;
+  }
 
   try {
     const rsp = await client.chat.completions.create({
       model: "gpt-4o-mini",
       temperature: 0.2,
-      max_tokens: 500,
+      max_tokens: 600,
       messages: [
         { role: "system", content: system },
         { role: "user",   content: user }
@@ -660,9 +674,9 @@ async function analyzeReasonWithLLM(userText = "", s, opts = {}) {
 
     const txt = rsp?.choices?.[0]?.message?.content || "";
     const obj = _extractJsonBlock(txt);
-    return _sanitizeReasonLLM(obj);
+    return _sanitize(obj);
   } catch {
-    return { empathy: "", paraphrase: "", suggested_question: "", candidates: [] };
+    return { empathy: "", paraphrase: "", asks: [], candidates: [] };
   }
 }
 
@@ -1339,8 +1353,7 @@ if (s.step === 4) {
 
 const llm1 = await analyzeReasonWithLLM(text, s);
 const empathyRaw = (llm1?.empathy && llm1.empathy.trim()) || await generateEmpathy(text, s);
-let nextQ = (llm1?.suggested_question && llm1.suggested_question.trim())
-  || "一番ひっかかる点はどこか、もう少しだけ教えてね。";
+let nextQ = pickNextAsk(llm1?.asks || [], s);
 
 s.drill.count = 1;
 s.drill.phase = "reason-llm-ask2";
@@ -1348,6 +1361,8 @@ s.drill.awaitingChoice = false;
 s.drill.flags.last_llm_candidates = llm1?.candidates || [];
 s.drill.flags.last_llm_summary = llm1?.paraphrase || "";
 s.drill.flags.last_ask = nextQ || "";
+
+if (nextQ) pushAskHistory(s, nextQ);
 
 return res.json(withMeta({
   response: joinEmp(empathyRaw, nextQ),
@@ -1386,47 +1401,27 @@ const decision = decideReasonFromCandidates(filtered2);
       }, 5));
     }
 
-        if (decision.status === "ambiguous") {
-      nextQ = llm2?.suggested_question || "具体的にどんな場面で一番強く感じたか、教えてね。";
+if (decision.status === "ambiguous") {
+let nextQ = pickNextAsk(llm2?.asks || [], s);
 
-{
-  const joinedBuf = (s.drill?.reasonBuf || [text || ""]).join(" ");
-  if (isHumanRelationPrompt(nextQ) && !hasBossIssueHint(joinedBuf)) {
-    nextQ = pickAngleFallback(joinedBuf, "人間関係");
-  }
-}  
-      if (isSamePrompt(nextQ, s.drill?.flags?.last_ask || "")) {
-
-  const basis = Array.isArray(s?.drill?.reasonBuf) && s.drill.reasonBuf.length
-    ? s.drill.reasonBuf.slice(-3).join(" / ")
-    : (text || "");
-  const redo = await analyzeReasonWithLLM(basis, s, { forceNewAngle: true });
-  const altQ = redo?.suggested_question || "";
-
-  if (altQ && !isSamePrompt(altQ, s.drill?.flags?.last_ask || "")) {
-    nextQ = altQ;
-  } else {
-    const alts = [
-      "直近で一番つらかった具体的な場面は？",
-      "その中で“絶対に避けたいこと”を一つ挙げると？",
-      "改善されると一気に楽になるポイントはどこ？"
-    ];
-    nextQ = alts[(s.drill?.count ?? 0) % alts.length];
-  }
+if (!nextQ) {
+  const redo = await analyzeReasonWithLLM(joined, s, { forceNewAngle: true });
+  nextQ = pickNextAsk(redo?.asks || [], s);
 }
 
-      s.drill.count = 2;
-      s.drill.phase = "reason-llm-ask3";
-      s.drill.awaitingChoice = false;
-      s.drill.flags.last_llm_candidates = llm2?.candidates || [];
-      s.drill.flags.last_llm_summary    = llm2?.paraphrase || "";
-      s.drill.flags.last_ask            = nextQ || "";
+s.drill.count = 2;
+s.drill.phase = "reason-llm-ask3";
+s.drill.awaitingChoice = false;
+s.drill.flags.last_llm_candidates = llm2?.candidates || [];
+s.drill.flags.last_llm_summary    = llm2?.paraphrase || "";
+s.drill.flags.last_ask            = nextQ || "";
+if (nextQ) pushAskHistory(s, nextQ);
 
-      return res.json(withMeta({
-        response: nextQ ? joinEmp(empathy2, nextQ) : empathy2,
-        step: 4, status: s.status, isNumberConfirmed: true,
-        candidateNumber: s.status.number, debug: debugState(s)
-      }, 4));
+return res.json(withMeta({
+  response: nextQ ? joinEmp(empathy2, nextQ) : empathy2,
+  step: 4, status: s.status, isNumberConfirmed: true,
+  candidateNumber: s.status.number, debug: debugState(s)
+}, 4));
     }
       
       nextQ = llm2?.suggested_question || "一番の根っこは何か、言葉にしてみてね。";
@@ -1533,15 +1528,74 @@ const decision = decideReasonFromCandidates(filtered3);
   s.drill.phase = (nextCount === 2 ? "reason-llm-ask3" : "reason-llm-ask2");
   s.drill.awaitingChoice = false;
 
-  const empF = await generateEmpathy(text || "", s);
-  const fallbackAsk =
-    nextCount === 1
-      ? "一番ひっかかる点はどこか、もう少しだけ教えてね。"
-      : "直近で一番つらかった具体的な場面は？";
-  return res.json(withMeta({
-    response: joinEmp(empF, fallbackAsk),
-    step: 4, status: s.status, isNumberConfirmed: true,
-    candidateNumber: s.status.number, debug: debugState(s)
+const empF = await generateEmpathy(text || "", s);
+const nextQ =
+  pickNextAsk([], s) ||
+  (nextCount === 1
+    ? "一番ひっかかる点はどこか、もう少しだけ教えてね。"
+    : "直近で一番つらかった具体的な場面は？");
+
+  if (isSamePrompt(nextQ, s.drill?.flags?.last_ask || "")) {
+  const basis = (Array.isArray(s?.drill?.reasonBuf) && s.drill.reasonBuf.length)
+    ? s.drill.reasonBuf.join(" ")
+    : (text || "");
+
+  const redo = await analyzeReasonWithLLM(basis, s, { forceNewAngle: true });
+  const alt = pickNextAsk(redo?.asks || [], s) || redo?.suggested_question || "";
+
+  if (alt && !isSamePrompt(alt, s.drill?.flags?.last_ask || "")) {
+    nextQ = alt; 
+  } else {
+    const filtered = gateCandidatesByEvidence(redo?.candidates || [], basis);
+    const decision = decideReasonFromCandidates(filtered);
+
+    if (decision.status === "ambiguous" && decision.options?.length) {
+      s.drill.phase = "reason-llm-choice";
+      s.drill.awaitingChoice = true;
+      s.drill.options = decision.options.slice(0, 3);
+      return res.json(withMeta({
+        response: joinEmp(empF, `この中だとどれが一番近い？『${s.drill.options.map(x=>`［${x}］`).join("／")}』`),
+        step: 4, status: s.status, isNumberConfirmed: true,
+        candidateNumber: s.status.number, debug: debugState(s)
+      }, 4));
+    }
+
+    if (decision.status === "confirm") {
+      const id = decision.id;
+      const label = reasonNameById.get(id) || "";
+      s.status.reason_tag = label;
+      s.status.reason_ids = [id];
+      resetDrill(s);
+      s.step = 5;
+      return res.json(withMeta({
+        response: joinEmp(empF, `『${label}』だね！担当エージェントに伝えておくね。\n\n${mustIntroText()}`),
+        step: 5, status: s.status, isNumberConfirmed: true,
+        candidateNumber: s.status.number, debug: debugState(s)
+      }, 5));
+    }
+
+    const paraphrase = (redo?.paraphrase || basis || "").slice(0, 30) || "理由（テキスト）";
+    s.status.reason_tag = paraphrase;
+    s.status.reason_ids = [];
+    resetDrill(s);
+    s.step = 5;
+    return res.json(withMeta({
+      response: joinEmp(empF, mustIntroText()),
+      step: 5, status: s.status, isNumberConfirmed: true,
+      candidateNumber: s.status.number, debug: debugState(s)
+    }, 5));
+  }
+}
+
+s.drill.flags.last_ask = nextQ || "";
+pushAskHistory(s, nextQ);
+
+return res.json(withMeta({
+  response: nextQ ? joinEmp(empF, nextQ) : empF,
+  step: 4, status: s.status, isNumberConfirmed: true,
+  candidateNumber: s.status.number, debug: debugState(s)
+}, 4));
+
   }, 4));
 } 
   // ---- Step5：絶対NG（Must NG） ----
@@ -1863,6 +1917,23 @@ function isSamePrompt(a, b){
   const A = norm(a), B = norm(b);
   if (!A || !B) return false;
   return A === B || A.includes(B) || B.includes(A);
+}
+
+function pickNextAsk(asks = [], s) {
+  const tried = new Set();
+  if (s?.drill?.flags?.last_ask) tried.add(s.drill.flags.last_ask);
+  if (Array.isArray(s?.drill?.flags?.ask_history)) {
+    for (const a of s.drill.flags.ask_history.slice(-5)) tried.add(a);
+  }
+  for (const a of (asks || [])) {
+    const ok = Array.from(tried).every(old => !isSamePrompt(a, old));
+    if (ok) return a;
+  }
+  return null;
+}
+function pushAskHistory(s, ask) {
+  s.drill.flags.ask_history ??= [];
+  if (ask) s.drill.flags.ask_history.push(ask);
 }
 
 function isHumanRelationPrompt(s){
