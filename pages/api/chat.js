@@ -1514,7 +1514,7 @@ const decision = decideReasonFromCandidates(filtered3);
     candidateNumber: s.status.number, debug: debugState(s)
   }, 4));
 } 
-
+}
   // ---- Step5：絶対NG（Must NG） ----
 if (s.step === 5) {
   if (isNone(text)) {
