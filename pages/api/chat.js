@@ -1478,6 +1478,7 @@ llm3.candidates = filtered3;
 
 const empathy3 = llm3?.empathy || await generateEmpathy(text, s);
 const decision = decideReasonFromCandidates(filtered3);
+}
 
     if (decision.status === "confirm") {
       const id = decision.id;
