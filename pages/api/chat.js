@@ -1342,6 +1342,23 @@ const empathyRaw = (llm1?.empathy && llm1.empathy.trim()) || await generateEmpat
 let nextQ = (llm1?.suggested_question && llm1.suggested_question.trim())
   || "一番ひっかかる点はどこか、もう少しだけ教えてね。";
 
+s.drill.count = 1;
+s.drill.phase = "reason-llm-ask2";
+s.drill.awaitingChoice = false;
+s.drill.flags.last_llm_candidates = llm1?.candidates || [];
+s.drill.flags.last_llm_summary = llm1?.paraphrase || "";
+s.drill.flags.last_ask = nextQ || "";
+
+return res.json(withMeta({
+  response: joinEmp(empathyRaw, nextQ),
+  step: 4,
+  status: s.status,
+  isNumberConfirmed: true,
+  candidateNumber: s.status.number,
+  debug: debugState(s)
+}, 4));
+
+
   if (s.drill.count === 1) {
     s.drill.reasonBuf.push(text || "");
     const joined = s.drill.reasonBuf.join(" ");
@@ -1352,6 +1369,8 @@ llm2.candidates = filtered2;
 
 const empathy2 = llm2?.empathy || await generateEmpathy(text, s);
 const decision = decideReasonFromCandidates(filtered2);
+
+    let nextQ;
 
     if (decision.status === "confirm") {
       const id = decision.id;
@@ -1368,7 +1387,7 @@ const decision = decideReasonFromCandidates(filtered2);
     }
 
         if (decision.status === "ambiguous") {
-      let nextQ = llm2?.suggested_question || "具体的にどんな場面で一番強く感じたか、教えてね。";
+      nextQ = llm2?.suggested_question || "具体的にどんな場面で一番強く感じたか、教えてね。";
 
 {
   const joinedBuf = (s.drill?.reasonBuf || [text || ""]).join(" ");
@@ -1410,7 +1429,7 @@ const decision = decideReasonFromCandidates(filtered2);
       }, 4));
     }
       
-      let nextQ = llm2?.suggested_question || "一番の根っこは何か、言葉にしてみてね。";
+      nextQ = llm2?.suggested_question || "一番の根っこは何か、言葉にしてみてね。";
 
 {
   const joinedBuf = (s.drill?.reasonBuf || [text || ""]).join(" ");
