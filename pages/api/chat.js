@@ -1594,8 +1594,6 @@ return res.json(withMeta({
   step: 4, status: s.status, isNumberConfirmed: true,
   candidateNumber: s.status.number, debug: debugState(s)
 }, 4));
-
-  }, 4));
 } 
   // ---- Step5：絶対NG（Must NG） ----
 if (s.step === 5) {
