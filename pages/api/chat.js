@@ -1394,63 +1394,6 @@ const empathyRaw = (llm1?.empathy && llm1.empathy.trim()) || await generateEmpat
 let nextQ = (llm1?.suggested_question && llm1.suggested_question.trim())
   || "一番ひっかかる点はどこか、もう少しだけ教えてね。";
 
-const catHits = countCategoryHits(text);
-if (catHits === 0) {
-  const options = ["人間関係", "労働条件", "仕事内容・キャリア"];
-  s.drill.phase = "reason-category-choice";
-  s.drill.awaitingChoice = true;
-  s.drill.options = options;
-  s.drill.count = 0;
-
-  return res.json(withMeta({
-    response: joinEmp(empathyRaw, `どれが一番近い？『${options.map(x=>`［${x}］`).join("／")}』`),
-    step: 4, status: s.status, isNumberConfirmed: true,
-    candidateNumber: s.status.number, debug: debugState(s)
-  }, 4));
-}
-
-{
-  const joinedBuf = (s.drill?.reasonBuf || [text || ""]).join(" ");
-  if (isHumanRelationPrompt(nextQ) && !hasBossIssueHint(joinedBuf)) {
-    nextQ = pickAngleFallback(joinedBuf, "人間関係");
-  }
-}
-
-    if (isSamePrompt(nextQ, s.drill?.flags?.last_ask || "")) {
- 
-  const basis = Array.isArray(s?.drill?.reasonBuf) && s.drill.reasonBuf.length
-    ? s.drill.reasonBuf.slice(-3).join(" / ")
-    : (text || "");
-  const redo = await analyzeReasonWithLLM(basis, s, { forceNewAngle: true });
-  const altQ = redo?.suggested_question || "";
-
-  if (altQ && !isSamePrompt(altQ, s.drill?.flags?.last_ask || "")) {
-    nextQ = altQ;
-  } else {
-    const alts = [
-      "直近で一番つらかった具体的な場面は？",
-      "その中で“絶対に避けたいこと”を一つ挙げると？",
-      "改善されると一気に楽になるポイントはどこ？"
-    ];
-    nextQ = alts[(s.drill?.count ?? 0) % alts.length];
-  }
-}
-    s.drill.count = 1;
-    s.drill.phase = "reason-llm-ask2";
-    s.drill.awaitingChoice = false;
-
-    // 内部用メモ（返却しない）
-    s.drill.flags.last_llm_candidates = llm1?.candidates || [];
-    s.drill.flags.last_llm_summary    = llm1?.paraphrase || "";
-    s.drill.flags.last_ask            = nextQ || "";
-
-    return res.json(withMeta({
-      response: nextQ ? joinEmp(empathyRaw, nextQ) : empathyRaw,
-      step: 4, status: s.status, isNumberConfirmed: true,
-      candidateNumber: s.status.number, debug: debugState(s)
-    }, 4));
-  }
-
   if (s.drill.count === 1) {
     s.drill.reasonBuf.push(text || "");
     const joined = s.drill.reasonBuf.join(" ");
