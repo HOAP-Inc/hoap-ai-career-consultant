@@ -1,21 +1,4 @@
 // ほーぷちゃん：会話ロジック（Step厳密・深掘り2回・候補提示・ステータス算出）
-function _bigrams(text) {
-  const s = String(text || '').toLowerCase();
-  const set = new Set();
-  for (let i = 0; i < s.length - 1; i++) set.add(s.slice(i, i + 2));
-  return set;
-}
-
-function scoreSimilarity(a, b) {
-  const A = _bigrams(a || '');
-  const B = _bigrams(b || '');
-  if (!A.size || !B.size) return 0;
-  let inter = 0;
-  for (const x of A) if (B.has(x)) inter++;
-  const union = A.size + B.size - inter;
-  return union ? inter / union : 0;
-}
-
 let tagList = [];
 try {
   const raw = require("../../tags.json");
@@ -261,21 +244,7 @@ const isAllowedOralSurgeryInput = () => ALLOWED_ORAL_SURGERY_KEYS.includes(norm(
     if (!nTag) continue;
     if (normText.includes(nTag) || nTag.includes(normText)) out.add(name);
   }
-
-  if (out.size === 0) {
-    const pool = [];
-    for (const t of (Array.isArray(serviceFormTagList) ? serviceFormTagList : [])) {
-      const name = String(t?.name ?? '');
-      if (!name) continue;
-      const s = scoreSimilarity(name, raw);
-      if (s > 0) pool.push({ name, s });
-    }
-    pool.sort((a,b)=> b.s - a.s);
-    for (const { name, s } of pool.slice(0, 6)) {
-      if (s >= 0.35) out.add(name);
-    }
-  }
-
+  
 if (oralLabel && !isAllowedOralSurgeryInput()) out.delete(oralLabel);
 
   return Array.from(out);
@@ -323,21 +292,6 @@ const isAllowedOralSurgeryInput = () => ALLOWED_ORAL_SURGERY_KEYS.includes(norm(
     const nTag = normalize(name);
     if (!nTag) continue;
     if (normText.includes(nTag) || nTag.includes(normText)) out.add(id);
-  }
-
-  if (out.size === 0) {
-    const scored = [];
-    for (const t of (Array.isArray(serviceFormTagList) ? serviceFormTagList : [])) {
-      const name = String(t?.name ?? '');
-      const id   = t?.id;
-      if (!name || id == null) continue;
-      const s = scoreSimilarity(name, raw);
-      if (s > 0) scored.push({ id, s });
-    }
-    scored.sort((a,b)=> b.s - a.s);
-    for (const { id, s } of scored.slice(0, 3)) {
-      if (s >= 0.35) out.add(id);
-    }
   }
 
   if (!isAllowedOralSurgeryInput()) out.delete(ORAL_SURGERY_ID);
@@ -2186,20 +2140,6 @@ function matchTagIdsInText(text = "") {
     if (normText.includes(nTag) || nTag.includes(normText)) out.add(id);
   }
 
-  if (out.size === 0) {
-    const scored = [];
-    for (const t of (Array.isArray(tagList) ? tagList : [])) {
-      const name = String(t?.name ?? "");
-      const id   = t?.id;
-      if (!name || id == null) continue;
-      const s = scoreSimilarity(name, raw);
-      if (s > 0) scored.push({ id, s });
-    }
-    scored.sort((a,b)=> b.s - a.s);
-    for (const { id, s } of scored.slice(0, 3)) {
-      if (s >= 0.35) out.add(id);
-    }
-  }
   return Array.from(out);
 }
 
@@ -2249,18 +2189,6 @@ function mapFreeLabelsToTags(freeLabels = []) {
       }
     }
 
-    if (id == null) {
-      let best = null, bestScore = 0;
-      for (const t of (Array.isArray(tagList) ? tagList : [])) {
-        const name = String(t?.name ?? "");
-        const tid  = t?.id;
-        if (!name || tid == null) continue;
-        const s = scoreSimilarity(name, q);
-        if (s > bestScore) { bestScore = s; best = { id: tid, name }; }
-      }
-      if (best && bestScore >= 0.35) id = best.id;
-    }
-
     if (id != null && !seenIds.has(id)) {
       seenIds.add(id);
       results.push({ id, label: tagNameById.get(id) || String(q) });
@@ -2302,23 +2230,8 @@ function getIdsForOfficialLicense(label = "") {
     }
   }
   if (exactCandidates.length) {
-    exactCandidates.sort((a, b) =>
-      scoreSimilarity(normalize(b.name), normalize(label)) -
-      scoreSimilarity(normalize(a.name), normalize(label))
-    );
     return [exactCandidates[0].id];
   }
 
-  const needles = Array.from(needleSet).map(normalize).filter(Boolean);
-  let best = null;
-  for (const t of (Array.isArray(licenseTagList) ? licenseTagList : [])) {
-    const name = String(t?.name ?? "");
-    if (!name || t?.id == null) continue;
-    const nt = normalize(name);
-    const hit = needles.some(nd => nt.includes(nd) || nd.includes(nt));
-    if (!hit) continue;
-    const sim = scoreSimilarity(nt, normalize(label));
-  if (!best || sim > best.sim) best = { id: t.id, sim };
-  }
-  return best ? [best.id] : [];
+  return [];
 } 
