@@ -1372,7 +1372,7 @@ return res.json(withMeta({
   candidateNumber: s.status.number,
   debug: debugState(s)
 }, 4));
-
+}
 
   if (s.drill.count === 1) {
     s.drill.reasonBuf.push(text || "");
