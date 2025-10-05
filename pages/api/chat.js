@@ -1527,9 +1527,19 @@ const decision = decideReasonFromCandidates(filtered3);
     }, 5));
   } 
 
+  const before = Number.isFinite(s.drill?.count) ? s.drill.count : 0;
+  const nextCount = Math.max(1, Math.min(before + 1, 2)); // 0→1、1→2、2で頭打ち
+  s.drill.count = nextCount;
+  s.drill.phase = (nextCount === 2 ? "reason-llm-ask3" : "reason-llm-ask2");
+  s.drill.awaitingChoice = false;
+
   const empF = await generateEmpathy(text || "", s);
+  const fallbackAsk =
+    nextCount === 1
+      ? "一番ひっかかる点はどこか、もう少しだけ教えてね。"
+      : "直近で一番つらかった具体的な場面は？";
   return res.json(withMeta({
-    response: joinEmp(empF, "もう少しだけ詳しく教えて！"),
+    response: joinEmp(empF, fallbackAsk),
     step: 4, status: s.status, isNumberConfirmed: true,
     candidateNumber: s.status.number, debug: debugState(s)
   }, 4));
