@@ -1528,7 +1528,7 @@ const decision = decideReasonFromCandidates(filtered3);
   s.drill.awaitingChoice = false;
 
 const empF = await generateEmpathy(text || "", s);
-const nextQ =
+let nextQ =
   pickNextAsk([], s) ||
   (nextCount === 1
     ? "一番ひっかかる点はどこか、もう少しだけ教えてね。"
