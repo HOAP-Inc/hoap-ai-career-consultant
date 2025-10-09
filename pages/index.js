@@ -3,13 +3,12 @@ import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
 const statusInit = {
   求職者ID: "未入力",
   職種: "未入力",
-  現職: "未入力",
-  転職目的: "未入力",   // reason_ids を ID列で表示
-  Must_NG: "未入力",     // must_ng_ids を ID列で表示
-  Must_have: "未入力",   // must_have_ids を ID列で表示
-  Want: "未入力",        // テキスト
-  Can: "未入力",         // テキスト
-  Will: "未入力",        // テキスト
+  転職理由: "未入力",   // STEP3: テキスト
+  Can: "未入力",        // STEP4: テキスト
+  Will: "未入力",       // STEP5: テキスト
+  Must_NG: "未入力",    // STEP6: ID配列（なければテキスト）
+  Must_have: "未入力",  // STEP7: ID配列（なければテキスト）
+  Being: "未入力",      // STEP8: 確定キャッチ（2〜3行）
 };
 
 export default function Home() {
@@ -21,12 +20,11 @@ export default function Home() {
   const [sessionId] = useState(() => Math.random().toString(36).slice(2));
   const [step, setStep] = useState(0);
   const [isComposing, setIsComposing] = useState(false);
-  const [aiText, setAiText] = useState("");      // ほーぷちゃんの吹き出し用 文言
-  const [isTyping, setIsTyping] = useState(false); // 返答待ちのタイピング表示
-  const [userEcho, setUserEcho] = useState("");  // 入力欄上のユーザー吹き出し用 文言
+  const [aiText, setAiText] = useState("");
+  const [isTyping, setIsTyping] = useState(false);
+  const [userEcho, setUserEcho] = useState(""); 
   const [choices, setChoices] = useState([]);
 
-  // ▼ バッジ整形：API応答をフロント表示用にマップ（ID優先／未マッチのみテキスト保持）
 function toBadges(resp, currStep) {
   const st = resp?.status ?? {};
   const step = Number(currStep ?? resp?.meta?.step ?? 0);
@@ -36,45 +34,28 @@ function toBadges(resp, currStep) {
 
   const joinTxt = (arr) =>
     Array.isArray(arr) && arr.length ? arr.join("／") : "";
-
-  // 転職目的：Step4進行中は“仮テキスト”を出さない（チラつき防止）
-  // Step5以降になっても ID 未確定なら、そのときだけテキスト（reason_tag -> reason の順）を表示
-  const reasonBadge =
-    joinIds(st?.reason_ids) ||
-    (step >= 5
-      ? (st?.reason_tag || st?.reason || "未入力")
-      : ""); // ← Step4中は空表示
-
-  // Must系：IDがあればID、なければ“未マッチテキストのみ”を表示
-  // （labelsは表示しない。未マッチは memo.*_raw に入ってくる想定）
-  const mustNgBadge =
-    joinIds(st?.must_ng_ids) || joinTxt(st?.memo?.must_ng_raw) || "";
-  const mustHaveBadge =
-    joinIds(st?.must_have_ids) || joinTxt(st?.memo?.must_have_raw) || "";
-
+ 
   return {
-    求職者ID: st?.number ? `ID:${st.number}` : "未入力",
-    職種: joinIds(st?.role_ids) || (st?.role || "未入力"),
-    現職: joinIds(st?.place_ids) || (st?.place || "未入力"),
-    転職目的: reasonBadge,
-    Must_NG: mustNgBadge,
-    Must_have: mustHaveBadge,
-    Want: st?.want_text ? String(st.want_text) : "未入力",
-    Can: st?.can ? String(st.can) : "未入力",
-    Will: st?.will ? String(st.will) : "未入力",
-  };
+  求職者ID: st?.number ? `ID:${st.number}` : "未入力",
+  職種: joinIds(st?.role_ids) || "未入力",
+
+  転職理由: st?.reason_text ? String(st.reason_text) : "未入力", // STEP3
+  Can: st?.can_text ? String(st.can_text) : "未入力",             // STEP4
+  Will: st?.will_text ? String(st.will_text) : "未入力",          // STEP5
+  Must_NG: (joinIds(st?.must_ng_ids) || joinTxt(st?.memo?.must_ng_raw) || "未入力"),
+  Must_have: (joinIds(st?.must_have_ids) || joinTxt(st?.memo?.must_have_raw) || "未入力"),
+  Being: st?.being_text ? String(st.being_text) : "未入力",
+};
 }
 
-  // バッジの表示（空/未入力は出さない）
   function displayBadgeValue(_key, val) {
     const s = String(val ?? "").trim();
     return s && s !== "未入力" ? s : "";
   }
 
-  // 対象ステップかを判定（STEP2〜6）
   function isChoiceStep(n) {
-    return n >= 2 && n <= 6;
-  }
+  return n === 2 || n === 6 || n === 7 || n === 8;
+}
 
   // 『［A］／［B］／［C］』形式から配列を作る
   function extractChoices(text) {
@@ -144,7 +125,7 @@ function toBadges(resp, currStep) {
   const revertTimerRef = useRef(null);
 
   // 進捗バー
-  const MAX_STEP = 10;
+  const MAX_STEP = 8;
   const progress = Math.min(100, Math.max(0, Math.round((step / MAX_STEP) * 100)));
 
   // ★最初の挨拶をサーバーから1回だけ取得
@@ -163,18 +144,13 @@ const data = raw ? JSON.parse(raw) : null;
 
         setAiText(data.response);
 
-        // ▼ ステップ & バッジ
         const next = data?.meta?.step ?? 0;
         setStatus(toBadges(data, next));
-        setStatus(toBadges(data, nextStep));
 
-        // ▼ 選択肢
-        const inline = getInlineChoices(next, data.response, data.meta);
-        setChoices(
-          isChoiceStep(next)
-            ? uniqueByNormalized(inline.length ? inline : extractChoices(data.response))
-            : []
-        );
+        setStep(next);
+
+        const inline = extractChoices(data.response);
+setChoices(isChoiceStep(next) ? uniqueByNormalized(inline) : []);
       } catch (e) {
         setMessages([{ type: "ai", content: "初期メッセージの取得に失敗したよ🙏" }]);
       }
@@ -201,8 +177,7 @@ const data = raw ? JSON.parse(raw) : null;
       return;
     }
 
-    // 最後の回答が終わったあと（完了：step=10 の最初のタイミング）
-    if (step >= 10 && !cheeredDoneRef.current) {
+    if (step >= 8 && !cheeredDoneRef.current) {
       cheeredDoneRef.current = true;
       setHoapSrc("/hoap-up.png");
       revertTimerRef.current = setTimeout(() => {
@@ -354,18 +329,15 @@ const data = raw ? JSON.parse(raw) : null;
 
   function statusStepLabel(step) {
     const map = {
-      0: "基本情報",
-      1: "求職者ID",
-      2: "職種",
-      3: "現在の職場",
-      4: "転職理由",
-      5: "Must（NG）条件",
-      6: "Must（Have）条件",
-      7: "Want条件",
-      8: "これまで（Can）",
-      9: "これから（Will）",
-      10: "完了",
-    };
+  1: "求職者ID",
+  2: "職種",
+  3: "転職理由",
+  4: "Can",
+  5: "Will",
+  6: "Must（NG）",
+  7: "Must（Have）",
+  8: "Being",
+};
     return map[step] ?? "";
   }
 
@@ -392,6 +364,10 @@ const data = raw ? JSON.parse(raw) : null;
         <div className="step">
           Step {step}/{MAX_STEP}　{statusStepLabel(step)}
         </div>
+    <div style={{ display: "flex", gap: "8px", fontSize: "12px" }}>
+  {displayBadgeValue("求職者ID", status["求職者ID"]) && (<span className="badge">{displayBadgeValue("求職者ID", status["求職者ID"])}</span>)}
+  {displayBadgeValue("職種", status["職種"]) && (<span className="badge">職種：{displayBadgeValue("職種", status["職種"])}</span>)}
+</div>
       </header>
 
       <section className="duo-stage">
@@ -403,8 +379,11 @@ const data = raw ? JSON.parse(raw) : null;
               <span className="dots"><span>・</span><span>・</span><span>・</span></span>
             ) : (
               showChoices
-                ? "どれが一番近い？下のボタンから選んでね！"
-                : (aiText || "…")
+  ? (step === 8
+      ? "ここまで長い時間、ありがとう！\n今までの話から、あなただけのオリジナル「自己紹介キャッチコピー」を作成したよ！\nいくつか候補を出すから、一番ぴったりなものを選んでね！"
+      : "どれが一番近い？下のボタンから選んでね！")
+  : (aiText || "…")
+
             )}
           </div>
         </div>
@@ -430,17 +409,15 @@ const data = raw ? JSON.parse(raw) : null;
 
       {/* ステータスバッジ */}
       <div className="status-row">
-        {[
-          "求職者ID",
-          "職種",
-          "現職",
-          "転職目的",
-          "Must_NG",
-          "Must_have",
-          "Want",
-          "Can",
-          "Will",
-        ].map((k) => (
+       {[
+  "転職理由",
+  "Can",
+  "Will",
+  "Must_NG",
+  "Must_have",
+  "Being",
+].map((k) => (
+
           <span key={k} className="badge">
             {k}：{displayBadgeValue(k, status[k])}
           </span>
