@@ -312,15 +312,20 @@ html, body, #__next { height: 100%; }
   padding: 0 48px;
   pointer-events: none; 
 }
+
 .user-echo__bubble{
   pointer-events: auto;
-  max-width: min(70%, 720px); 
+  display: inline-block;
   background: linear-gradient(135deg, var(--user-grad-from), var(--user-grad-via) 50%, var(--user-grad-to));
   border: 1px solid #e9d5ff;
   border-radius: 16px;
   padding: 10px 12px;
   box-shadow: var(--card-shadow);
   white-space: pre-wrap;
+
+  width: 100%;
+  max-width: 1040px;
+  margin: 0 auto;
 }
 
 @media (max-width: 640px){
@@ -443,11 +448,22 @@ html, body, #__next { height: 100%; }
     transform: translateY(calc(var(--kb, 0px) * -1));
     pointer-events: none;
   }
-  .user-echo__bubble{
-    pointer-events: auto;
-    max-width: calc(100vw - 104px);
-    padding: 10px 12px;
-  }
+
+.user-echo__bubble{
+  pointer-events: auto;
+  display: inline-block;
+  background: linear-gradient(135deg, var(--user-grad-from), var(--user-grad-via) 50%, var(--user-grad-to));
+  border: 1px solid #e9d5ff;
+  border-radius: 16px;
+  padding: 10px 12px;
+  box-shadow: var(--card-shadow);
+  white-space: pre-wrap;
+
+  width: 100%;
+  max-width: 1040px;
+  margin: 0 auto;
+}
+
 }
 
 section[aria-label="最終確認"] details{
