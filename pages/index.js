@@ -372,12 +372,10 @@ setChoices(isChoiceStep(next) ? uniqueByNormalized(inline) : []);
           <img className="duo-stage__hoap" src={hoapSrc} alt="ほーぷちゃん" />
           <div className={`duo-stage__bubble ${isTyping ? "typing" : ""}`} aria-live="polite">
             {isTyping ? (
-              <span className="dots"><span>・</span><span>・</span><span>・</span></span>
-            ) : (
-              showChoices
-  ?showChoices ? "下のボタンから選んでね！" : (aiText || "…")
-
-            )}
+  <span className="dots"><span>・</span><span>・</span><span>・</span></span>
+) : (
+  showChoices ? "下のボタンから選んでね！" : (aiText || "…")
+)}
           </div>
         </div>
       </section>
