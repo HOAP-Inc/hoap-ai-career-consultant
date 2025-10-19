@@ -92,9 +92,18 @@ body{
 }
 .status-row{
   display: grid;
-  grid-template-columns: repeat(2, minmax(0,1fr)); /* PCは2列 */
+  grid-template-columns: repeat(2, minmax(0,1fr)); 
   gap: 10px;
-  margin: 10px 0 20px;
+  margin: 8px 0 14px;
+  padding: 6px 0;
+
+  max-height: 72px;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+
+  background: linear-gradient(180deg, var(--bg-via) 0%, transparent 100%);
+  border-radius: 8px;
 }
 
 .badge{
