@@ -1,14 +1,13 @@
 import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
 
 const statusInit = {
-  求職者ID: "未入力",
-  職種: "未入力",
-  転職理由: "未入力",   // STEP3: テキスト
-  Can: "未入力",        // STEP4: テキスト
-  Will: "未入力",       // STEP5: テキスト
-  Must_NG: "未入力",    // STEP6: ID配列（なければテキスト）
-  Must_have: "未入力",  // STEP7: ID配列（なければテキスト）
-  Being: "未入力",      // STEP8: 確定キャッチ（2〜3行）
+  資格: "未入力",
+  Can: "未入力",          // 60〜90字（将来的に複数でも表示は1本でOK）
+  Will: "未入力",         // 60〜90字
+  Must_have: "未入力",    // 既存IDロジックを流用
+  私はこんな人: "未入力", // 180〜280字
+  Doing: "未入力",        // 生成（約300字）
+  Being: "未入力",        // 生成（約300字）
 };
 
 export default function Home() {
@@ -34,18 +33,21 @@ function toBadges(resp, currStep) {
 
   const joinTxt = (arr) =>
     Array.isArray(arr) && arr.length ? arr.join("／") : "";
- 
-  return {
-  求職者ID: st?.number ? `ID:${st.number}` : "未入力",
-  職種: joinIds(st?.role_ids) || "未入力",
 
-  転職理由: st?.reason_text ? String(st.reason_text) : "未入力", // STEP3
-  Can: st?.can_text ? String(st.can_text) : "未入力",             // STEP4
-  Will: st?.will_text ? String(st.will_text) : "未入力",          // STEP5
-  Must_NG: (joinIds(st?.must_ng_ids) || joinTxt(st?.memo?.must_ng_raw) || "未入力"),
-  Must_have: (joinIds(st?.must_have_ids) || joinTxt(st?.memo?.must_have_raw) || "未入力"),
-  Being: st?.being_text ? String(st.being_text) : "未入力",
-};
+  return {
+    // 資格：当面は role_ids を仮に表示。後で qual_ids に差し替え可。
+    資格: joinIds(st?.qual_ids) || joinIds(st?.role_ids) || "未入力",
+    // Can / Will：配列でも単文でも受ける
+    Can: Array.isArray(st?.can_texts) ? st.can_texts.join("／")
+       : (st?.can_text ? String(st.can_text) : "未入力"),
+    
+    Will: Array.isArray(st?.will_texts) ? st.will_texts.join("／")
+        : (st?.will_text ? String(st.will_text) : "未入力"),
+    Must_have: (joinIds(st?.must_have_ids) || joinTxt(st?.memo?.must_have_raw) || "未入力"),
+    私はこんな人: st?.self_intro || st?.self_text || "未入力",
+    Doing: st?.doing_text ? String(st.doing_text) : "未入力",
+    Being: st?.being_text ? String(st.being_text) : "未入力",
+  };
 }
 
   function displayBadgeValue(_key, val) {
@@ -54,7 +56,7 @@ function toBadges(resp, currStep) {
   }
 
   function isChoiceStep(n) {
-  return n === 2 || n === 6 || n === 7 || n === 8;
+   return n === 1 || n === 4;
 }
 
   // 『［A］／［B］／［C］』形式から配列を作る
@@ -125,7 +127,7 @@ function toBadges(resp, currStep) {
   const revertTimerRef = useRef(null);
 
   // 進捗バー
-  const MAX_STEP = 8;
+  const MAX_STEP = 6;
   const progress = Math.min(100, Math.max(0, Math.round((step / MAX_STEP) * 100)));
 
   // ★最初の挨拶をサーバーから1回だけ取得
@@ -177,7 +179,7 @@ setChoices(isChoiceStep(next) ? uniqueByNormalized(inline) : []);
       return;
     }
 
-    if (step >= 8 && !cheeredDoneRef.current) {
+    if (step >= 6 && !cheeredDoneRef.current) {
       cheeredDoneRef.current = true;
       setHoapSrc("/hoap-up.png");
       revertTimerRef.current = setTimeout(() => {
@@ -328,18 +330,16 @@ setChoices(isChoiceStep(next) ? uniqueByNormalized(inline) : []);
   }
 
   function statusStepLabel(step) {
-    const map = {
-  1: "求職者ID",
-  2: "職種",
-  3: "転職理由",
-  4: "Can",
-  5: "Will",
-  6: "Must（NG）",
-  7: "Must（Have）",
-  8: "Being",
-};
-    return map[step] ?? "";
-  }
+  const map = {
+    1: "資格",
+    2: "Can",
+    3: "Will",
+    4: "Must（Have）",
+    5: "私はこんな人",
+    6: "分析（Doing/Being）",
+  };
+  return map[step] ?? "";
+}
 
   // アンマウント時にポーズ復帰タイマーを必ず止める
   useEffect(() => {
@@ -358,16 +358,12 @@ setChoices(isChoiceStep(next) ? uniqueByNormalized(inline) : []);
       {/* ヘッダ */}
       <header className="header">
         <div className="title">
-          <div>AIキャリアエージェント</div>
+          <div>AIキャリアデザイナー</div>
           <div>ほーぷちゃん</div>
         </div>
         <div className="step">
           Step {step}/{MAX_STEP}　{statusStepLabel(step)}
         </div>
-    <div style={{ display: "flex", gap: "8px", fontSize: "12px" }}>
-  {displayBadgeValue("求職者ID", status["求職者ID"]) && (<span className="badge">{displayBadgeValue("求職者ID", status["求職者ID"])}</span>)}
-  {displayBadgeValue("職種", status["職種"]) && (<span className="badge">職種：{displayBadgeValue("職種", status["職種"])}</span>)}
-</div>
       </header>
 
       <section className="duo-stage">
@@ -379,10 +375,7 @@ setChoices(isChoiceStep(next) ? uniqueByNormalized(inline) : []);
               <span className="dots"><span>・</span><span>・</span><span>・</span></span>
             ) : (
               showChoices
-  ? (step === 8
-      ? "ここまで長い時間、ありがとう！\n今までの話から、あなただけのオリジナル「自己紹介キャッチコピー」を作成したよ！\nいくつか候補を出すから、一番ぴったりなものを選んでね！"
-      : "どれが一番近い？下のボタンから選んでね！")
-  : (aiText || "…")
+  ?showChoices ? "下のボタンから選んでね！" : (aiText || "…")
 
             )}
           </div>
@@ -410,18 +403,18 @@ setChoices(isChoiceStep(next) ? uniqueByNormalized(inline) : []);
       {/* ステータスバッジ */}
       <div className="status-row">
        {[
-  "転職理由",
+  "資格",
   "Can",
   "Will",
-  "Must_NG",
   "Must_have",
+  "私はこんな人",
+  "Doing",
   "Being",
 ].map((k) => (
-
-          <span key={k} className="badge">
-            {k}：{displayBadgeValue(k, status[k])}
-          </span>
-        ))}
+  <span key={k} className="badge">
+    {k}：{displayBadgeValue(k, status[k])}
+  </span>
+))}
       </div>
 
       {/* ステータス進捗バー */}
@@ -431,6 +424,67 @@ setChoices(isChoiceStep(next) ? uniqueByNormalized(inline) : []);
           style={{ width: `${progress}%` }}
         />
       </div>
+{/* 最終確認（step>=6で表示）：全STEPの折りたたみ一覧 */}
+{step >= 6 && (
+  <section aria-label="最終確認" style={{ padding: "12px 16px" }}>
+    {/* 1) 資格 */}
+    <details>
+      <summary style={{ cursor: "pointer", fontWeight: 700 }}>資格</summary>
+      <div style={{ marginTop: 8 }}>
+        {displayBadgeValue("資格", status["資格"]) || "未入力"}
+      </div>
+    </details>
+
+    {/* 2) Can */}
+    <details style={{ marginTop: 12 }}>
+      <summary style={{ cursor: "pointer", fontWeight: 700 }}>Can（今後も活かしたい強み）</summary>
+      <div style={{ marginTop: 8, whiteSpace: "pre-wrap" }}>
+        {displayBadgeValue("Can", status["Can"]) || "未入力"}
+      </div>
+    </details>
+
+    {/* 3) Will */}
+    <details style={{ marginTop: 12 }}>
+      <summary style={{ cursor: "pointer", fontWeight: 700 }}>Will（これから挑戦したいこと）</summary>
+      <div style={{ marginTop: 8, whiteSpace: "pre-wrap" }}>
+        {displayBadgeValue("Will", status["Will"]) || "未入力"}
+      </div>
+    </details>
+
+    {/* 4) Must（Have） */}
+    <details style={{ marginTop: 12 }}>
+      <summary style={{ cursor: "pointer", fontWeight: 700 }}>Must（Have）</summary>
+      <div style={{ marginTop: 8, whiteSpace: "pre-wrap" }}>
+        {displayBadgeValue("Must_have", status["Must_have"]) || "未入力"}
+      </div>
+    </details>
+
+    {/* 5) 私はこんな人 */}
+    <details style={{ marginTop: 12 }}>
+      <summary style={{ cursor: "pointer", fontWeight: 700 }}>私はこんな人</summary>
+      <div style={{ marginTop: 8, whiteSpace: "pre-wrap" }}>
+        {displayBadgeValue("私はこんな人", status["私はこんな人"]) || "未入力"}
+      </div>
+    </details>
+
+    {/* 6) Doing（初期は閉じる／好みでopenに） */}
+    <details style={{ marginTop: 12 }}>
+      <summary style={{ cursor: "pointer", fontWeight: 700 }}>Doing（行動・実践）</summary>
+      <div style={{ marginTop: 8, whiteSpace: "pre-wrap" }}>
+        {displayBadgeValue("Doing", status["Doing"]) || "未入力"}
+      </div>
+    </details>
+
+    {/* 7) Being（初期は開く） */}
+    <details open style={{ marginTop: 12 }}>
+      <summary style={{ cursor: "pointer", fontWeight: 700 }}>Being（価値観・関わり方）</summary>
+      <div style={{ marginTop: 8, whiteSpace: "pre-wrap" }}>
+        {displayBadgeValue("Being", status["Being"]) || "未入力"}
+      </div>
+    </details>
+  </section>
+)}
+
 
       {/* チャット画面 */}
       <main className="chat" ref={listRef} />
@@ -449,11 +503,11 @@ setChoices(isChoiceStep(next) ? uniqueByNormalized(inline) : []);
     <textarea
       ref={taRef}
       className="textarea"
-      placeholder={
-        step === 1
-          ? "求職者IDを入力してください（メールに届いているID）…"
-          : "メッセージを入力…"
-      }
+     placeholder={
+  step === 1
+    ? "お持ちの資格名を入力してください（例：看護師、准看護師、介護福祉士…）"
+    : "メッセージを入力…"
+}
       value={input}
       onChange={(e) => { setInput(e.target.value); }}
       onKeyDown={onKeyDown}
