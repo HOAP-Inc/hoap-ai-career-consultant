@@ -391,35 +391,35 @@ html, body, #__next { height: 100%; }
 
   .duo-stage{
     margin: 0;
-    margin-top: 8px !important;
-    height: 260px !important;
+    margin-top: 6px !important;
+    height: 304px !important;
     position: relative;
     overflow: hidden;
   }
   .duo-stage__bg{
-    background-size: 102%;
-    background-position: center bottom -24px;
+    background-size: 116%;
+    background-position: center bottom -18px;
   }
-  .duo-stage__wrap{ padding: 6px 12px; }
+  .duo-stage__wrap{ padding: 8px 14px; }
 
   .duo-stage__hoap{
-    width: min(48vw, 220px);
-    right: 6%;
-    bottom: 6px !important;
+    width: min(54vw, 248px);
+    right: 4%;
+    bottom: 10px !important;
     top: auto !important;
     z-index: 1;
   }
 
   .duo-stage__bubble{
-    left: 6%;
-    top: 4%;
-    width: 84vw;
-    max-width: 84vw;
+    left: 5%;
+    top: 6%;
+    width: 76vw;
+    max-width: 76vw;
     font-size:14px;
     line-height:1.6;
     padding:10px 12px;
     z-index: 2;
-    max-height: calc(100% - 24px);
+    max-height: 58%;
     overflow-y: auto;
     -webkit-overflow-scrolling: touch;
     overscroll-behavior: contain;
