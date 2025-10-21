@@ -10,6 +10,13 @@ const statusInit = {
   Being: "未入力",
 };
 
+const INITIAL_AI_TEXT =
+  "こんにちは！まずは保有している資格があれば教えてね。なければ空送信でも大丈夫だよ。\n※あとから追記もできるよ。";
+
+function createSessionId() {
+  return Math.random().toString(36).slice(2);
+}
+
 const STATUS_FIELDS = [
   "qual_ids",
   "can_text",
@@ -94,11 +101,11 @@ export default function Home() {
   const [statusBadges, setStatusBadges] = useState(statusInit);
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
-  const [sessionId] = useState(() => Math.random().toString(36).slice(2));
+  const [sessionId, setSessionId] = useState(() => createSessionId());
   const [meta, setMeta] = useState({ step: 1 });
   const [step, setStep] = useState(1);
   const [isComposing, setIsComposing] = useState(false);
-  const [aiText, setAiText] = useState("こんにちは！まずは保有している資格があれば教えてね。なければ空送信でも大丈夫だよ。\n※あとから追記もできるよ。");
+  const [aiText, setAiText] = useState(INITIAL_AI_TEXT);
   const [isTyping, setIsTyping] = useState(false);
   const [userEcho, setUserEcho] = useState("");
   const [choices, setChoices] = useState([]);
@@ -203,12 +210,12 @@ export default function Home() {
     }
   }
 
-  async function requestChat({ userMessage, metaOverride, statusOverride }) {
+  async function requestChat({ userMessage, metaOverride, statusOverride, sessionIdOverride }) {
     const payload = {
       userMessage,
       status: statusOverride ?? statusPayload,
       meta: metaOverride ?? meta,
-      sessionId,
+      sessionId: sessionIdOverride ?? sessionId,
     };
     const res = await fetch("/api/v2/chat", {
       method: "POST",
@@ -234,13 +241,14 @@ export default function Home() {
     return { data, nextStatus };
   }
 
-  async function fetchStepIntro(targetStep, statusOverride) {
+  async function fetchStepIntro(targetStep, statusOverride, sessionIdOverride) {
     setIsTyping(true);
     try {
       const { data } = await requestChat({
         userMessage: "",
         metaOverride: { step: targetStep, phase: "intro" },
         statusOverride,
+        sessionIdOverride,
       });
       if (data?.meta) {
         setMeta(data.meta);
@@ -279,6 +287,40 @@ export default function Home() {
     setAiText("");
 
     try {
+      if (meta.step >= 7) {
+        const freshSessionId = createSessionId();
+        setSessionId(freshSessionId);
+        setStatusPayload({});
+        setStatusBadges(statusInit);
+        setMeta({ step: 1 });
+        setStep(1);
+        setChoices([]);
+        cheeredIdRef.current = false;
+        cheeredDoneRef.current = false;
+        setHoapSrc("/hoap-basic.png");
+
+        const { data, nextStatus } = await requestChat({
+          userMessage: userText,
+          metaOverride: { step: 1 },
+          statusOverride: {},
+          sessionIdOverride: freshSessionId,
+        });
+
+        const nextStepValue = data?.meta?.step ?? 1;
+        setMeta({ step: nextStepValue, phase: "intro" });
+        setStep(Math.min(nextStepValue, 7));
+        setChoices([]);
+
+        if (nextStepValue >= 2 && nextStepValue <= 6) {
+          await fetchStepIntro(nextStepValue, nextStatus, freshSessionId);
+        } else if (nextStepValue === 7) {
+          setAiText(COMPLETION_MESSAGE);
+        } else {
+          setAiText(INITIAL_AI_TEXT);
+        }
+        return;
+      }
+
       if (meta.step === 1) {
         const { data, nextStatus } = await requestChat({
           userMessage: userText,
