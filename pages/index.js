@@ -114,6 +114,8 @@ export default function Home() {
   const cheeredDoneRef = useRef(false);
   const revertTimerRef = useRef(null);
   const empathyTimerRef = useRef(null);
+  const deepeningTimerRef = useRef(null);
+  const deepeningAdvanceRef = useRef(false);
   const bottomRef = useRef(null);
   const taRef = useRef(null);
 
@@ -188,6 +190,14 @@ export default function Home() {
       clearTimeout(revertTimerRef.current);
       revertTimerRef.current = null;
     }
+    if (empathyTimerRef.current) {
+      clearTimeout(empathyTimerRef.current);
+      empathyTimerRef.current = null;
+    }
+    if (deepeningTimerRef.current) {
+      clearTimeout(deepeningTimerRef.current);
+      deepeningTimerRef.current = null;
+    }
   }, []);
 
   useEffect(() => {
@@ -212,6 +222,38 @@ export default function Home() {
       }
     };
   }, [meta?.phase, meta?.step, sending]);
+
+  useEffect(() => {
+    if (deepeningTimerRef.current) {
+      clearTimeout(deepeningTimerRef.current);
+      deepeningTimerRef.current = null;
+    }
+    if (meta?.phase !== "deepening") {
+      deepeningAdvanceRef.current = false;
+      return undefined;
+    }
+    if (!aiText || sending) {
+      deepeningAdvanceRef.current = false;
+      return undefined;
+    }
+    if (!/次に進もう/.test(aiText)) {
+      deepeningAdvanceRef.current = false;
+      return undefined;
+    }
+    if (deepeningAdvanceRef.current) {
+      return undefined;
+    }
+    deepeningAdvanceRef.current = true;
+    deepeningTimerRef.current = setTimeout(() => {
+      autoAdvanceFromDeepeningCue();
+    }, 1600);
+    return () => {
+      if (deepeningTimerRef.current) {
+        clearTimeout(deepeningTimerRef.current);
+        deepeningTimerRef.current = null;
+      }
+    };
+  }, [aiText, meta?.phase, sending]);
 
   function statusStepLabel(current) {
     const map = {
@@ -440,6 +482,49 @@ export default function Home() {
       console.error(err);
       setAiText("通信エラーが発生したよ🙏");
     } finally {
+      setIsTyping(false);
+      setSending(false);
+    }
+  }
+
+  async function autoAdvanceFromDeepeningCue() {
+    if (meta?.phase !== "deepening") {
+      deepeningAdvanceRef.current = false;
+      return;
+    }
+    setSending(true);
+    setIsTyping(true);
+    setAiText("");
+    try {
+      const { data, nextStatus } = await requestChat({
+        userMessage: "",
+        metaOverride: meta,
+      });
+      const nextMeta = data?.meta ?? {};
+      if (nextMeta.phase) {
+        setMeta(nextMeta);
+        setStep(Math.min(nextMeta.step ?? step, 7));
+        const responseText = data?.response || "";
+        setAiText(responseText);
+        updateChoices(nextMeta.step ?? step, responseText);
+      } else {
+        const nextStepValue = nextMeta.step ?? step;
+        setMeta({ step: nextStepValue, phase: "intro" });
+        setStep(Math.min(nextStepValue, 7));
+        setChoices([]);
+        if (nextStepValue === 7) {
+          setAiText(COMPLETION_MESSAGE);
+        } else if (nextStepValue >= 2 && nextStepValue <= 6) {
+          await fetchStepIntro(nextStepValue, nextStatus);
+        } else {
+          setAiText("");
+        }
+      }
+    } catch (err) {
+      console.error(err);
+      setAiText("通信エラーが発生したよ🙏");
+    } finally {
+      deepeningAdvanceRef.current = false;
       setIsTyping(false);
       setSending(false);
     }
