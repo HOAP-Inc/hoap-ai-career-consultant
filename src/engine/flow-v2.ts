@@ -250,24 +250,63 @@ async function callLLM(_prompt: string, input: LLMInput): Promise<string> {
   }
   return JSON.stringify({
     control: { phase: input.phase },
-    response: buildConversationResponse(input.phase as Phase, input.cycleCount),
+    response: buildConversationResponse(input.phase as Phase, input),
   });
 }
 
-function buildConversationResponse(phase: Phase, cycleCount: number): string {
+function buildConversationResponse(phase: Phase, input: LLMInput): string {
+  const summary = summariseUserMessage(input.userMessage);
   if (phase === "intro") {
-    return "こんにちは！まずは今のご状況を少し教えてもらえるかな？";
+    const topic = summary ? `今の「${summary}」という状況` : "今のご状況";
+    return `こんにちは。${topic}について、無理のない範囲で教えてもらえるかな？`;
   }
   if (phase === "empathy") {
-    return "それは大変だったね。気持ちに寄り添いながら整理していこう。";
+    return buildEmpathyResponse(summary, input.cycleCount);
   }
   if (phase === "deepening") {
-    if (cycleCount >= 2) {
-      return "教えてくれた内容で十分な具体性ありと判断できたよ。次に進もう。";
-    }
-    return "もう少し詳しく状況を聞かせてもらってもいいかな？";
+    return buildDeepeningPrompt(summary, input.cycleCount);
   }
   return "";
+}
+
+function summariseUserMessage(message: string): string {
+  const trimmed = message.trim();
+  if (!trimmed) return "";
+  const segments = trimmed
+    .split(/[。！？!\?\n]/)
+    .map((part) => part.trim())
+    .filter(Boolean);
+  if (segments.length === 0) {
+    return trimmed.slice(-20);
+  }
+  const candidate = segments[segments.length - 1] || segments[0];
+  return candidate.length > 24 ? candidate.slice(0, 24) : candidate;
+}
+
+function buildEmpathyResponse(summary: string, cycleCount: number): string {
+  const focus = summary ? `「${summary}」というお話` : "話してくれた内容";
+  const variants = [
+    `${focus}から、とても丁寧に向き合ってきた様子が伝わってきたよ。大変だった気持ちを抱えながらもここまで共有してくれて本当にありがとう。`,
+    `${focus}に込められた思いや重さを想像すると胸がぎゅっとなるよ。ひとつひとつ整理しながら一緒に乗り越えていこう。`,
+    `${focus}を聞いて、どれほど頑張ってきたのかを感じたよ。気持ちが少しでも軽くなるよう、これからも伴走するね。`,
+  ];
+  const index = Math.min(cycleCount, variants.length - 1);
+  return variants[index];
+}
+
+function buildDeepeningPrompt(summary: string, cycleCount: number): string {
+  const context = summary ? `その「${summary}」という経験` : "その経験";
+  if (cycleCount >= MAX_CYCLES - 1) {
+    return "共有してくれた内容で十分な具体性ありと判断できたよ。次に進もう。";
+  }
+  const prompts = [
+    `${context}の中で特に印象に残っている場面や出来事を教えてもらえる？`,
+    `${context}に向き合うとき、意識していた工夫や大切にした考え方があれば詳しく聞かせてほしいな。`,
+    `${context}を通じて得た気づきや周囲との関わり方についても知りたい。どんな変化があった？`,
+    `${context}から生まれた学びや、今後に活かしたいと思っていることがあれば教えてもらえる？`,
+  ];
+  const index = Math.min(cycleCount, prompts.length - 1);
+  return prompts[index];
 }
 
 function buildGenerationPayload(step: number): Partial<Status> {
