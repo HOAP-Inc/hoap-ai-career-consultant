@@ -70,7 +70,7 @@ function mergeStatus(base: Status, patch: Partial<Status>): Status {
   const next: Status = { ...base };
   for (const [key, value] of Object.entries(patch) as Array<[keyof Status, Status[keyof Status]]>) {
     if (value !== undefined) {
-      next[key] = value;
+      (next as Record<keyof Status, Status[keyof Status]>)[key] = value;
     }
   }
   return next;
