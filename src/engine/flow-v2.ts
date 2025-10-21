@@ -243,18 +243,22 @@ type LLMInput = {
   mode: "conversation" | "generation";
 };
 
-async function callLLM(_prompt: string, input: LLMInput): Promise<string> {
+async function callLLM(prompt: string, input: LLMInput): Promise<string> {
   // Stub implementation that emulates deterministic LLM behaviour.
   if (input.mode === "generation") {
     return JSON.stringify({ status: buildGenerationPayload(input.step) });
   }
   return JSON.stringify({
     control: { phase: input.phase },
-    response: buildConversationResponse(input.phase as Phase, input),
+    response: buildConversationResponse(input.phase as Phase, input, prompt),
   });
 }
 
-function buildConversationResponse(phase: Phase, input: LLMInput): string {
+function buildConversationResponse(phase: Phase, input: LLMInput, prompt: string): string {
+  const scripted = extractScriptedResponse(prompt, phase);
+  if (scripted) {
+    return scripted;
+  }
   const summary = summariseUserMessage(input.userMessage);
   if (phase === "intro") {
     const topic = summary ? `今の「${summary}」という状況` : "今のご状況";
@@ -307,6 +311,68 @@ function buildDeepeningPrompt(summary: string, cycleCount: number): string {
   ];
   const index = Math.min(cycleCount, prompts.length - 1);
   return prompts[index];
+}
+
+function extractScriptedResponse(prompt: string, phase: Phase): string | null {
+  if (!prompt.trim()) return null;
+  const labelMap: Record<Phase, string[]> = {
+    intro: ["Phase 1：intro", "Phase1：intro"],
+    empathy: ["Phase 2：empathy", "Phase2：empathy"],
+    deepening: ["Phase 3：deepening", "Phase3：deepening"],
+    generation: [],
+  };
+
+  const labels = labelMap[phase];
+  if (!labels.length) return null;
+
+  const lines = prompt.split(/\r?\n/);
+  const startIndex = lines.findIndex((line) => labels.some((label) => line.includes(label)));
+  if (startIndex === -1) {
+    return null;
+  }
+
+  const collected: string[] = [];
+  for (let i = startIndex + 1; i < lines.length; i += 1) {
+    const line = lines[i].trim();
+    if (!line) {
+      if (collected.length > 0) break;
+      continue;
+    }
+    if (/^Phase\s+\d/.test(line) || line.startsWith("---")) {
+      break;
+    }
+    if (line.startsWith("出力：") || line.startsWith("例：") || line.startsWith("禁止語検出")) {
+      break;
+    }
+    if (/^\{/.test(line)) {
+      break;
+    }
+    collected.push(line);
+  }
+
+  if (collected.length === 0) {
+    // As a fallback, try to capture the response string inside the example JSON block.
+    const snippet = lines.slice(startIndex).join("\n");
+    const match = snippet.match(/"response"\s*:\s*"([^"]+)"/);
+    if (match) {
+      return match[1];
+    }
+    return null;
+  }
+
+  const text = collected.join(" ");
+  if (phase === "intro") {
+    return text;
+  }
+
+  if (phase === "empathy" || phase === "deepening") {
+    if (text.includes("自然な共感メッセージ") || text.includes("質問")) {
+      return null;
+    }
+    return text;
+  }
+
+  return null;
 }
 
 function buildGenerationPayload(step: number): Partial<Status> {
