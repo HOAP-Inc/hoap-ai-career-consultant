@@ -42,3 +42,28 @@ async function callLLM(_prompt: string, input: LLMInput): Promise<string> {
 - STEP4 の Must 条件 ID 寄せは `src/engine/legacy/step4-adapter.ts`
 
 いずれも旧仕様のロジックを TypeScript へ移植したラッパーで、必要に応じて拡張できます。
+
+## 本番環境へのデプロイ
+
+このリポジトリは Vercel でのデプロイを想定しています。`main` ブランチへマージすると Vercel 側の自動デプロイが走る構成であれば、基本的にはそれだけで最新の変更が本番へ反映されます。
+
+手元から直接本番デプロイを行いたい場合は Vercel CLI を利用してください。
+
+```bash
+# 1. Vercel へログイン（初回のみ）
+npx vercel login
+
+# 2. このプロジェクトと Vercel を紐付け（初回のみ）
+npx vercel link
+
+# 3. 本番用の環境変数を取得（必要なら）
+npx vercel pull --environment=production
+
+# 4. 念のためビルド確認
+npm run build
+
+# 5. 本番へ反映
+npx vercel deploy --prod
+```
+
+CLI を実行した端末に Vercel のチーム／プロジェクトへのアクセス権限が必要です。`--prod` を付与することでプレビューではなく本番エイリアスへ直接公開されます。
