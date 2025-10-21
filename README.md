@@ -87,5 +87,26 @@ GitHub 上で Pull Request を作成しても `main` ブランチへマージで
 
 4. **権限の確認** — リポジトリに書き込み権限がないとマージできません。GitHub 上で自分の権限を確認し、必要に応じて管理者に付与を依頼してください。
 
+### 「Can't automatically merge. Don't worry, you can still create the pull request.」が表示される場合
+
+GitHub で PR を作成するときにこのメッセージが出るのは、**ベースブランチ（例: `main`）と差分がコンフリクトしており、GitHub 上の自動マージができない状態**であることを意味します。次の手順で解消してください。
+
+1. **最新版の `main` を取り込む** — ローカルで以下を実行し、競合しているファイルを解消します。
+
+   ```bash
+   git checkout main
+   git pull origin main
+   git checkout <feature-branch>
+   git merge main  # または git rebase main
+   # コンフリクトを解消してからステージング＆コミット
+   git add <修正したファイル>
+   git commit
+   git push origin <feature-branch>
+   ```
+
+2. **GitHub 上で解消する** — PR 画面に「Resolve conflicts」ボタンが表示されている場合、その場で編集して解消できます。完了後は GitHub が自動的にマージ可能な状態へ更新します。
+
+3. **マージ可能か確認する** — コンフリクトが無くなるとメッセージが消え、「This branch has no conflicts with the base branch」と表示されます。その状態であれば、レビューやテストなどの条件を満たせばマージできます。
+
 上記をクリアすると `main` ブランチへのマージが可能になり、自動デプロイが有効であればそのまま本番へ反映されます。
 
