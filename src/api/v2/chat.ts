@@ -72,9 +72,13 @@ export default async function handler(
     const sessionId = sessionIdRaw || "default";
 
     if (meta.step === 1) {
-      const legacy = runStep1Adapter(userMessage);
+      const legacy = runStep1Adapter({ userMessage, sessionId });
       const mergedStatus = { ...status, ...legacy.status };
-      res.status(200).json({ status: mergedStatus, meta: legacy.meta });
+      const payload: SuccessResponse = { status: mergedStatus, meta: legacy.meta };
+      if (legacy.response != null) {
+        payload.response = legacy.response;
+      }
+      res.status(200).json(payload);
       return;
     }
 

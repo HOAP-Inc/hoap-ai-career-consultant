@@ -91,7 +91,7 @@ function extractChoices(text) {
 }
 
 function isChoiceStep(step) {
-  return step === 4;
+  return step === 1 || step === 4;
 }
 
 const COMPLETION_MESSAGE = "すべてのステップが完了したよ！お疲れさま😊";
@@ -326,14 +326,24 @@ export default function Home() {
           userMessage: userText,
           metaOverride: { step: 1 },
         });
-        const nextStepValue = data?.meta?.step ?? 1;
-        setMeta({ step: nextStepValue, phase: "intro" });
+        const nextMeta = data?.meta ?? { step: 1 };
+        const nextStepValue = nextMeta.step ?? 1;
+        setMeta(nextMeta);
         setStep(Math.min(nextStepValue, 7));
-        setChoices([]);
-        if (nextStepValue >= 2 && nextStepValue <= 6) {
-          await fetchStepIntro(nextStepValue, nextStatus);
-        } else if (nextStepValue === 7) {
-          setAiText(COMPLETION_MESSAGE);
+
+        if (nextStepValue === 1) {
+          const responseText = data?.response || "";
+          setAiText(responseText || INITIAL_AI_TEXT);
+          updateChoices(1, responseText);
+        } else {
+          setChoices([]);
+          if (nextStepValue >= 2 && nextStepValue <= 6) {
+            await fetchStepIntro(nextStepValue, nextStatus);
+          } else if (nextStepValue === 7) {
+            setAiText(COMPLETION_MESSAGE);
+          } else {
+            setAiText("");
+          }
         }
         return;
       }
