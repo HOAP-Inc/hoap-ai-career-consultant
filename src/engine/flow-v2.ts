@@ -57,6 +57,16 @@ function parseLLMResponse(raw: unknown): unknown {
   return null;
 }
 
+type LLMInput = {
+  step: number;
+  phase: string;
+  status: Status;
+  meta: Meta;
+  userMessage: string;
+  cycleCount: number;
+  mode: "conversation" | "generation";
+};
+
 async function callLLM(_prompt: string, input: LLMInput): Promise<string> {
   if (input.mode === "generation") {
     return JSON.stringify({ status: buildGenerationPayload(input.step) });
