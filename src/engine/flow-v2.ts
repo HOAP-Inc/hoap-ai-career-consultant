@@ -57,6 +57,33 @@ function parseLLMResponse(raw: unknown): unknown {
   return null;
 }
 
+    function buildGenerationPayload(step: number): Partial<Status> {
+  if (step === 2) {
+    return { can_text: buildFixedLengthText(70) };
+  }
+  if (step === 3) {
+    return { will_text: buildFixedLengthText(72) };
+  }
+  if (step === 4) {
+    return { must_have_text: buildFixedLengthText(75) };
+  }
+  if (step === 5) {
+    return { self_text: buildFixedLengthText(140) };
+  }
+  if (step === 6) {
+    const doing = buildFixedLengthText(300);
+    const being = buildFixedLengthText(300);
+    return { doing_text: insertNewline(doing), being_text: insertNewline(being) };
+  }
+  return {};
+}
+  }
+  if (typeof raw === "object" && raw !== null) {
+    return raw;
+  }
+  return null;
+}
+
 type LLMInput = {
   step: number;
   phase: string;
@@ -284,28 +311,6 @@ async function callLLM(_prompt: string, input: LLMInput): Promise<string> {
   const data = await response.json();
   const message = data?.choices?.[0]?.message?.content;
   return message || "";
-}
-
-
-function buildGenerationPayload(step: number): Partial<Status> {
-  if (step === 2) {
-    return { can_text: buildFixedLengthText(70) };
-  }
-  if (step === 3) {
-    return { will_text: buildFixedLengthText(72) };
-  }
-  if (step === 4) {
-    return { must_have_text: buildFixedLengthText(75) };
-  }
-  if (step === 5) {
-    return { self_text: buildFixedLengthText(140) };
-  }
-  if (step === 6) {
-    const doing = buildFixedLengthText(300);
-    const being = buildFixedLengthText(300);
-    return { doing_text: insertNewline(doing), being_text: insertNewline(being) };
-  }
-  return {};
 }
 
 function buildFixedLengthText(target: number): string {
