@@ -12,8 +12,10 @@ export function readPrompt(step: number): string {
     throw new Error(`Prompt directory not found: ${PROMPT_DIR}`);
   }
 
-  const pattern = new RegExp(`^step${step}_.+\\.txt$`);
-  const entries = fs.readdirSync(PROMPT_DIR).filter((file) => pattern.test(file));
+  const entries = fs.readdirSync(PROMPT_DIR).filter((file) => {
+  return file.startsWith(`step${step}_`) && file.endsWith(".txt");
+});
+
 
   if (entries.length === 0) {
     throw new Error(`Prompt for step ${step} not found`);
