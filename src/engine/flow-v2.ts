@@ -127,11 +127,6 @@ async function callLLM(_prompt: string, input: LLMInput): Promise<string> {
   return message;
 }
 
-  const data = await response.json();
-  const message = data?.choices?.[0]?.message?.content;
-  return message || "";
-}
-
 function shouldEnterGeneration(response: string, cycles: number): boolean {
   if (!response) return false;
   const markers = ["十分な具体性あり", "GENERATION_READY", "具体性は十分"];
