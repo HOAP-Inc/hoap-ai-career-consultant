@@ -112,6 +112,21 @@ async function callLLM(_prompt: string, input: LLMInput): Promise<string> {
     }),
   });
 
+  if (!response.ok) {
+    const text = await response.text().catch(() => "");
+    throw new Error(`LLM API error: ${response.status} ${response.statusText} - ${text}`);
+  }
+
+  const data = await response.json().catch(() => ({}));
+  const message = data?.choices?.[0]?.message?.content ?? "";
+
+  if (!message) {
+    throw new Error("Invalid LLM response structure");
+  }
+
+  return message;
+}
+
   const data = await response.json();
   const message = data?.choices?.[0]?.message?.content;
   return message || "";
@@ -195,9 +210,9 @@ async function runGenerationPhase(params: {
 
 export async function routeStep({ sessionId, status, meta, userMessage }: RouteStepArgs): Promise<RouteStepResult> {
   const step = Number(meta?.step ?? 0);
-  if (!Number.isFinite(step) || step < 2 || step > 6) {
-    throw new Error(`Unsupported step: ${meta?.step}`);
-  }
+  if (!Number.isFinite(step) || step < 1 || step > 6) {
+  return { status, meta, response: "" };
+}
 
   const session = getSessionState(sessionId, step);
 
