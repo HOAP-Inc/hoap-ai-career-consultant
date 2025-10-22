@@ -244,31 +244,33 @@ type LLMInput = {
 };
 
 async function callLLM(_prompt: string, input: LLMInput): Promise<string> {
-  // Stub implementation that emulates deterministic LLM behaviour.
-  if (input.mode === "generation") {
-    return JSON.stringify({ status: buildGenerationPayload(input.step) });
-  }
-  return JSON.stringify({
-    control: { phase: input.phase },
-    response: buildConversationResponse(input.phase as Phase, input.cycleCount),
+  const response = await fetch("https://api.openai.com/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Authorization": `Bearer ${process.env.OPENAI_API_KEY}`,
+    },
+    body: JSON.stringify({
+      model: "gpt-4o-mini",
+      messages: [
+        { role: "system", content: _prompt },
+        { role: "user", content: JSON.stringify(input) }
+      ],
+    }),
   });
+
+  const data: {
+  choices?: { message?: { content?: string } }[];
+  error?: { message: string };
+} = await response.json();
+
+if (data.error) {
+  throw new Error(`OpenAI API error: ${data.error.message}`);
 }
 
-function buildConversationResponse(phase: Phase, cycleCount: number): string {
-  if (phase === "intro") {
-    return "こんにちは！まずは今のご状況を少し教えてもらえるかな？";
-  }
-  if (phase === "empathy") {
-    return "それは大変だったね。気持ちに寄り添いながら整理していこう。";
-  }
-  if (phase === "deepening") {
-    if (cycleCount >= 2) {
-      return "教えてくれた内容で十分な具体性ありと判断できたよ。次に進もう。";
-    }
-    return "もう少し詳しく状況を聞かせてもらってもいいかな？";
-  }
-  return "";
-}
+return data.choices?.[0]?.message?.content || "";
+} 
+
 
 function buildGenerationPayload(step: number): Partial<Status> {
   if (step === 2) {
