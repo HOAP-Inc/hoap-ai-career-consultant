@@ -11,7 +11,7 @@ const statusInit = {
 };
 
 const INITIAL_AI_TEXT =
-  "こんにちは！まずは保有している資格があれば教えてね。なければ空送信でも大丈夫だよ。\n※あとから追記もできるよ。";
+  "こんにちは！まずは保有している資格があれば教えてね。\n資格がない場合は「未資格」でOK。";
 
 function createSessionId() {
   return Math.random().toString(36).slice(2);
