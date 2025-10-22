@@ -228,9 +228,10 @@ export async function routeStep({ sessionId, status, meta, userMessage }: RouteS
   sessions.delete(sessionId);
 
   return {
-    status: merged,
-    meta: { step: nextStep },
-  };
+  status: merged,
+  meta: { step: nextStep },
+  response: generation.response || "",
+};
 }
 
 type LLMInput = {
