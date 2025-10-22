@@ -57,6 +57,17 @@ function parseLLMResponse(raw: unknown): unknown {
   return null;
 }
 
+async function callLLM(_prompt: string, input: LLMInput): Promise<string> {
+  if (input.mode === "generation") {
+    return JSON.stringify({ status: buildGenerationPayload(input.step) });
+  }
+  return JSON.stringify({
+    control: { phase: input.phase },
+    response: buildConversationResponse(input.phase as Phase, input.cycleCount),
+  });
+}
+
+
 function shouldEnterGeneration(response: string, cycles: number): boolean {
   if (!response) return false;
   const markers = ["十分な具体性あり", "GENERATION_READY", "具体性は十分" ];
