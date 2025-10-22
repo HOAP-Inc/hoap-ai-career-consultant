@@ -230,9 +230,8 @@ export async function routeStep({ sessionId, status, meta, userMessage }: RouteS
   return {
   status: merged,
   meta: { step: nextStep },
-  response: generation.response || "",
+  response: generation.response ?? generation.status?.summary ?? "",
 };
-}
 
 type LLMInput = {
   step: number;
