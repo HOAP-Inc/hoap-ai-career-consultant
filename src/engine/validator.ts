@@ -8,6 +8,7 @@ export type ConversationValidationResult = {
 export type GenerationValidationResult = {
   ok: boolean;
   status: Partial<Status>;
+  response?: string;
 };
 
 const MIN_CAN_WILL = 60;
