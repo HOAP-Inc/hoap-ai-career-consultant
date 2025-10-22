@@ -64,7 +64,17 @@ export default async function handler(
   }
 
   try {
-    const body = typeof req.body === "object" && req.body ? req.body : {};
+    const bodyRaw = req.body;
+    let body: Record<string, unknown> = {};
+    if (typeof bodyRaw === "string") {
+      try {
+        body = JSON.parse(bodyRaw) as Record<string, unknown>;
+      } catch {
+        body = {};
+      }
+    } else if (typeof bodyRaw === "object" && bodyRaw) {
+      body = bodyRaw as Record<string, unknown>;
+    }
     const userMessage = typeof (body as any).userMessage === "string" ? (body as any).userMessage : "";
     const status = normalizeStatus((body as any).status);
     const meta = normalizeMeta((body as any).meta);
