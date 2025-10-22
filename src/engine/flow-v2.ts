@@ -255,22 +255,16 @@ async function callLLM(_prompt: string, input: LLMInput): Promise<string> {
       model: "gpt-4o-mini",
       messages: [
         { role: "system", content: _prompt },
-        { role: "user", content: JSON.stringify(input) }
+        { role: "user", content: JSON.stringify(input) },
       ],
+      temperature: 0.7,
     }),
   });
 
-  const data: {
-  choices?: { message?: { content?: string } }[];
-  error?: { message: string };
-} = await response.json();
-
-if (data.error) {
-  throw new Error(`OpenAI API error: ${data.error.message}`);
+  const data = await response.json();
+  const message = data?.choices?.[0]?.message?.content;
+  return message || "";
 }
-
-return data.choices?.[0]?.message?.content || "";
-} 
 
 
 function buildGenerationPayload(step: number): Partial<Status> {
