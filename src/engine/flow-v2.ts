@@ -51,18 +51,14 @@ function parseLLMResponse(raw: unknown): unknown {
       return null;
     }
   }
-  if (typeof raw === "object" && raw !== null) {
-    return raw;
-  }
+  if (typeof raw === "object" && raw !== null) return raw;
   return null;
 }
 
 function buildFixedLengthText(target: number): string {
   const base = "私は患者さんの病気ではなく、人生や価値観、その人そのものを看る看護を大切にしてきました。";
   let result = "";
-  while (result.length < target) {
-    result += base;
-  }
+  while (result.length < target) result += base;
   return result.slice(0, target);
 }
 
@@ -70,19 +66,6 @@ function insertNewline(text: string): string {
   if (text.length < 2) return text;
   const midpoint = Math.floor(text.length / 2);
   return `${text.slice(0, midpoint)}\n${text.slice(midpoint)}`;
-}
-
-function buildGenerationPayload(step: number): Partial<Status> {
-  if (step === 2) return { can_text: buildFixedLengthText(70) };
-  if (step === 3) return { will_text: buildFixedLengthText(72) };
-  if (step === 4) return { must_have_text: buildFixedLengthText(75) };
-  if (step === 5) return { self_text: buildFixedLengthText(140) };
-  if (step === 6) {
-    const doing = buildFixedLengthText(300);
-    const being = buildFixedLengthText(300);
-    return { doing_text: insertNewline(doing), being_text: insertNewline(being) };
-  }
-  return {};
 }
 
 type LLMInput = {
@@ -100,7 +83,7 @@ async function callLLM(_prompt: string, input: LLMInput): Promise<string> {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      "Authorization": `Bearer ${process.env.OPENAI_API_KEY}`,
+      Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
     },
     body: JSON.stringify({
       model: "gpt-4o-mini",
@@ -119,19 +102,14 @@ async function callLLM(_prompt: string, input: LLMInput): Promise<string> {
 
   const data = await response.json().catch(() => ({}));
   const message = data?.choices?.[0]?.message?.content ?? "";
-
-  if (!message) {
-    throw new Error("Invalid LLM response structure");
-  }
-
+  if (!message) throw new Error("Invalid LLM response structure");
   return message;
 }
 
 function shouldEnterGeneration(response: string, cycles: number): boolean {
   if (!response) return false;
   const markers = ["十分な具体性あり", "GENERATION_READY", "具体性は十分"];
-  if (markers.some((m) => response.includes(m))) return true;
-  return cycles >= MAX_CYCLES;
+  return markers.some((m) => response.includes(m)) || cycles >= MAX_CYCLES;
 }
 
 function mergeStatus(base: Status, patch: Partial<Status>): Status {
@@ -206,8 +184,8 @@ async function runGenerationPhase(params: {
 export async function routeStep({ sessionId, status, meta, userMessage }: RouteStepArgs): Promise<RouteStepResult> {
   const step = Number(meta?.step ?? 0);
   if (!Number.isFinite(step) || step < 1 || step > 6) {
-  return { status, meta, response: "" };
-}
+    throw new Error(`Unsupported step: ${step}`);
+  }
 
   const session = getSessionState(sessionId, step);
 
@@ -276,8 +254,8 @@ export async function routeStep({ sessionId, status, meta, userMessage }: RouteS
   sessions.delete(sessionId);
 
   return {
-  status: merged,
-  meta: { step: nextStep },
-  response: generation.response ?? "",
-};
+    status: merged,
+    meta: { step: nextStep, phase: "generation" },
+    response: generation.response ?? "",
+  };
 }
