@@ -503,7 +503,7 @@ setChoices(isChoiceStep(next) ? uniqueByNormalized(inline) : []);
       className="textarea"
      placeholder={
   step === 1
-    ? "お持ちの資格名を入力してください（例：看護師、准看護師、介護福祉士…）"
+    ? "お持ちの資格名を入力してください（例：正看護師、准看護師、介護福祉士…）"
     : "メッセージを入力…"
 }
       value={input}
