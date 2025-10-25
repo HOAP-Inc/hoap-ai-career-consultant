@@ -388,8 +388,8 @@ setChoices(isChoiceStep(next) ? uniqueByNormalized(inline) : []);
               type="button"
               className="choice-btn"
               onClick={() => {
-                onSend(c);      // タップした文言で即送信
-                setChoices([]); // 二重送信防止で即非表示
+                onSend(c); 
+                setChoices([]);
               }}
             >
               {c}
@@ -486,11 +486,10 @@ setChoices(isChoiceStep(next) ? uniqueByNormalized(inline) : []);
 
       {/* チャット画面 */}
       <main className="chat" ref={listRef} />
-      <div ref={bottomRef} />   {/* ← これを追加 */}
+      <div ref={bottomRef} /> 
 
      {/* 入力欄 */}
 <footer className="input-bar">
-  {/* 入力欄の“直上”に固定表示（横並びに巻き込まれない位置） */}
   {userEcho && (
     <div className="user-echo" aria-live="polite">
       <div className="user-echo__bubble">{userEcho}</div>
