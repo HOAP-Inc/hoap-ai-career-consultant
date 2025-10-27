@@ -24,19 +24,7 @@ generation_rules（運用指針）
 - rule が一切マッチしない場合のデフォルトは "call_llm"。
 
 recommended_rules（例）
-- step 1（資格入力）
-  - 条件: matched_qualification == true
-  - action: no_call
-  - 理由: 既存辞書（qualifications.json）で確定できるため LLM 不要
-  - 条件: matched_qualification == false AND found_license_labels_count >= 1 AND found_license_labels_count <= 1
-  - action: no_call
-  - 理由: 単一候補なら LLM 不要（選択肢提示も server で可能）
-  - 条件: matched_qualification == false AND found_license_labels_count >= 2
-  - action: no_call
-  - 理由: 複数候補は server が選択肢を提示するため LLM 不要
-  - 条件: user_text.length < 3
-  - action: no_call
-  - 理由: 短すぎる入力は LLM を呼ばず補助を促す
+# STEP1はすべてLLM側（step1_license_system.txt）で処理するため、ここでの判定ロジックは削除。
 
 - step 4（転職理由深掘り）
   - 条件: category_hits >= 2 OR contains_salary_keywords == true
