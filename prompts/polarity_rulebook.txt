@@ -1,1 +1,48 @@
+purpose
+server 側で LLM を呼ぶ/呼ばないを決めるためのルールブック。入力内容の「信頼度」「明確度」「辞書一致度」を判定し、必要な場合のみ LLM を呼ぶ。
+
+expected_input
+- {
+  "step": 数値,
+  "user_text": "ユーザー発話",
+  "stage": { "turn_index": 0|1|2 },
+  "available_maps": { "available_licenses": {...}, "available_purposes": {...}, "available_tags": {...} },
+  "derived_signals": { "norm_length": 数値, "has_digits": true|false, "matched_qualification": true|false, ... }
+  }
+
+rule_schema
+- rules: 配列
+  - id: 文字列（内部識別）
+  - steps: 配列または null（適用する step 番号。null は全体適用）
+  - condition: 文言による判定条件（正規表現／閾値の組み合わせを明記）
+  - action: "call_llm" | "no_call"
+  - rationale: 短文
+
+generation_rules（運用指針）
+- server は rules を上から順に評価し、最初にマッチした rule の action を採用する。
+- 各 rule の condition は明示的に評価可能であること（例: "matched_qualification == true" や "norm_length >= 30"）。
+- rule が一切マッチしない場合のデフォルトは "call_llm"。
+
+recommended_rules（例）
+- step 1（資格入力）
+  - 条件: matched_qualification == true
+  - action: no_call
+  - 理由: 既存辞書（qualifications.json）で確定できるため LLM 不要
+  - 条件: matched_qualification == false AND found_license_labels_count >= 1 AND found_license_labels_count <= 1
+  - action: no_call
+  - 理由: 単一候補なら LLM 不要（選択肢提示も server で可能）
+  - 条件: matched_qualification == false AND found_license_labels_count >= 2
+  - action: no_call
+  - 理由: 複数候補は server が選択肢を提示するため LLM 不要
+  - 条件: user_text.length < 3
+  - action: no_call
+  - 理由: 短すぎる入力は LLM を呼ばず補助を促す
+
+- step 4（転職理由深掘り）
+  - 条件: category_hits >= 2 OR contains_salary_keywords == true
+  - action: call_llm
+  - 理由: 複雑な意図解釈には LLM が有効
+
+operational_notes
+- このファイルは server 側で直接評価する目的のルールであり、LLM に渡すものではない。LLM に渡す際は llm_brake_system.txt を最初に含める。
 
