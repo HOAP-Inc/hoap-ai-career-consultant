@@ -45,4 +45,4 @@ recommended_rules（例）
 
 operational_notes
 - このファイルは server 側で直接評価する目的のルールであり、LLM に渡すものではない。LLM に渡す際は llm_brake_system.txt を最初に含める。
-
+- 本ファイル内のルール判定は server 側のみが実行権を持ち、実行エンジンが再評価・変更を行うことはできない。
