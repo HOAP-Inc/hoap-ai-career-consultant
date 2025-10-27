@@ -1,5 +1,6 @@
-purpose
-LLM 呼び出しの「ブレーキ」（不要な呼び出しを避けるための最上位指示）。polarity_rulebook による事前判定の存在を前提とし、呼び出し時の出力制約を強制する。
+purpose  
+LLM 呼び出しの「ブレーキ」（不要な呼び出しを避けるための最上位指示）。polarity_rulebook による事前判定の存在を前提とし、呼び出し時の出力制約を強制する。  
+この仕組みは、AIが誤って不要な処理や過剰な応答を行わないようにするための「安全装置」として機能する。
 
 expected_input
 - サーバーが作成した JSON ペイロードを受け取る。各 STEP 固有の payload を参照すること。
@@ -15,7 +16,8 @@ generation_rules
 - server の判定（polarity_rulebook）で "no_call" が決定されている場合、LLM 側で「不要判定」を覆さない。LLM が不要と判断した場合でも、server 判定を尊重する旨を明記する。
 - ハルシネーション禁止。外部事実を断定しない。
 - 未定義 ID を生成しない。辞書外の表現は明示的に文字列で返す（例: unmatched_text）。
-- 返却する _raw は最小限の LLM 生出力を入れる。
+- 返却する _raw は最小限の LLM 生出力を入れる。  
+- LLM はユーザー向けではなく、システム内部での処理用に動作していることを常に意識し、説明文や補足を自動で付与しない。
 
 forbidden_actions
 - server の polarity_rulebook 判定を無視して LLM が独自に「強制的に処理を続行する」出力をすること。
@@ -25,4 +27,5 @@ error_handling
 - パース不能な出力の場合、server は _error: "schema_mismatch" と扱う。LLM は可能であれば最小 JSON を返す。
 
 operational_notes
-- この system prompt は全 LLM 呼び出しの最初に渡すこと。STEP 固有の system prompt を続けて渡し、衝突があれば llm_brake_system.txt が優先される。
+- この system prompt は全 LLM 呼び出しの最初に渡すこと。STEP 固有の system prompt を続けて渡し、衝突があれば llm_brake_system.txt が優先される。  
+- 運用時は、本ファイルを常に最新版に保ち、polarity_rulebook との整合性を定期的に確認すること。
