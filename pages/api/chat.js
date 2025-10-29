@@ -277,7 +277,7 @@ async function handleStep1(session, userText) {
     if (!qualId) {
       resetDrill(session);
       return {
-        response: "IDを付与できなかったよ。別の言い方で教えてみて。",
+        response: "ほーぷちゃんの中にはその資格名が見つからないみたい。別の言い方で教えてみて。",
         status: session.status,
         meta: { step: 1 },
         drill: session.drill,
@@ -290,7 +290,7 @@ async function handleStep1(session, userText) {
     session.step = 2;
     session.stage.turnIndex = 0;
     return {
-      response: `資格は「${qualName}」で進めるね！次はCanを整理しよう✨`,
+      response: `資格は「${qualName}」で進めるね！次はあなたのやってきたこと、これからも活かしていきたいことを整理しよう✨`,
       status: session.status,
       meta: { step: 2 },
       drill: session.drill,
@@ -299,7 +299,7 @@ async function handleStep1(session, userText) {
 
   if (!trimmed) {
     return {
-      response: "今の資格や研修名を一言で教えてね！",
+      response: "今持っている資格や研修名を一言で教えてね！",
       status: session.status,
       meta: { step: 1 },
       drill: session.drill,
@@ -315,7 +315,7 @@ async function handleStep1(session, userText) {
     session.stage.turnIndex = 0;
     resetDrill(session);
     return {
-      response: `了解！「${qualName}」として記録したよ。次はCanを一緒に考えよう✨`,
+      response: `了解！「${qualName}」として記録したよ。次はあなたのやってきたこと、これからも活かしていきたいことを一緒に考えよう✨`,
       status: session.status,
       meta: { step: 2 },
       drill: session.drill,
@@ -337,7 +337,7 @@ async function handleStep1(session, userText) {
       session.stage.turnIndex = 0;
       resetDrill(session);
       return {
-        response: `その呼び方なら「${label}」が近いかな！このIDで進めるね✨`,
+        response: `その呼び方なら「${label}」が近いかな！これで進めるね✨`,
         status: session.status,
         meta: { step: 2 },
         drill: session.drill,
@@ -352,7 +352,7 @@ async function handleStep1(session, userText) {
       session.stage.turnIndex = 0;
       resetDrill(session);
       return {
-        response: `その表現なら「${label}」として登録できるよ！このIDで進めよう✨`,
+        response: `その表現なら「${label}」として登録できるよ！これで進めよう✨`,
         status: session.status,
         meta: { step: 2 },
         drill: session.drill,
@@ -387,7 +387,7 @@ async function handleStep1(session, userText) {
   }
 
   return {
-    response: "ごめん、まだ登録できる資格が見つからなかったよ。正式名称で教えてみて！",
+    response: "ごめん、ほーぷちゃんの中にはその資格名がないみたい。正式名称で教えてみて！",
     status: session.status,
     meta: { step: 1 },
     drill: session.drill,
@@ -413,11 +413,11 @@ async function handleStep2(session, userText) {
   const payload = buildStepPayload(session, userText, 3);
   const llm = await callLLM(2, payload, session, { model: "gpt-4o" });
   if (!llm.ok) {
-    return buildSchemaError(2, session, "Canの整理でエラーが起きたみたい。もう一度話してみて！", llm.error);
+    return buildSchemaError(2, session, "あなたのやってきたこと、これからも活かしていきたいことの整理でエラーが起きたみたい。もう一度話してみて！", llm.error);
   }
   const { empathy, paraphrase, ask_next, meta } = llm.parsed || {};
   if (typeof empathy !== "string" || typeof paraphrase !== "string" || (ask_next != null && typeof ask_next !== "string")) {
-    return buildSchemaError(2, session, "Canの整理でエラーが起きたみたい。もう一度話してみて！");
+    return buildSchemaError(2, session, "あなたやってきたこと、これからも活かしていきたいことの整理でエラーが起きたみたい。もう一度話してみて！");
   }
   session.status.can_text = paraphrase;
   if (!Array.isArray(session.status.can_texts)) {
@@ -426,7 +426,7 @@ async function handleStep2(session, userText) {
   if (!session.status.can_texts.includes(paraphrase)) {
     session.status.can_texts.push(paraphrase);
   }
-  const message = stringifyResponseParts([empathy, ask_next]) || "Canについて教えてくれてありがとう！";
+  const message = stringifyResponseParts([empathy, ask_next]) || "あなたのやってきたこと、これからも活かしていきたいことについて教えてくれてありがとう！";
   const nextStep = Number(meta?.step) || 2;
   if (nextStep !== session.step) {
     session.step = nextStep;
@@ -445,7 +445,7 @@ async function handleStep3(session, userText) {
   const payload = buildStepPayload(session, userText, 5);
   const llm = await callLLM(3, payload, session, { model: "gpt-4o" });
   if (!llm.ok) {
-    return buildSchemaError(3, session, "Willの生成でエラーが発生したよ。少し時間を置いてみてね。", llm.error);
+    return buildSchemaError(3, session, "あなたのこれから挑戦したいことの生成でエラーが発生したよ。少し時間を置いてみてね。", llm.error);
   }
   const parsed = llm.parsed || {};
   if (parsed?.status?.will_text && typeof parsed.status.will_text === "string") {
@@ -476,7 +476,7 @@ async function handleStep3(session, userText) {
     };
   }
   return {
-    response: "Willを整理する準備をしてるよ。もう少し話してみて！",
+    response: "あなたのこれから挑戦したいことを整理する準備をしてるよ。もう少し話してみて！",
     status: session.status,
     meta: { step: 3 },
     drill: session.drill,
@@ -510,7 +510,7 @@ async function handleStep4(session, userText) {
   };
   const llm = await callLLM(4, payload, session, { model: "gpt-4o" });
   if (!llm.ok) {
-    return buildSchemaError(4, session, "Mustの整理に失敗しちゃった。もう一度教えてもらえる？", llm.error);
+    return buildSchemaError(4, session, "あなたの譲れない条件の整理に失敗しちゃった。もう一度教えてもらえる？", llm.error);
   }
   const parsed = llm.parsed || {};
   if (parsed?.status && typeof parsed.status === "object") {
@@ -519,7 +519,7 @@ async function handleStep4(session, userText) {
     session.step = nextStep;
     session.stage.turnIndex = 0;
     return {
-      response: session.status.must_text || "Mustのまとめを更新したよ。",
+      response: session.status.must_text || "まとめを更新したよ。",
       status: session.status,
       meta: { step: session.step, deepening_attempt_total: session.meta.deepening_attempt_total },
       drill: session.drill,
@@ -553,7 +553,7 @@ async function handleStep4(session, userText) {
     };
   }
   return {
-    response: "Mustの整理を続けているよ。気になる条件を教えてね。",
+    response: "あなたの譲れない条件の整理を続けているよ。気になる条件を教えてね。",
     status: session.status,
     meta: { step: 4, deepening_attempt_total: session.meta.deepening_attempt_total },
     drill: session.drill,
@@ -642,7 +642,7 @@ async function handleStep6(session, userText) {
 
 function initialGreeting(session) {
   return {
-    response: "やっほー！まずは今持っている資格や研修名を教えてね✨",
+    response: "こんにちは！AIキャリアデザイナーのほーぷちゃんだよ✨\n今日はあなたのこれまでキャリアの説明書をあなたの言葉で作っていくね！\nそれじゃあ、まずは持っている資格を教えて欲しいな🌱",
     status: session.status,
     meta: { step: session.step },
     drill: session.drill,
@@ -650,6 +650,21 @@ function initialGreeting(session) {
 }
 
 async function handler(req, res) {
+if (req.method === "OPTIONS") {
+  res.setHeader("Allow", "POST, OPTIONS");
+  res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+  res.setHeader("Access-Control-Allow-Origin", "*"); // 開発時は *、本番は origin を限定する
+  res.status(204).end();
+  return;
+}
+
+// 既存の POST 判定
+if (req.method !== "POST") {
+  res.status(405).json({ error: "method_not_allowed" });
+  return;
+}
+
   if (req.method !== "POST") {
     res.status(405).json({ error: "method_not_allowed" });
     return;
