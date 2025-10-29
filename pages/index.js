@@ -4,7 +4,7 @@ const statusInit = {
   資格: "未入力",
   Can: "未入力",          // 60〜90字（将来的に複数でも表示は1本でOK）
   Will: "未入力",         // 60〜90字
-  Must_have: "未入力",    // 既存IDロジックを流用
+  Must: "未入力",    // 既存IDロジックを流用
   私はこんな人: "未入力", // 180〜280字
   Doing: "未入力",        // 生成（約300字）
   Being: "未入力",        // 生成（約300字）
@@ -43,7 +43,7 @@ function toBadges(resp, currStep) {
     
     Will: Array.isArray(st?.will_texts) ? st.will_texts.join("／")
         : (st?.will_text ? String(st.will_text) : "未入力"),
-    Must_have: (joinIds(st?.must_have_ids) || joinTxt(st?.memo?.must_have_raw) || "未入力"),
+    Must: (joinIds(st?.must_have_ids) || joinTxt(st?.memo?.must_have_raw) || "未入力"),
     私はこんな人: st?.self_intro || st?.self_text || "未入力",
     Doing: st?.doing_text ? String(st.doing_text) : "未入力",
     Being: st?.being_text ? String(st.being_text) : "未入力",
@@ -334,7 +334,7 @@ setChoices(isChoiceStep(next) ? uniqueByNormalized(inline) : []);
     1: "資格",
     2: "Can",
     3: "Will",
-    4: "Must（Have）",
+    4: "Must",
     5: "私はこんな人",
     6: "分析（Doing/Being）",
   };
@@ -404,7 +404,7 @@ setChoices(isChoiceStep(next) ? uniqueByNormalized(inline) : []);
   "資格",
   "Can",
   "Will",
-  "Must_have",
+  "Must",
   "私はこんな人",
   "Doing",
   "Being",
@@ -449,11 +449,11 @@ setChoices(isChoiceStep(next) ? uniqueByNormalized(inline) : []);
       </div>
     </details>
 
-    {/* 4) Must（Have） */}
+    {/* 4) Must */}
     <details style={{ marginTop: 12 }}>
       <summary style={{ cursor: "pointer", fontWeight: 700 }}>Must（Have）</summary>
       <div style={{ marginTop: 8, whiteSpace: "pre-wrap" }}>
-        {displayBadgeValue("Must_have", status["Must_have"]) || "未入力"}
+        {displayBadgeValue("Must", status["Must"]) || "未入力"}
       </div>
     </details>
 
