@@ -1,2225 +1,717 @@
-// ほーぷちゃん：会話ロジック（Step厳密・深掘り2回・候補提示・ステータス算出）
-let tagList = [];
-try {
-  const raw = require("../../tags.json");
-  tagList = Array.isArray(raw?.tags) ? raw.tags : (Array.isArray(raw) ? raw : []);
-} catch (e) {
-  console.error("tags.json 読み込み失敗:", e);
-  tagList = [];
-}
-let licenses = {};
-try {
-  licenses = require("../../licenses.json");
-} catch (e) {
-  console.error("licenses.json 読み込み失敗:", e);
-  licenses = {};
+const fs = require("fs");
+const path = require("path");
+const { OpenAI } = require("openai");
+
+const PROMPTS_DIR = path.join(process.cwd(), "prompts");
+
+function safeRead(filePath) {
+  try {
+    return fs.readFileSync(filePath, "utf8");
+  } catch (err) {
+    console.error("prompt_read_failed", filePath, err);
+    return "";
+  }
 }
 
-let licenseTagList = [];
-try {
-  const raw = require("../../qualifications.json"); 
-  const src =
-    Array.isArray(raw) ? raw :
-    Array.isArray(raw?.qualifications) ? raw.qualifications :
-    Array.isArray(raw?.items) ? raw.items :
-    Array.isArray(raw?.tags) ? raw.tags : [];
-  // どのキーでも {id, name} に正規化
-  licenseTagList = src.map(x => ({
-    id:   x?.id ?? x?.tag_id ?? x?.value ?? null,
-    name: x?.name ?? x?.label ?? x?.tag_label ?? ""
-  })).filter(t => t.id != null && t.name);
-} catch (e) {
-  console.error("qualifications.json 読み込み失敗:", e);
-  licenseTagList = [];
-}
-
-const licenseTagIdByName = new Map();
-const licenseTagNameById = new Map();
-try {
-  for (const t of (Array.isArray(licenseTagList) ? licenseTagList : [])) {
-    const name = String(t?.name ?? "");
-    if (!name || t?.id == null) continue;
-    const fw = name.replace(/\(/g,"（").replace(/\)/g,"）").replace(/~/g,"～");
-    const hw = name.replace(/（/g,"(").replace(/）/g,")").replace(/～/g,"~");
-    licenseTagIdByName.set(name, t.id);
-    licenseTagIdByName.set(fw,   t.id);
-    licenseTagIdByName.set(hw,   t.id);
-    licenseTagNameById.set(t.id, name);
-  }
-} catch (e) {
-  console.error("licenseTagIdByName 構築失敗:", e);
-}
-
-const licenseMap = new Map(); // Map<string, string[]>
-
-try {
-  for (const [, arr] of Object.entries(licenses || {})) {
-    if (!Array.isArray(arr)) continue;
-    for (const item of arr) {
-      const label = typeof item === "string" ? item : item?.label;
-      if (!label) continue;
-
-      const put = (alias, l) => {
-        if (!alias) return;
-        const curr = licenseMap.get(alias) || [];
-        if (!curr.includes(l)) curr.push(l);
-        licenseMap.set(alias, curr);
-      };
-
-      put(label, label);
-
-      const fwLabel = label.replace(/\(/g, "（").replace(/\)/g, "）").replace(/~/g, "～");
-      const hwLabel = label.replace(/（/g, "(").replace(/）/g, ")").replace(/～/g, "~");
-      put(fwLabel, label);
-      put(hwLabel, label);
-
-      const aliases = (typeof item === "object" && Array.isArray(item.aliases)) ? item.aliases : [];
-      for (const a of aliases) {
-        if (!a) continue;
-        put(a, label);
-        const fw = a.replace(/\(/g, "（").replace(/\)/g, "）").replace(/~/g, "～");
-        const hw = a.replace(/（/g, "(").replace(/）/g, ")").replace(/～/g, "~");
-        put(fw, label);
-        put(hw, label);
-      }
-    }
-  }
-} catch (e) {
-  console.error("licenseMap 構築に失敗:", e);
-}
-
-const OFFICIAL_LICENSES = new Set();
-try {
-  for (const [, arr] of Object.entries(licenses || {})) {
-    if (!Array.isArray(arr)) continue;
-    for (const item of arr) {
-      const label = typeof item === "string" ? item : item?.label;
-      if (label) OFFICIAL_LICENSES.add(label);
-    }
-  }
-  for (const [, labels] of licenseMap.entries()) {
-    if (!Array.isArray(labels)) continue;
-    for (const l of labels) if (l) OFFICIAL_LICENSES.add(l);
-  }
-} catch {}
-
-const tagIdByName = new Map();
-try {
-  for (const t of (Array.isArray(tagList) ? tagList : [])) {
-    const name = String(t?.name ?? "");
-    if (!name) continue;
-    const fullWidth = name.replace(/\(/g, "（").replace(/\)/g, "）").replace(/~/g, "～");
-    const halfWidth = name.replace(/（/g, "(").replace(/）/g, ")").replace(/～/g, "~");
-    tagIdByName.set(name, t.id);
-    tagIdByName.set(fullWidth, t.id);
-    tagIdByName.set(halfWidth, t.id);
-  }
-} catch (e) {
-  console.error("tagIdByName 構築失敗:", e);
-}
-const tagNameById = new Map();
-try {
-  for (const t of (Array.isArray(tagList) ? tagList : [])) {
-    if (t?.id == null) continue;
-    const name = String(t?.name ?? "");
-    if (name) tagNameById.set(t.id, name);
-  }
-} catch (e) {
-  console.error("tagNameById 構築失敗:", e);
-}
-
-function buildAvailableRevMap(available) {
-  const idByLabel = new Map(); 
-  const labelById = new Map(); 
-  const labelsSet = new Set(); 
-
-  const toFW = (s) => String(s || "").replace(/\(/g, "（").replace(/\)/g, "）").replace(/~/g, "～");
-  const toHW = (s) => String(s || "").replace(/（/g, "(").replace(/）/g, ")").replace(/～/g, "~");
-  const scrub = (s) => String(s || "")
-    .toLowerCase()
-    .replace(/[ \t\r\n\u3000]/g, "")
-    .replace(/[、。・／\/＿\-–—~～!?！？。，．・]/g, "");
-  const norm  = (s) => scrub(toHW(toFW(s)));
-
-  const entries = available && typeof available === "object"
-    ? Object.entries(available)
-    : [];
-
-  for (const [idRaw, labelRaw] of entries) {
-    const id    = String(idRaw); 
-    const label = String(labelRaw || ""); 
-    if (!label) continue;
-
-    labelById.set(id, label);
-
-    const variants = new Set([label, toFW(label), toHW(label)]);
-    for (const v of variants) {
-      if (!idByLabel.has(v)) idByLabel.set(v, id);
-      const key = norm(v);
-      if (key && !idByLabel.has(key)) idByLabel.set(key, id);
-    }
-
-    labelsSet.add(label);
-  }
-
-  function resolveIdByLabel(inputLabel = "") {
-    const raw = String(inputLabel || "");
-    if (!raw) return null;
-    const key1 = raw;
-    const key2 = norm(raw);
-    return idByLabel.get(key1) ?? idByLabel.get(key2) ?? null;
-  }
-
-  return { idByLabel, labelById, resolveIdByLabel, norm };
-}
-
-const serviceFormTagList = (Array.isArray(tagList) ? tagList : []).filter(
-  t => t?.category === "サービス形態"
-);
-
-const serviceTagIdByName = new Map();
-const serviceTagNameById = new Map();
-try {
-  for (const t of serviceFormTagList) {
-    const name = String(t?.name ?? "");
-    if (!name || t?.id == null) continue;
-    const fw = name.replace(/\(/g, "（").replace(/\)/g, "）").replace(/~/g, "～");
-    const hw = name.replace(/（/g, "(").replace(/）/g, ")").replace(/～/g, "~");
-    serviceTagIdByName.set(name, t.id);
-    serviceTagIdByName.set(fw, t.id);
-    serviceTagIdByName.set(hw, t.id);
-    serviceTagNameById.set(t.id, name);
-  }
-} catch (e) {
-  console.error("serviceTag maps 構築失敗:", e);
-}
-
-function matchServicePlacesInText(text = '') {
-  const raw = String(text || '').trim();
-  if (!raw) return [];
-
-  const toFW = s => String(s || '').replace(/\(/g,'（').replace(/\)/g,'）').replace(/~/g,'～');
-  const toHW = s => String(s || '').replace(/（/g,'(').replace(/）/g,')').replace(/～/g,'~');
-  const scrub = s =>
-    String(s || '').toLowerCase()
-      .replace(/[ \t\r\n\u3000、。・／\/＿\-–—~～!?！？。、，．・]/g,'');
-  const norm  = s => scrub(toHW(toFW(s)));
-  const normText = norm(raw);
-
-const ORAL_SURGERY_ID = 41;
-const ALLOWED_ORAL_SURGERY_KEYS = ['口腔外科', '歯科口腔外科'].map(norm);
-const oralLabel = serviceTagNameById.get(ORAL_SURGERY_ID);
-const isAllowedOralSurgeryInput = () => ALLOWED_ORAL_SURGERY_KEYS.includes(norm(raw));
-
-  const out = new Set();
-
-  const byExact =
-        serviceTagIdByName.get(raw)
-     || serviceTagIdByName.get(toFW(raw))
-     || serviceTagIdByName.get(toHW(raw));
-  if (byExact != null) {
-    const name = serviceTagNameById.get(byExact);
-    if (name) out.add(name);
-  }
-
-  for (const [alias, label] of Object.entries(PLACE_ALIASES || {})) {
-    if (!alias || !label) continue;
-    if (normText.includes(norm(alias))) {
-      const id =
-            serviceTagIdByName.get(label)
-         || serviceTagIdByName.get(toFW(label))
-         || serviceTagIdByName.get(toHW(label));
-      if (id != null) {
-        const official = serviceTagNameById.get(id);
-        if (official) out.add(official);
-      }
-    }
-  }
-
-  const normalize = s => (s ? norm(s) : '');
-  for (const t of (Array.isArray(serviceFormTagList) ? serviceFormTagList : [])) {
-    const name = String(t?.name ?? '');
-    if (!name) continue;
-    const nTag = normalize(name);
-    if (!nTag) continue;
-    if (normText.includes(nTag) || nTag.includes(normText)) out.add(name);
-  }
-  
-if (oralLabel && !isAllowedOralSurgeryInput()) out.delete(oralLabel);
-
-  return Array.from(out);
-}
-
-function matchServiceTagIdsInText(text = '') {
-  const raw = String(text || '').trim();
-  if (!raw) return [];
-
-  const toFW = s => String(s || '').replace(/\(/g,'（').replace(/\)/g,'）').replace(/~/g,'～');
-  const toHW = s => String(s || '').replace(/（/g,'(').replace(/）/g,')').replace(/～/g,'~');
-  const scrub = s =>
-    String(s || '').toLowerCase()
-      .replace(/[ \t\r\n\u3000、。・／\/＿\-–—~～!?！？。、，．・]/g,'');
-  const norm = s => scrub(toHW(toFW(s)));
-  const normText = norm(raw);
-const ORAL_SURGERY_ID = 41;
-const ALLOWED_ORAL_SURGERY_KEYS = ['口腔外科', '歯科口腔外科'].map(norm);
-const isAllowedOralSurgeryInput = () => ALLOWED_ORAL_SURGERY_KEYS.includes(norm(raw));
-
-
-  const out = new Set();
-  const direct =
-        serviceTagIdByName.get(raw)
-     || serviceTagIdByName.get(toFW(raw))
-     || serviceTagIdByName.get(toHW(raw));
-  if (direct != null) out.add(direct);
-
-  for (const [alias, label] of Object.entries(PLACE_ALIASES || {})) {
-    if (!alias || !label) continue;
-    if (normText.includes(norm(alias))) {
-      const id =
-            serviceTagIdByName.get(label)
-         || serviceTagIdByName.get(toFW(label))
-         || serviceTagIdByName.get(toHW(label));
-      if (id != null) out.add(id);
-    }
-  }
-
-  const normalize = s => (s ? norm(s) : '');
-  for (const t of (Array.isArray(serviceFormTagList) ? serviceFormTagList : [])) {
-    const name = String(t?.name ?? '');
-    const id   = t?.id;
-    if (!name || id == null) continue;
-    const nTag = normalize(name);
-    if (!nTag) continue;
-    if (normText.includes(nTag) || nTag.includes(normText)) out.add(id);
-  }
-
-  if (!isAllowedOralSurgeryInput()) out.delete(ORAL_SURGERY_ID);
-
-  return Array.from(out);
-}
-
-const PLACE_ALIASES = {
-  // 医療・病院
-  "急性期": "急性期病棟",
-  "回復期": "回復期病棟",
-  "療養": "療養病棟",
-  "地域包括": "地域包括ケア病棟",
-  "緩和": "緩和ケア病棟（ホスピス）",
-
-  // 介護・福祉
-  "特養": "特別養護老人ホーム",
-  "地域密着特養": "地域密着型特別養護老人ホーム（定員29名以下）",
-  "老健": "介護老人保健施設",
-  "介護付有料": "介護付き有料老人ホーム",
-  "住宅型": "住宅型有料老人ホーム",
-  "サ高住": "サービス付き高齢者向け住宅（サ高住）",
-  "小多機": "小規模多機能型居宅介護",
-  "看多機": "看護小規模多機能型居宅介護",
-  "ショート": "ショートステイ（短期入所生活介護）",
-  "デイ": "通所介護（デイサービス）",
-  "デイケア": "通所リハビリテーション（デイケア）",
-
-  // 訪問系
-  "訪看": "訪問看護ステーション",
-  "訪問看": "訪問看護ステーション",
-  "訪リハ": "訪問リハビリテーション",
-  "訪問栄養": "訪問栄養指導",
-  "訪問歯科": "訪問歯科",
-  "訪入浴": "訪問入浴",
-
-  // 児童・障害
-  "放デイ": "放課後等デイサービス",
-  "障デイ": "生活介護（障害者の日中活動）",
-
-  // 歯科
-  "歯科外来": "歯科クリニック",
-
-  // クリニック系
-  "クリニック": "クリニック",
-
-  // そのほか素朴な省略
-  "病棟": "一般病院",
+const STEP_PROMPTS = {
+  1: safeRead(path.join(PROMPTS_DIR, "step1_license_system.txt")),
+  2: safeRead(path.join(PROMPTS_DIR, "step2_can_system.txt")),
+  3: safeRead(path.join(PROMPTS_DIR, "step3_will_system.txt")),
+  4: safeRead(path.join(PROMPTS_DIR, "step4_must_system.txt")),
+  5: safeRead(path.join(PROMPTS_DIR, "step5_self_system.txt")),
+  6: safeRead(path.join(PROMPTS_DIR, "step6_doingbeing_system.txt")),
 };
+const COMMON_PROMPT = safeRead(path.join(PROMPTS_DIR, "common_instructions.txt"));
+const LLM_BRAKE_PROMPT = safeRead(path.join(PROMPTS_DIR, "llm_brake_system.txt"));
 
-let reasonMaster = [];
-try {
-  const raw = require("../../job_change_purposes.json"); 
-  if (Array.isArray(raw))              reasonMaster = raw;
-  else if (Array.isArray(raw?.items))  reasonMaster = raw.items;
-  else if (Array.isArray(raw?.tags))   reasonMaster = raw.tags;
-  else                                 reasonMaster = [];
-} catch (e) {
-  console.error("job_change_purposes.json 読み込み失敗:", e);
-  reasonMaster = [];
-}
-
-const reasonIdByName = new Map();
-const reasonNameById = new Map();
-try {
-  for (const t of (Array.isArray(reasonMaster) ? reasonMaster : [])) {
-    const label = String(t?.tag_label ?? t?.name ?? "");
-    const id    = t?.id;
-    if (!label || id == null) continue;
-
-    const fw = label.replace(/\(/g, "（").replace(/\)/g, "）").replace(/~/g, "～");
-    const hw = label.replace(/（/g, "(").replace(/）/g, ")").replace(/～/g, "~");
-
-    reasonIdByName.set(label, id);
-    reasonIdByName.set(fw, id);
-    reasonIdByName.set(hw, id);
-
-    reasonNameById.set(id, label);
-  }
-} catch (e) {
-  console.error("reasonIdByName 構築失敗:", e);
-}
-
-const REASON_ID_SET = new Set(
-  (Array.isArray(reasonMaster) ? reasonMaster : [])
-    .map(t => t?.id)
-    .filter(v => v != null)
-);
-
-const REASON_ID_LABELS = (Array.isArray(reasonMaster) ? reasonMaster : [])
-  .map(t => ({ id: t?.id, label: String(t?.tag_label ?? t?.name ?? "") }))
-  .filter(x => x.id != null && x.label);
-
-function pickTop3ReasonOptions(userText = "") {
-  const t = String(userText || "").toLowerCase();
-  const buckets = [
-    // 労働時間・シフト系
-    { keys: ["残業", "夜勤", "シフト", "オンコール", "当直", "定時"], picked: [] },
-    // 給与・待遇系
-    { keys: ["給与", "給料", "年収", "月収", "賞与", "ボーナス", "昇給", "待遇"], picked: [] },
-    // 通勤・勤務地・働き方動線
-    { keys: ["通勤", "近い", "自宅", "直行直帰", "移動", "訪問"], picked: [] },
-    // 仕事内容・キャリア
-    { keys: ["業務", "負担", "スキル", "成長", "経験", "キャリア", "専門"], picked: [] },
-    // 休暇・休み
-    { keys: ["休日", "休み", "有給", "連休", "土日"], picked: [] },
-    // 人間関係・組織
-    { keys: ["人間関係", "上司", "同僚", "雰囲気", "チーム"], picked: [] },
-  ];
-
-  const labelPool = REASON_ID_LABELS.map(x => String(x.label || ""));
-  const used = new Set();
-  const out = [];
-
-  const includesAny = (label, keys) => keys.some(k => label.includes(k));
-
-  for (const b of buckets) {
-    for (const label of labelPool) {
-      if (out.length >= 3) break;
-      if (used.has(label)) continue;
-      if (includesAny(label, b.keys)) {
-        out.push(label);
-        used.add(label);
-      }
-    }
-    if (out.length >= 3) break;
-  }
-
-  if (out.length < 3) {
-    for (const label of labelPool) {
-      if (out.length >= 3) break;
-      if (!used.has(label)) {
-        out.push(label);
-        used.add(label);
-      }
-    }
-  }
-  return out.slice(0, 3);
-}
-
-const STRICT_REASON_MODE = true;
-
-function _normKeyJP(s=""){
-  return String(s||"")
-    .toLowerCase()
-    .replace(/[ \t\r\n\u3000]/g,"")
-    .replace(/[（）\(\)［\]\[\]／\/・,，。．\.\-–—~～!?！？:：]/g,"")
-    .replace(/直行直帰できる?/g,"直行直帰") 
-    .replace(/職場で働きたい$/,"")
-    .replace(/で働きたい$/,"")
-    .replace(/がほしい$/,"")
-    .replace(/がある$/,"")
-    .replace(/できる$/,"")
-    .trim();
-}
-function countCategoryHits(userText = "") {
-  const T = _normKeyJP(userText || "");
-  if (!T) return 0;
-  const CATS = {
-    "労働時間・シフト": [
-      /夜勤/, /ｵﾝｺｰﾙ|オンコール|当直/, /残業|定時/, /シフト|連勤/, /直行直帰/, /休憩/
-    ],
-    "仕事内容・キャリア": [
-      /業務量|負担|忙しさ|多忙/, /急性期|重症|救急/, /記録|書類|事務/, /成長|経験|スキル|専門/
-    ],
-    "給与・待遇": [
-      /給料|給与|年収|月収|手取り|賞与|ﾎﾞｰﾅｽ|ボーナス|昇給|待遇/, /安い|低い|上がらない/
-    ],
-    "通勤・勤務地・動線": [
-      /通勤|距離|移動|近い|遠い/, /訪問|直行直帰/
-    ],
-    "休暇・休み": [
-      /休日|休み|有給|有休|連休|土日|祝日/
-    ],
-    "人間関係・組織": [
-      /人間関係|上司|同僚|師長|部長|雰囲気|チーム/
-    ],
-  };
-
-  let hitCats = 0;
-  for (const regs of Object.values(CATS)) {
-    const matched = regs.some(re => re.test(T));
-    if (matched) hitCats++;
-  }
-  return hitCats; 
-}
-
-function extractEvidenceKeysFromLabel(label=""){
-  const raw = String(label||"").trim();
-  if (!raw) return [];
-
-  let core = raw
-    .replace(/の?職場で働きたい$/,"")
-    .replace(/が欲しい$/,"")
-    .replace(/がほしい$/,"")
-    .replace(/があると良い$/,"")
-    .replace(/がある$/,"")
-    .replace(/(を)?重視したい$/,"")
-    .replace(/を避けたい$/,"")
-    .replace(/したい$/,"")
-    .trim();
-
-  const keys = new Set();
-  if (core) keys.add(core);
-
-  const parts = core.split(/[・／\/、]/g).map(s=>s.trim()).filter(Boolean);
-  for (const p of parts) {
-    if (p.length >= 2) keys.add(p);
-  }
-
-  const stop = new Set(["職場","環境","体制","制度","条件","勤務","働き方","理解","機会","基準","評価","残業時間"]);
-  for (const k of Array.from(keys)) {
-    const clean = k.replace(/(な|に|を|が|と|も|の)$/,"");
-    if (!stop.has(clean)) keys.add(clean);
-  }
-
-  const expanded = new Set();
-  for (const k of keys) {
-    expanded.add(k);
-    expanded.add(_normKeyJP(k));
-  }
-
-  const txt = core;
-  if (/近い|自宅|家/.test(txt)) { expanded.add("近い"); expanded.add("自宅から近い"); expanded.add("家から近い"); }
-  if (/残業/.test(txt)) { expanded.add("残業"); }
-  if (/有給|有休/.test(txt)) { expanded.add("有給"); expanded.add("有休"); }
-  if (/夜勤/.test(txt)) { expanded.add("夜勤"); }
-  if (/直行直帰/.test(txt)) { expanded.add("直行直帰"); }
-
-  return Array.from(expanded).filter(k => String(k||"").trim().length >= 2);
-}
-
-function gateCandidatesByEvidence(cands = [], userText = ""){
-  if (!STRICT_REASON_MODE) return cands || [];
-  const T = _normKeyJP(userText || "");
-  if (!T) return [];
-
-  const passed = [];
-  for (const c of (Array.isArray(cands) ? cands : [])) {
-    const label = reasonNameById.get(c.id) || "";
-    const keys = extractEvidenceKeysFromLabel(label);
-    const ok = keys.some(k => {
-      const nk = _normKeyJP(k);
-      return (k && userText.includes(k)) || (nk && T.includes(nk));
-    });
-    if (ok) passed.push(c);
-  }
-  return passed;
-}
-
-function _extractJsonBlock(s = "") {
-  const t = String(s || "");
-  const code = t.match(/```json\s*([\s\S]*?)```/i)?.[1]
-            || t.match(/```[\s\S]*?```/i)?.[0]?.replace(/```/g, "")
-            || null;
-  const raw = code || t;
-  const i = raw.indexOf("{");
-  const j = raw.lastIndexOf("}");
-  if (i >= 0 && j > i) {
-    const slice = raw.slice(i, j + 1);
-    try { return JSON.parse(slice); } catch {}
-  }
-  try { return JSON.parse(raw); } catch {}
-  return null;
-}
-
-function _sanitizeReasonLLM(obj) {
-  const out = { empathy: "", paraphrase: "", suggested_question: "", candidates: [] };
-  if (!obj || typeof obj !== "object") return out;
-
-  out.empathy = String(obj.empathy || "");
-  out.paraphrase = String(obj.paraphrase || obj.summary || "");
-  out.suggested_question = String(obj.ask_next || obj.suggested_question || "");
-
-  const list = Array.isArray(obj.candidates) ? obj.candidates : [];
-  const norm = [];
-  for (const c of list) {
-    const id = Number(c?.id);
-    let conf = Number(c?.confidence);
-    if (!Number.isFinite(id) || !REASON_ID_SET.has(id)) continue;
-    if (!Number.isFinite(conf)) conf = 0;
-    if (conf < 0) conf = 0; if (conf > 1) conf = 1;
-    norm.push({ id, confidence: conf });
-  }
-  norm.sort((a,b)=> b.confidence - a.confidence);
-  out.candidates = norm.slice(0, 3);
-  return out;
-}
-
-async function analyzeReasonWithLLM(userText = "", s, opts = {}) {
-  const key = process.env.OPENAI_API_KEY;
-  if (!key) return { empathy: "", paraphrase: "", asks: [], candidates: [] };
-
-  const { default: OpenAI } = await import("openai");
-  const client = new OpenAI({ apiKey: key });
-
-  const role    = s?.status?.role || "未入力";
-  const place   = s?.status?.place || "未入力";
-  const recent  = Array.isArray(s?.drill?.reasonBuf) ? s.drill.reasonBuf.slice(-3).join(" / ") : "";
-  const lastAsk = s?.drill?.flags?.last_ask || "";
-  const forceNew = !!opts.forceNewAngle;
-
-  const system = [
-    "あなたは日本語で自然に寄り添うキャリアエージェントAI。",
-    "出力は必ずJSONのみ。前置きや説明は書かない。",
-    "- empathy：共感のみ。2〜3文／100字程度。疑問・依頼・誘導・提案を含めない。語尾に『？』を置かない。常体（です・ます禁止）。",
-    "- asks：次の深掘り候補を**1〜3個**の配列で返す。全て疑問文。改善策・方法論を問うのは厳禁。事実特定の観点のみ（原因/主体/運用/頻度/期間/具体場面 など）。",
-    "- 直前のaskと**同義回避**（語彙が違っても観点が同じなら別観点を出す）。forceNewAngleがtrueなら特に角度を変えること。",
-    "- candidates は user_text に直接現れた語句や因果の“結果側”に整合するものだけ。",
-    "- 辞書外IDは出さない。信頼度は0〜1で並べる。",
-    "JSON形式：{ \"empathy\": \"...\", \"paraphrase\": \"...\", \"asks\": [\"?\", \"?\"], \"candidates\": [{\"id\": 数値, \"confidence\": 0〜1}] }"
-  ].join("\n");
-
-  const catalog = REASON_ID_LABELS.map(x => `${x.id}:${x.label}`).join(", ");
-
-  const user = [
-    `直近の発話: ${recent || "なし"}`,
-    `直前の問いかけ: ${lastAsk || "なし"}`,
-    `今回の発話: ${userText || "（内容なし）"}`,
-    `職種: ${role}`,
-    `現職: ${place}`,
-    "",
-    "job_change_purposes の候補一覧（id:label）:",
-    catalog,
-    "",
-    `forceNewAngle: ${forceNew ? "true" : "false"}`,
-    "出力は上記フォーマットのJSONのみ。"
-  ].join("\n");
-
-  function _extractJsonBlock(s = "") {
-    const t = String(s || "");
-    const code = t.match(/```json\s*([\s\S]*?)```/i)?.[1]
-              || t.match(/```[\s\S]*?```/i)?.[0]?.replace(/```/g, "")
-              || null;
-    const raw = code || t;
-    const i = raw.indexOf("{");
-    const j = raw.lastIndexOf("}");
-    if (i >= 0 && j > i) {
-      const slice = raw.slice(i, j + 1);
-      try { return JSON.parse(slice); } catch {}
-    }
-    try { return JSON.parse(raw); } catch {}
+function loadJson(fileName) {
+  const filePath = path.join(process.cwd(), fileName);
+  try {
+    const raw = fs.readFileSync(filePath, "utf8");
+    return JSON.parse(raw);
+  } catch (err) {
+    console.error("json_read_failed", fileName, err);
     return null;
   }
-
-  function _sanitize(obj) {
-    const out = { empathy: "", paraphrase: "", asks: [], candidates: [] };
-    if (!obj || typeof obj !== "object") return out;
-
-    out.empathy    = String(obj.empathy || "");
-    out.paraphrase = String(obj.paraphrase || obj.summary || "");
-    const asksArr  = Array.isArray(obj.asks) ? obj.asks : (obj.ask_next ? [String(obj.ask_next)] : []);
-    out.asks       = asksArr.filter(x => typeof x === "string" && x.trim()).slice(0, 3);
-
-    const list = Array.isArray(obj.candidates) ? obj.candidates : [];
-    const norm = [];
-    for (const c of list) {
-      const id = Number(c?.id);
-      let conf = Number(c?.confidence);
-      if (!Number.isFinite(id) || !REASON_ID_SET.has(id)) continue;
-      if (!Number.isFinite(conf)) conf = 0;
-      if (conf < 0) conf = 0; if (conf > 1) conf = 1;
-      norm.push({ id, confidence: conf });
-    }
-    norm.sort((a,b)=> b.confidence - a.confidence);
-    out.candidates = norm.slice(0, 3);
-    return out;
-  }
-
-  try {
-    const rsp = await client.chat.completions.create({
-      model: "gpt-4o-mini",
-      temperature: 0.2,
-      max_tokens: 600,
-      messages: [
-        { role: "system", content: system },
-        { role: "user",   content: user }
-      ]
-    });
-
-    const txt = rsp?.choices?.[0]?.message?.content || "";
-    const obj = _extractJsonBlock(txt);
-    return _sanitize(obj);
-  } catch {
-    return { empathy: "", paraphrase: "", asks: [], candidates: [] };
-  }
 }
 
-function _sanitizeMWLLM(obj){
-  const out = { must_ng: [], must_have: [], summary: "", ask_next: "" };
-  if (!obj || typeof obj !== "object") return out;
-
-  const arr = (x) =>
-    Array.isArray(x)
-      ? x.filter(v => typeof v === "string" && v.trim()).slice(0, 10)
-      : [];
-
-  out.must_ng   = arr(obj.must_ng   ?? obj.ng   ?? obj.mustNG);
-  out.must_have = arr(obj.must_have ?? obj.have ?? obj.mustHave);
-  out.summary   = String(obj.summary || obj.paraphrase || "");
-  out.ask_next  = String(obj.ask_next || obj.suggested_question || "");
-  return out;
-}
-
-async function analyzeMWWithLLM(userText = "", mode /* 'ng' | 'have' */, s){
-  const key = process.env.OPENAI_API_KEY;
-  if (!key) return { must_ng: [], must_have: [], summary: "", ask_next: "" };
-
-  const { default: OpenAI } = await import("openai");
-  const client = new OpenAI({ apiKey: key });
-
-  const system = [
-    "あなたは日本語で自然に寄り添うキャリアエージェントAI。",
-    "出力は必ずJSONのみ（前置きや説明は禁止）。"
-  ].join("\n");
-
-  const role   = s?.status?.role  || "未入力";
-  const place  = s?.status?.place || "未入力";
-  const recent = Array.isArray(s?.drill?.reasonBuf) ? s.drill.reasonBuf.slice(-3).join(" / ") : "";
-
-  const ask = mode === "ng"
-    ? "ユーザーの発話から『絶対NG（Must NG）』に該当するラベルだけを抽出して返す。"
-    : "ユーザーの発話から『絶対欲しい（Must Have）』に該当するラベルだけを抽出して返す。";
-
-  const format = `{
-    "must_ng": ["文字列ラベル", ...],
-    "must_have": ["文字列ラベル", ...],
-    "summary": "30字以内の要約（評価語NG）",
-    "ask_next": "次の一言（<=80字／疑問符で終わらせない）"
-  }`;
-
-  const user = [
-    `直近の発話: ${recent || "なし"}`,
-    `職種: ${role}`, `現職: ${place}`,
-    `今回の発話: ${userText || "（内容なし）"}`,
-    "",
-    ask,
-    "ID・タグ辞書・スコアリングは使わない。ラベルは日本語の自然な語で返す。",
-    "出力は上記フォーマットのJSONのみ。", format
-  ].join("\n");
-
-  const rsp = await client.chat.completions.create({
-    model: "gpt-4o-mini",
-    temperature: 0.2,
-    max_tokens: 400,
-    messages: [
-      { role: "system", content: system },
-      { role: "user", content: user }
-    ],
-  });
-
-  const txt = rsp?.choices?.[0]?.message?.content || "";
-  const obj = _extractJsonBlock(txt);
-  return _sanitizeMWLLM(obj);
-}
-
-function decideReasonFromCandidates(cands = []) {
-  const top = cands?.[0], second = cands?.[1];
-  if (!top) return { status: "uncertain" };
-  const gap = second ? (top.confidence - second.confidence) : Infinity;
-  if (top.confidence >= 0.85 && gap >= 0.10) {
-    return { status: "confirm", id: top.id };
-  }
-  const options = (cands || []).slice(0, 3).map(c => reasonNameById.get(c.id)).filter(Boolean);
-  return options.length ? { status: "ambiguous", options } : { status: "uncertain" };
-}
-
-const STEP_LABELS = {
-  1: "求職者ID",
-  2: "職種",
-  3: "現職",
-  4: "転職理由",
-  5: "絶対NG（Must NG）",
-  6: "絶対欲しい（Must Have）",
-  7: "あったら嬉しい（Want）",
-  8: "これまで（Can）",
-  9: "これから（Will）",
-  10: "完了",
-};
-
-const GENERIC_REASON_Q = {
-  deep1: [
-    "一番ストレスだったのは、仕事内容・人間関係・労働時間のどれに近い？できれば具体例があれば教えて！",
-  ],
-  deep2: [
-    "それはいつ頃から続いてる？改善の見込みはなさそう？もう少し詳しく教えて！",
-  ],
-};
-
-function detectSalaryIssue(text=""){
-  return /(給料|給与|年収|月収|手取り|ボーナス|賞与|昇給|お金|安い|低い|上がらない)/i.test(String(text||""));
-}
-function isPeerComparisonSalary(text=""){
-  return /(周り|同僚|友達|同年代|先輩|他(社|院|施設)|相場|平均|求人|市場|みんな|世間|一般)/i.test(String(text||""));
-}
-function isValueMismatchSalary(text=""){
-  return /(見合わない|割に合わない|評価|人事考課|等級|査定|フィードバック|昇給|昇格|不公平|公平|基準|成果|反映)/i.test(String(text||""));
-}
-
-const sessions = Object.create(null);
-function initSession() {
-  return {
-    step: 1,
-    isNumberConfirmed: false,
-    drill: { phase: null, count: 0, category: null, awaitingChoice: false, options: [], reasonBuf: [], flags: {} },
-    status: {
-      number: "",
-      role: "",
-      role_ids: [],   
-      place: "",
-      place_ids: [],     
-      place_id: null,   
-      reason: "",
-      reason_tag: "",
-      reason_ids: [],
-
-      must_ng: [],  
-      must_have: [],    
-      must_ng_ids: [],   
-      must_have_ids: [],  
-
-      want_text: "",
-      can: "",
-      will: "",
-
-      licenses: [],
-
-      memo: {
-        role_raw: "",
-        reason_raw: "",
-        must_ng_raw: [],  
-        must_have_raw: [],  
-      },
-    },
-  };
-}
-
-function normalizeSession(s){
-  s.step ??= 1;
-  s.isNumberConfirmed ??= false;
-  s.drill ??= { phase:null, count:0, category:null, awaitingChoice:false, options:[], reasonBuf:[], flags:{} };
-
-  s.status ??= {};
-  s.status.number ??= "";
-  s.status.role ??= "";
-  s.status.role_ids ??= [];
-  s.status.place ??= "";
-  s.status.place_ids ??= [];
-  s.status.place_id ??= null;
-
-  s.status.reason ??= "";
-  s.status.reason_tag ??= "";
-  s.status.reason_ids ??= [];
-
-  s.status.must_ng ??= [];
-  s.status.must_have ??= [];
-  s.status.must_ng_ids ??= [];
-  s.status.must_have_ids ??= [];
-
-  s.status.want_text ??= "";
-  s.status.can ??= "";
-  s.status.will ??= "";
-  s.status.licenses ??= [];
-
-  s.status.memo ??= {};
-  s.status.memo.role_raw ??= "";
-  s.status.memo.reason_raw ??= "";
-  s.status.memo.must_ng_raw ??= [];
-  s.status.memo.must_have_raw ??= [];
-  return s;
-}
-
-function bootstrapSessionFromReq(req){
-  const method   = (req.method || "GET").toUpperCase();
-  const safeBody = (typeof req.body === "object" && req.body) ? req.body : {};
-
-  const headerSid = String(req.headers["x-session-id"] || "").trim();
-  const querySid  = String(req.query?.sessionId || "").trim();
-  const bodySid   = String(safeBody.sessionId || "").trim();
-  const sessionId = headerSid || querySid || bodySid || "default";
-
-  if (!sessions[sessionId] && safeBody.snapshot && method === "POST") {
-    sessions[sessionId] = safeBody.snapshot;
-  }
-  const s = sessions[sessionId] ?? (sessions[sessionId] = initSession());
-  normalizeSession(s);
-  return { s, sessionId, method, safeBody };
-}
-
-function resetDrill(s) {
-  s.drill = {
-    phase: null,
-    count: 0,
-    category: null,
-    awaitingChoice: false,
-    options: [],
-    reasonBuf: s.drill?.reasonBuf || [],
-    flags: s.drill?.flags || {},
-  };
-}
-
-function setCorsJson(res){
-  res.setHeader("Access-Control-Allow-Origin", "*");
-  res.setHeader("Vary", "Origin");
-  res.setHeader("Access-Control-Allow-Methods", "GET,POST,PUT,PATCH,DELETE,HEAD,OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type, X-Session-Id");
-  res.setHeader("Allow", "GET,POST,PUT,PATCH,DELETE,HEAD,OPTIONS");
-  res.setHeader("Content-Type", "application/json; charset=utf-8");
-}
-
-export default async function handler(req, res) {
-  setCorsJson(res);
-  const { s, method, safeBody } = bootstrapSessionFromReq(req);
-
-  if (method !== "POST") {
-    const greet = s.isNumberConfirmed
-      ? nextAfterId(s)
-      : "こんにちは！私はAIキャリアエージェント『ほーぷちゃん』です🤖✨\n担当との面談の前に、あなたの希望条件や想いを整理していくね！\n\n最初に【求職者ID】を教えてね。※メールに届いているIDだよ。";
-
-    return res.status(200).json(withMeta({
-      response: greet,
-      step: s.step,
-      status: s.status,
-      isNumberConfirmed: s.isNumberConfirmed,
-      candidateNumber: s.status.number || "",
-      debug: debugState(s),
-    }, s.step));
-  }
-
-var text = "";
-var idDigits = "";
-var looksId = false;
-
-try {
-  const { message = "" } = safeBody; 
-  text = String(message || "").trim();
-
-  idDigits = String(text || "").replace(/\D/g, ""); 
-  looksId = idDigits.length >= 10 && idDigits.length <= 20;
-
-  if (s.isNumberConfirmed && looksId) {
-    return res.json(withMeta({
-      response: nextAfterId(s),
-      step: s.step,
-      status: s.status,
-      isNumberConfirmed: true,
-      candidateNumber: s.status.number,
-      debug: debugState(s),
-    }, s.step));
-  }
-} catch (err) {
-  console.error("chat handler error:", err && (err.stack || err.message || err));
-  return res.status(500).json({
-    error: "handler_crashed",
-    message: String(err && (err.message || err)) || "unknown",
-  });
-}
-
-  // ---- Step1：求職者ID ----
-  if (s.step === 1) {
-    if (!looksId) {
-      return res.json(withMeta({
-        response:
-          "こんにちは！私はAIキャリアエージェント『ほーぷちゃん』です🤖✨\n" +
-          "担当との面談の前に、あなたの希望条件や想いを整理していくね！\n\n" +
-          "最初に【求職者ID】を教えてね。※メールに届いているIDだよ。",
-        step: 1, status: s.status, isNumberConfirmed: false, candidateNumber: "", debug: debugState(s)
-      }, 1));
-    }
-    s.status.number = idDigits;
-    s.isNumberConfirmed = true;
-    s.step = 2;
-    return res.json(withMeta({
-      response: "OK、求職者ID確認したよ！\n次に【今の職種（所有資格）】を教えてね。\n（例）正看護師／介護福祉士／初任者研修 など",
-      step: 2, status: s.status, isNumberConfirmed: true, candidateNumber: s.status.number, debug: debugState(s)
-    }, 2));
-  }
-
-  // ---- Step2：職種（所有資格） ----
-if (s.step === 2) {
-if (!s.drill.awaitingChoice) {
-  s.status.memo.role_raw = text || "";
-}
-  if (s.drill.phase === "license" && s.drill.awaitingChoice && s.drill.options?.length) {
-    const pick = normalizePick(text);
-   let chosen = s.drill.options.find(o => o === pick);
-   if (!chosen) {
-   const resolved = matchLicensesInText(pick);
-   if (resolved.length) {
-   chosen = resolved.find(label => s.drill.options.includes(label)) || null;
-  }
-}
-    if (chosen) {
-  s.status.role = chosen;
-  s.status.licenses = [chosen];
-  s.status.role_ids = [];
-      s.status.role_ids = getIdsForOfficialLicense(chosen);
-  s.drill = {
-  phase: null,
-  count: 0,
-  category: null,
-  awaitingChoice: false,
-  options: [],
-  reasonBuf: s.drill.reasonBuf || [],
-  flags: s.drill.flags || {},
-};
-  s.step = 3;
-  return res.json(withMeta({
-    response: "受け取ったよ！次に【今どこで働いてる？】を教えてね。\n（例）急性期病棟／訪問看護ステーション",
-    step: 3, status: s.status, isNumberConfirmed: true, candidateNumber: s.status.number, debug: debugState(s)
-  }, 3));
-}
-    return res.json(withMeta({
-      response: `ごめん、もう一度教えて！この中だとどれが一番近い？『${s.drill.options.map(x=>`［${x}］`).join("／")}』`,
-      step: 2, status: s.status, isNumberConfirmed: true, candidateNumber: s.status.number, debug: debugState(s)
-    }, 2));
-  }
-
-  const found = matchLicensesInText(text); 
-  const raw = String(text || "").trim();
-  const toFW = (s) => s.replace(/\(/g, "（").replace(/\)/g, "）").replace(/~/g, "～");
-  const toHW = (s) => s.replace(/（/g, "(").replace(/）/g, ")").replace(/～/g, "~");
-  const normalize = (s) => toHW(toFW(String(s || ""))).replace(/[ \t\r\n\u3000]/g, "");
-  const exact = found.find(l => normalize(l) === normalize(raw));
-
-  if (exact) {
-    s.status.role = exact;
-    s.status.licenses = [exact];
-    s.status.role_ids = getIdsForOfficialLicense(exact);
-    s.step = 3;
-    return res.json(withMeta({
-      response: "受け取ったよ！次に【今どこで働いてる？】を教えてね。\n（例）急性期病棟／訪問看護ステーション",
-      step: 3, status: s.status, isNumberConfirmed: true,
-      candidateNumber: s.status.number, debug: debugState(s)
-    }, 3));
-  }
-
-  if (found.length === 1) {
-    s.status.role = found[0];
-    s.status.licenses = [found[0]];
-    s.status.role_ids = getIdsForOfficialLicense(found[0]);
-    s.step = 3;
-    return res.json(withMeta({
-      response: "受け取ったよ！次に【今どこで働いてる？】を教えてね。\n（例）急性期病棟／訪問看護ステーション",
-      step: 3, status: s.status, isNumberConfirmed: true,
-      candidateNumber: s.status.number, debug: debugState(s)
-    }, 3));
-  }
-
-if (found.length === 0) {
-  const ids = getIdsForOfficialLicense(text);
-  if (ids.length) {
-    s.status.role_ids = ids;
-    const official = licenseTagNameById.get(ids[0]) || text || "";
-    s.status.role = official;
-  } else {
-    s.status.role = text || "";
-    s.status.role_ids = [];
-  }
-  s.step = 3;
-  return res.json(withMeta({
-    response: "受け取ったよ！次に【今どこで働いてる？】を教えてね。\n（例）急性期病棟／訪問看護ステーション",
-    step: 3, status: s.status, isNumberConfirmed: true,
-    candidateNumber: s.status.number, debug: debugState(s)
-  }, 3));
-}
-
-  const options = found.slice(0, 6);
-  s.drill.phase = "license";
-  s.drill.awaitingChoice = true;
-  s.drill.options = options;
-  return res.json(withMeta({
-    response: `どれが一番近い？『${options.map(x=>`［${x}］`).join("／")}』`,
-    step: 2, status: s.status, isNumberConfirmed: true,
-    candidateNumber: s.status.number, debug: debugState(s)
-  }, 2));
-}
-  
-  // ---- Step3：現職 ----
-if (s.step === 3) {
-  if (s.drill.phase === "place" && s.drill.awaitingChoice && s.drill.options?.length) {
-    const pick = normalizePick(text);
-    let chosen = s.drill.options.find(o => o === pick);
-
-    if (!chosen) {
-      const toFW = (x) => x.replace(/\(/g,"（").replace(/\)/g,"）").replace(/~/g,"～");
-      const toHW = (x) => x.replace(/（/g,"(").replace(/）/g,")").replace(/～/g,"~");
-      const normalize = (x) => toHW(toFW(String(x||""))).replace(/[ \t\r\n\u3000]/g,"");
-      chosen = s.drill.options.find(o => normalize(o) === normalize(pick)) || null;
-    }
-
-    if (chosen) {
-      s.status.place = chosen;
-
-      const id =
-            serviceTagIdByName.get(chosen)
-         || serviceTagIdByName.get(chosen.replace(/\(/g,'（').replace(/\)/g,'）').replace(/~/g,'～'))
-         || serviceTagIdByName.get(chosen.replace(/（/g,'(').replace(/）/g,')').replace(/～/g,'~'));
-
-      if (id != null) {
-        s.status.place_ids = [id];
-        s.status.place_id  = id; 
-        const official = serviceTagNameById.get(id);
-        if (official) s.status.place = official;
-      } else {
-      
-        const ids = matchServiceTagIdsInText(chosen);
-        if (Array.isArray(ids) && ids.length) {
-          s.status.place_ids = [ids[0]];
-          s.status.place_id  = ids[0]; 
-          const official = serviceTagNameById.get(ids[0]);
-          if (official) s.status.place = official;
-        } else {
-
-          s.status.place_ids = [];
-          s.status.place_id  = null; 
-        }
-      }
-
-      s.drill = {
-        phase: "reason",
-        count: 0,
-        category: null,
-        awaitingChoice: false,
-        options: [],
-        reasonBuf: [],
-        flags: s.drill.flags || {},
-      };
-      s.step = 4;
-      return res.json(withMeta({
-        response: "はじめに、今回の転職理由を教えてほしいな。きっかけってどんなことだった？\nしんどいと思ったこと、これはもう無理って思ったこと、逆にこういうことに挑戦したい！って思ったこと、何でもOKだよ🤖",
-        step: 4, status: s.status, isNumberConfirmed: true, candidateNumber: s.status.number, debug: debugState(s)
-      }, 4));
-    }
-
-    return res.json(withMeta({
-      response: `ごめん、もう一度教えて！この中だとどれが一番近い？『${s.drill.options.map(x=>`［${x}］`).join("／")}』`,
-      step: 3, status: s.status, isNumberConfirmed: true, candidateNumber: s.status.number, debug: debugState(s)
-    }, 3));
-  }
-
-const foundLabels = matchServicePlacesInText(text);
-const raw = String(text || "").trim();
-
-const toFW = (x) => x.replace(/\(/g,'（').replace(/\)/g,'）').replace(/~/g,'～');
-const toHW = (x) => x.replace(/（/g,'(').replace(/）/g,')').replace(/～/g,'~');
-const normalize = (x) => toHW(toFW(String(x||""))).replace(/[ \t\r\n\u3000]/g,"");
-const exact = foundLabels.find(l => normalize(l) === normalize(raw));
-
-const finalize = (label) => {
-  s.status.place = label;
-
-  const id =
-        serviceTagIdByName.get(label)
-     || serviceTagIdByName.get(toFW(label))
-     || serviceTagIdByName.get(toHW(label));
-
-  if (id != null) {
-    s.status.place_ids = [id];
-    s.status.place_id  = id; // 追加                    
-    const official = serviceTagNameById.get(id);
-    if (official) s.status.place = official;
-  } else {
-    const ids = matchServiceTagIdsInText(label); 
-    if (Array.isArray(ids) && ids.length) {
-      s.status.place_ids = [ids[0]];
-      s.status.place_id  = ids[0]; 
-      const official = serviceTagNameById.get(ids[0]);
-      if (official) s.status.place = official;
-    } else {
-      s.status.place_ids = [];
-      s.status.place_id  = null;  
-  }
- }
- 
-  s.drill = {
-    phase: "reason",
-    count: 0,
-    category: null,
-    awaitingChoice: false,
-    options: [],
-    reasonBuf: [],
-    flags: s.drill.flags || {},
-  };
-  s.step = 4;
-
-  return res.json(withMeta({
-    response: "はじめに、今回の転職理由を教えてほしいな。きっかけってどんなことだった？\nしんどいと思ったこと、これはもう無理って思ったこと、逆にこういうことに挑戦したい！って思ったこと、何でもOKだよ🤖",
-    step: 4, status: s.status, isNumberConfirmed: true, candidateNumber: s.status.number, debug: debugState(s)
-  }, 4));
-};
-
-if (exact) {
-  return finalize(exact);
-}
-if (foundLabels.length === 1) {
-  return finalize(foundLabels[0]);
-}
-if (foundLabels.length >= 2) {
-  const options = foundLabels.slice(0, 6);
-  s.drill.phase = "place";
-  s.drill.awaitingChoice = true;
-  s.drill.options = options;
-  return res.json(withMeta({
-    response: `どれが一番近い？『${options.map(x=>`［${x}］`).join("／")}』`,
-    step: 3, status: s.status, isNumberConfirmed: true, candidateNumber: s.status.number, debug: debugState(s)
-  }, 3));
-}
-
-s.status.place = raw;
-s.status.place_ids = []; 
-s.status.place_id  = null;
-
-s.drill = {
-  phase: "reason",
-  count: 0,
-  category: null,
-  awaitingChoice: false,
-  options: [],
-  reasonBuf: [],
-  flags: s.drill.flags || {},
-};
-s.step = 4;
-return res.json(withMeta({
-  response: "はじめに、今回の転職理由を教えてほしいな。きっかけってどんなことだった？\nしんどいと思ったこと、これはもう無理って思ったこと、逆にこういうことに挑戦したい！って思ったこと、何でもOKだよ🤖",
-  step: 4, status: s.status, isNumberConfirmed: true, candidateNumber: s.status.number, debug: debugState(s)
-}, 4)); 
-}
-
- // ---- Step4：転職理由（LLM主導：共感＋要約＋ID候補＋次の深掘り） ----
-if (s.step === 4) {
-
-  if (s.drill.phase === "salary-triage" && s.drill.awaitingChoice) {
-    s.drill.reasonBuf.push(text || "");
-
-    if (isPeerComparisonSalary(text)) {
-      s.status.reason_tag = "";
-      s.status.reason_ids = [];
-      resetDrill(s);
-      s.step = 5;
-
-      const emp = await generateEmpathy(text, s);
-      const msg = "収入アップが主目的ってこと、把握したよ。担当エージェントに共有するね。";
-      return res.json(withMeta({
-        response: joinEmp(emp, `${msg}\n\n${mustIntroText()}`),
-
-        step: 5, status: s.status, isNumberConfirmed: true,
-        candidateNumber: s.status.number, debug: debugState(s)
-      }, 5));
-    }
-
-    if (isValueMismatchSalary(text)) {
-      s.drill.category = "仕事内容・キャリアに関すること";
-      s.drill.awaitingChoice = false;
-      s.drill.count = 1;
-
-            const q = "評価や昇給の基準が不透明？成果が給与に反映されてない感じ？";
-      const emp = await generateEmpathy(text, s);
-      const empSafe = sanitizeEmpathy(emp);
-      return res.json(withMeta({
-        response: joinEmp(empSafe, q),
-        step: 4, status: s.status, isNumberConfirmed: true,
-        candidateNumber: s.status.number, debug: debugState(s)
-      }, 4));
-    }
-
-    s.drill.awaitingChoice = false;
-    s.drill.count = 1;
-  }
-
-  if (s.drill.phase === "private-confirm" && s.drill.awaitingChoice) {
-    if (isYes(text)) {
-      const tag = "家庭との両立に理解のある職場で働きたい";
-      s.status.reason_tag = tag;
-      const rid = reasonIdByName.get(tag);
-      s.status.reason_ids = Array.isArray(rid) ? rid : (rid != null ? [rid] : []);
-      resetDrill(s);
-      s.step = 5;
-      return res.json(withMeta({
-        response: `今回の転職理由は『${tag}』ってところが大きそうだね！担当エージェントに伝えておくね。\n\n${mustIntroText()}`,
-        step: 5, status: s.status, isNumberConfirmed: true,
-        candidateNumber: s.status.number, debug: debugState(s)
-      }, 5));
-    }
-    s.drill.flags.privateDeclined = true;
-    resetDrill(s);
-    s.status.reason_tag = "";
-    s.status.reason_ids = [];
-    s.step = 5;
-
-    const emp0 = await generateEmpathy(text, s);
-    const fixed = "無理なく働ける職場を考えていこうね。";
-    return res.json(withMeta({
-      response: joinEmp(emp0, `${fixed}\n\n${mustIntroText()}`),
-      step: 5, status: s.status, isNumberConfirmed: true,
-      candidateNumber: s.status.number, debug: debugState(s)
-    }, 5));
-  }
-
-  if (s.drill.phase === "reason-llm-choice" && s.drill.awaitingChoice && s.drill.options?.length) {
-    const pick = normalizePick(text);
-    const chosen = s.drill.options.find(o => o === pick);
-    if (chosen) {
-      s.status.reason_tag = chosen;
-      const rid = reasonIdByName.get(chosen);
-      s.status.reason_ids = Array.isArray(rid) ? rid : (rid != null ? [rid] : []);
-      resetDrill(s);
-      s.step = 5;
-
-      const emp = await generateEmpathy(text, s);
-      return res.json(withMeta({
-        response: joinEmp(emp, `今回の転職理由は『${chosen}』ってところが大きそうだね！担当エージェントに伝えておくね。\n\n${mustIntroText()}`),
-        step: 5, status: s.status, isNumberConfirmed: true,
-        candidateNumber: s.status.number, debug: debugState(s)
-      }, 5));
-    }
-   
-    return res.json(withMeta({
-      response: `ごめん、もう一度どれが近いか教えて！『${s.drill.options.map(x=>`［${x}］`).join("／")}』`,
-      step: 4, status: s.status, isNumberConfirmed: true,
-      candidateNumber: s.status.number, debug: debugState(s)
-    }, 4));
-  }
-
-  if (s.drill.count === 0) {
-    s.status.reason = text || "";
-    s.status.memo.reason_raw = text || "";
-    s.drill.reasonBuf = [text || ""];
-
-    const forced0 = shouldForcePrivate(s) ? forcePrivateOncallNight(text) : null;
-    if (forced0) {
-      s.drill.category = forced0.category;
-      s.drill.phase = "private-confirm";
-      s.drill.awaitingChoice = true;
-      s.drill.count = 0;
-
-      const emp0 = await generateEmpathy(text, s);
-      const confirmText = "プライベートや家庭との両立に理解がほしい感じ？";
-      return res.json(withMeta({
-        response: joinEmp(emp0, confirmText),
-        step: 4, status: s.status, isNumberConfirmed: true,
-        candidateNumber: s.status.number, debug: debugState(s)
-      }, 4));
-    }
-
-    if (detectSalaryIssue(text)) {
-      s.drill.phase = "salary-triage";
-      s.drill.awaitingChoice = true;
-      s.drill.count = 0;
-
-      const emp0 = await generateEmpathy(text, s);
-      const triage = "どうしてそう思う？周りの相場と比べて？それとも自分の働きに見合ってない感じ？";
-      return res.json(withMeta({
-        response: joinEmp(emp0, triage),
-        step: 4, status: s.status, isNumberConfirmed: true,
-        candidateNumber: s.status.number, debug: debugState(s)
-      }, 4));
-    }
-
-const llm1 = await analyzeReasonWithLLM(text, s);
-const empathyRaw = (llm1?.empathy && llm1.empathy.trim()) || await generateEmpathy(text, s);
-let nextQ = pickNextAsk(llm1?.asks || [], s);
-
-s.drill.count = 1;
-s.drill.phase = "reason-llm-ask2";
-s.drill.awaitingChoice = false;
-s.drill.flags.last_llm_candidates = llm1?.candidates || [];
-s.drill.flags.last_llm_summary = llm1?.paraphrase || "";
-s.drill.flags.last_ask = nextQ || "";
-
-if (nextQ) pushAskHistory(s, nextQ);
-
-return res.json(withMeta({
-  response: joinEmp(empathyRaw, nextQ),
-  step: 4,
-  status: s.status,
-  isNumberConfirmed: true,
-  candidateNumber: s.status.number,
-  debug: debugState(s)
-}, 4));
-}
-
-  if (s.drill.count === 1) {
-    s.drill.reasonBuf.push(text || "");
-    const joined = s.drill.reasonBuf.join(" ");
-    const llm2 = await analyzeReasonWithLLM(joined, s);
-
-const filtered2 = gateCandidatesByEvidence(llm2?.candidates || [], joined);
-llm2.candidates = filtered2;
-
-const empathy2 = llm2?.empathy || await generateEmpathy(text, s);
-const decision = decideReasonFromCandidates(filtered2);
-
-    let nextQ;
-
-    if (decision.status === "confirm") {
-      const id = decision.id;
-      const label = reasonNameById.get(id) || "";
-      s.status.reason_tag = label;
-      s.status.reason_ids = [id];
-      resetDrill(s);
-      s.step = 5;
-      return res.json(withMeta({
-        response: joinEmp(empathy2, `『${label}』だね！担当エージェントに伝えておくね。\n\n${mustIntroText()}`),
-        step: 5, status: s.status, isNumberConfirmed: true,
-        candidateNumber: s.status.number, debug: debugState(s)
-      }, 5));
-    }
-
-if (decision.status === "ambiguous") {
-let nextQ = pickNextAsk(llm2?.asks || [], s);
-
-if (!nextQ) {
-  const redo = await analyzeReasonWithLLM(joined, s, { forceNewAngle: true });
-  nextQ = pickNextAsk(redo?.asks || [], s);
-}
-
-s.drill.count = 2;
-s.drill.phase = "reason-llm-ask3";
-s.drill.awaitingChoice = false;
-s.drill.flags.last_llm_candidates = llm2?.candidates || [];
-s.drill.flags.last_llm_summary    = llm2?.paraphrase || "";
-s.drill.flags.last_ask            = nextQ || "";
-if (nextQ) pushAskHistory(s, nextQ);
-
-return res.json(withMeta({
-  response: nextQ ? joinEmp(empathy2, nextQ) : empathy2,
-  step: 4, status: s.status, isNumberConfirmed: true,
-  candidateNumber: s.status.number, debug: debugState(s)
-}, 4));
-    }
-      
-      nextQ = llm2?.suggested_question || "一番の根っこは何か、言葉にしてみてね。";
-
-{
-  const joinedBuf = (s.drill?.reasonBuf || [text || ""]).join(" ");
-  if (isHumanRelationPrompt(nextQ) && !hasBossIssueHint(joinedBuf)) {
-    nextQ = pickAngleFallback(joinedBuf, "人間関係");
-  }
-}     
-      if (isSamePrompt(nextQ, s.drill?.flags?.last_ask || "")) {
-  const basis = Array.isArray(s?.drill?.reasonBuf) && s.drill.reasonBuf.length
-    ? s.drill.reasonBuf.slice(-3).join(" / ")
-    : (text || "");
-  const redo = await analyzeReasonWithLLM(basis, s, { forceNewAngle: true });
-  const altQ = redo?.suggested_question || "";
-
-  if (altQ && !isSamePrompt(altQ, s.drill?.flags?.last_ask || "")) {
-    nextQ = altQ;
-  } else {
-    const alts = [
-      "直近で一番つらかった具体的な場面は？",
-      "その中で“絶対に避けたいこと”を一つ挙げると？",
-      "改善されると一気に楽になるポイントはどこ？"
-    ];
-    nextQ = alts[(s.drill?.count ?? 0) % alts.length];
-  }
-}
-      s.drill.count = 2;
-      s.drill.phase = "reason-llm-ask3";
-      s.drill.awaitingChoice = false;
-      s.drill.flags.last_llm_candidates = llm2?.candidates || [];
-      s.drill.flags.last_ask = nextQ || "";
-
-      return res.json(withMeta({
-        response: nextQ ? joinEmp(empathy2, nextQ) : empathy2,
-        step: 4, status: s.status, isNumberConfirmed: true,
-        candidateNumber: s.status.number, debug: debugState(s)
-      }, 4));
-    }
-
-  if (s.drill.count === 2) {
-    s.drill.reasonBuf.push(text || "");
-    const joined = s.drill.reasonBuf.join(" ");
-    const llm3 = await analyzeReasonWithLLM(joined, s);
-
-const filtered3 = gateCandidatesByEvidence(llm3?.candidates || [], joined);
-llm3.candidates = filtered3;
-
-const empathy3 = llm3?.empathy || await generateEmpathy(text, s);
-const decision = decideReasonFromCandidates(filtered3);
-
-    if (decision.status === "confirm") {
-      const id = decision.id;
-      const label = reasonNameById.get(id) || "";
-      s.status.reason_tag = label;
-      s.status.reason_ids = [id];
-      resetDrill(s);
-      s.step = 5;
-      return res.json(withMeta({
-        response: joinEmp(empathy3, `今回の転職理由は『${label}』ってところが大きそうだね！担当エージェントに伝えておくね。\n\n${mustIntroText()}`),
-        step: 5, status: s.status, isNumberConfirmed: true,
-        candidateNumber: s.status.number, debug: debugState(s)
-      }, 5));
-    }
-
-    const options = (decision.status === "ambiguous" ? decision.options : [])
-      .filter(Boolean)
-      .slice(0, 3);
-
-    if (options.length) {
-      s.drill.phase = "reason-llm-choice";
-      s.drill.awaitingChoice = true;
-      s.drill.options = options;
-
-      return res.json(withMeta({
-        response: joinEmp(empathy3, `この中だとどれが一番近い？『${options.map(x=>`［${x}］`).join("／")}』`),
-        step: 4, status: s.status, isNumberConfirmed: true,
-        candidateNumber: s.status.number, debug: debugState(s)
-      }, 4));
-    }
-
-    const p1 = String(llm3?.paraphrase || "").trim();
-    const p2 = String(s.drill?.flags?.last_llm_summary || "").trim();
-    const p3 = String(joined || "").slice(0, 30);
-    const finalParaphrase = (p1 || p2 || p3) || "理由（テキスト）";
-
-    s.status.reason_tag = finalParaphrase;
-    s.status.reason_ids = [];
-    resetDrill(s);
-    s.step = 5;
-
-    return res.json(withMeta({
-      response: joinEmp(empathy3, mustIntroText()),
-      step: 5, status: s.status, isNumberConfirmed: true,
-      candidateNumber: s.status.number, debug: debugState(s)
-    }, 5));
-  } 
-
-  const before = Number.isFinite(s.drill?.count) ? s.drill.count : 0;
-  const nextCount = Math.max(1, Math.min(before + 1, 2)); // 0→1、1→2、2で頭打ち
-  s.drill.count = nextCount;
-  s.drill.phase = (nextCount === 2 ? "reason-llm-ask3" : "reason-llm-ask2");
-  s.drill.awaitingChoice = false;
-
-const empF = await generateEmpathy(text || "", s);
-let nextQ =
-  pickNextAsk([], s) ||
-  (nextCount === 1
-    ? "一番ひっかかる点はどこか、もう少しだけ教えてね。"
-    : "直近で一番つらかった具体的な場面は？");
-
-  if (isSamePrompt(nextQ, s.drill?.flags?.last_ask || "")) {
-  const basis = (Array.isArray(s?.drill?.reasonBuf) && s.drill.reasonBuf.length)
-    ? s.drill.reasonBuf.join(" ")
-    : (text || "");
-
-  const redo = await analyzeReasonWithLLM(basis, s, { forceNewAngle: true });
-  const alt = pickNextAsk(redo?.asks || [], s) || redo?.suggested_question || "";
-
-  if (alt && !isSamePrompt(alt, s.drill?.flags?.last_ask || "")) {
-    nextQ = alt; 
-  } else {
-    const filtered = gateCandidatesByEvidence(redo?.candidates || [], basis);
-    const decision = decideReasonFromCandidates(filtered);
-
-    if (decision.status === "ambiguous" && decision.options?.length) {
-      s.drill.phase = "reason-llm-choice";
-      s.drill.awaitingChoice = true;
-      s.drill.options = decision.options.slice(0, 3);
-      return res.json(withMeta({
-        response: joinEmp(empF, `この中だとどれが一番近い？『${s.drill.options.map(x=>`［${x}］`).join("／")}』`),
-        step: 4, status: s.status, isNumberConfirmed: true,
-        candidateNumber: s.status.number, debug: debugState(s)
-      }, 4));
-    }
-
-    if (decision.status === "confirm") {
-      const id = decision.id;
-      const label = reasonNameById.get(id) || "";
-      s.status.reason_tag = label;
-      s.status.reason_ids = [id];
-      resetDrill(s);
-      s.step = 5;
-      return res.json(withMeta({
-        response: joinEmp(empF, `『${label}』だね！担当エージェントに伝えておくね。\n\n${mustIntroText()}`),
-        step: 5, status: s.status, isNumberConfirmed: true,
-        candidateNumber: s.status.number, debug: debugState(s)
-      }, 5));
-    }
-
-    const paraphrase = (redo?.paraphrase || basis || "").slice(0, 30) || "理由（テキスト）";
-    s.status.reason_tag = paraphrase;
-    s.status.reason_ids = [];
-    resetDrill(s);
-    s.step = 5;
-    return res.json(withMeta({
-      response: joinEmp(empF, mustIntroText()),
-      step: 5, status: s.status, isNumberConfirmed: true,
-      candidateNumber: s.status.number, debug: debugState(s)
-    }, 5));
-  }
-}
-
-s.drill.flags.last_ask = nextQ || "";
-pushAskHistory(s, nextQ);
-
-return res.json(withMeta({
-  response: nextQ ? joinEmp(empF, nextQ) : empF,
-  step: 4, status: s.status, isNumberConfirmed: true,
-  candidateNumber: s.status.number, debug: debugState(s)
-}, 4));
-} 
-  // ---- Step5：絶対NG（Must NG） ----
-if (s.step === 5) {
-  if (isNone(text)) {
-    s.step = 6;
-    return res.json(withMeta({
-      response: "次は【これだけは絶対ないと困る！】という条件を教えてね。\n「賞与がないと困る！」\n「絶対土日休みがいい！」\nって感じ。1個じゃなくてもOKだよ！",
-      step: 6, status: s.status, isNumberConfirmed: true,
-      candidateNumber: s.status.number, debug: debugState(s),
-    }, 6));
-  }
-
-  const { decideStep56, loadAvailablePurposes } = await import("../../lib/decideStep56.js");
-  const dec = await decideStep56({
-    userText: text,
-    mode: "must_ng",
-    recentTexts: Array.isArray(s?.drill?.reasonBuf) ? s.drill.reasonBuf.slice(-3) : [],
-    role: s?.status?.role || "",
-    place: s?.status?.place || "",
-    turnIndex: (s?.drill?.count ?? 0),
-  });
-
-  const emp = await generateEmpathy(text || "", s);
-  const available = loadAvailablePurposes();
-  const picked = [];
-  if (Array.isArray(dec?.candidates)) {
-    for (const c of dec.candidates.slice(0, 3)) {
-      const idStr = String(c?.id ?? "");
-      const label = available[idStr];
-      if (label) {
-        const idNum = Number(idStr);
-        if (!s.status.must_ng_ids.includes(idNum)) s.status.must_ng_ids.push(idNum);
-        if (!s.status.must_ng.includes(label))     s.status.must_ng.push(label);
-        picked.push(label);
-      }
-    }
-  }
-
-  if (dec?.unmatched_title) {
-    s.status.memo.must_ng_raw ??= [];
-    s.status.memo.must_ng_raw.push(dec.unmatched_title);
-  }
-
-  const tail = "他にも『これは絶対ダメ！』はある？（なければ「ない」と返してね）";
-  const head = picked.length ? `OK！『${picked.join("』『")}』だね。担当エージェントに共有するね。` : "";
-  return res.json(withMeta({
-    response: joinEmp(emp, [head, tail].filter(Boolean).join("\n")),
-    step: 5, status: s.status, isNumberConfirmed: true,
-    candidateNumber: s.status.number, debug: debugState(s)
-  }, 5));
-}
-
- // ---- Step6：絶対欲しい（Must Have） ----
-if (s.step === 6) {
-  if (isNone(text)) {
-    s.step = 7;
-    return res.json(withMeta({
-      response: "次は【これがあったら（なかったら）嬉しいな】という条件を教えてね。\n自由に回答してね！",
-      step: 7, status: s.status, isNumberConfirmed: true,
-      candidateNumber: s.status.number, debug: debugState(s)
-    }, 7));
-  }
-
-  const { decideStep56, loadAvailablePurposes } = await import("../../lib/decideStep56.js");
-  const dec = await decideStep56({
-    userText: text,
-    mode: "must_have",
-    recentTexts: Array.isArray(s?.drill?.reasonBuf) ? s.drill.reasonBuf.slice(-3) : [],
-    role: s?.status?.role || "",
-    place: s?.status?.place || "",
-    turnIndex: (s?.drill?.count ?? 0),
-  });
-
-  const emp = await generateEmpathy(text || "", s);
-  const available = loadAvailablePurposes();
-  const picked = [];
-  if (Array.isArray(dec?.candidates)) {
-    for (const c of dec.candidates.slice(0, 3)) {
-      const idStr = String(c?.id ?? "");
-      const label = available[idStr];
-      if (label) {
-        const idNum = Number(idStr);
-        if (!s.status.must_have_ids.includes(idNum)) s.status.must_have_ids.push(idNum);
-        if (!s.status.must_have.includes(label))     s.status.must_have.push(label);
-        picked.push(label);
-      }
-    }
-  }
-
-  if (dec?.unmatched_title) {
-    s.status.memo.must_have_raw ??= [];
-    s.status.memo.must_have_raw.push(dec.unmatched_title);
-  }
-
-  const tail = "他にも『これは必須でほしい！』はある？（なければ「ない」と返してね）";
-  const head = picked.length ? `『${picked.join("』『")}』も担当エージェントに共有するね！` : "";
-  return res.json(withMeta({
-    response: joinEmp(emp, [head, tail].filter(Boolean).join("\n")),
-    step: 6, status: s.status, isNumberConfirmed: true,
-    candidateNumber: s.status.number, debug: debugState(s)
-  }, 6));
-}
-
-  // ---- Step7：あったら嬉しい（Want / 自由記述）----
-if (s.step === 7) {
-  s.status.want_text = text || "";
-  s.step = 8;
-  const emp = await generateEmpathy(text || "", s);
-  return res.json(withMeta({
-    response: joinEmp(emp, "次は【これまでやってきたこと／自分が得意なこと】を教えてね。\n「急性期病棟で3年勤務した」\n「採血が得意で周りから褒められる」\nみたいな感じ！"),
-    step: 8, status: s.status, isNumberConfirmed: true,
-    candidateNumber: s.status.number, debug: debugState(s)
-  }, 8));
-}
-
-// ---- Step8：Can ----
-if (s.step === 8) {
-  s.status.can = text || "";
-  s.step = 9;
-  const empCan = await generateEmpathy(text || "", s);
-  return res.json(withMeta({
-    response: joinEmp(empCan, "最後！【これから挑戦したいこと】を教えてね。\n「未経験だけど在宅の分野に挑戦したい」\n「プライベートと両立しながら看護師のキャリアを継続したい」\nあなたの想いを自由に書いてね！"),
-    step: 9, status: s.status, isNumberConfirmed: true,
-    candidateNumber: s.status.number, debug: debugState(s)
-  }, 9));
-}
-
-// ---- Step9：Will ----
-if (s.step === 9) {
-  s.status.will = text || "";
-  s.step = 10;
-  const empWill = await generateEmpathy(text || "", s);
-  return res.json(withMeta({
-    response: joinEmp(empWill, "今日はたくさん話してくれて助かった！\n整理した内容は担当エージェントに共有するね。"),
-    step: 10, status: s.status, isNumberConfirmed: true,
-    candidateNumber: s.status.number, debug: debugState(s)
-  }, 10));
-}
-
-// ---- Step10：完了後の追加発話 ----
-if (s.step === 10) {
-  const empDone = await generateEmpathy(text || "", s);
-  return res.json(withMeta({
-    response: joinEmp(empDone, "ここまでで入力はOK！続きは担当エージェントと詰めていこう。"),
-    step: 10,
-    status: s.status,
-    isNumberConfirmed: true,
-    candidateNumber: s.status.number,
-    debug: debugState(s),
-  }, 10));
-}
-
-  return res.json(withMeta({
-    response: "（内部エラー）",
-    step: s.step,
-    status: s.status,
-    isNumberConfirmed: s.isNumberConfirmed,
-    candidateNumber: s.status.number,
-    debug: debugState(s)
-  }, s.step));
-}
- 
-
-async function generateEmpathy(userText, s){
-  const key = process.env.OPENAI_API_KEY;
-  const fallback = "今の話、ちゃんと受け取ったよ。";
-  const recent = Array.isArray(s?.drill?.reasonBuf) ? s.drill.reasonBuf.slice(-3).join(" / ") : "";
-  const role = s?.status?.role || "";
-  const place = s?.status?.place || "";
-  const cat = s?.drill?.category || "";
-
-  if (!key) return fallback;
-
-  try {
-    const { default: OpenAI } = await import("openai");
-    const client = new OpenAI({ apiKey: key });
-
-    const system = [
-      "あなたは日本語で自然に寄り添う会話を返すAI。",
-      "決まり文句やお祈り文句は禁止。",
-      "命令・説教・断定の押し付けは禁止。",
-      "文体ルール：『です・ます調』や敬語の終止は禁止（常体寄りの素直な口語）。",
-      "共感文は必ず 2〜3文／100字程度。",
-      "質問文を作らない。疑問符（？/?) を含めない。句点（。）で終える。"
-    ].join("\\n");
-
-    const user = [
-      `直近の発話: ${recent || "なし"}`,
-      `職種: ${role || "未入力"}`,
-      `現職: ${place || "未入力"}`,
-      `カテゴリ: ${cat || "未確定"}`,
-      "",
-      `今回の発話: ${userText || "（内容なし）"}`,
-      "",
-      "避ける言い回し例: ありがとう ありがとうございます 大切 寄り添う わかる そうだよね 安心して 頑張ろう 大丈夫 受け止めた 整理しよう 〜です 〜ます 〜でしょう 〜ですね 〜ですよね"
-    ].join("\\n");
-
-    const rsp = await client.chat.completions.create({
-      model: "gpt-4o-mini",
-      temperature: 0.2,
-      max_tokens: 220,
-      messages: [
-        { role: "system", content: system },
-        { role: "user", content: user }
-      ],
-    });
-
-    let txt = rsp?.choices?.[0]?.message?.content?.trim() || "";
-    txt = txt.replace(/\"/g, "")
-             .replace(/\s+\n/g, "\n")
-             .replace(/\n{3,}/g, "\n\n")
-             .trim();
-
-    const sentences = txt
-      .split(/(?<=[。．！!？?])\s*/).filter(Boolean)
-      .map(s => s.trim());
-
-    const RE_QUESTION_MARK = /[？?]\s*$/;
-    const RE_QUESTION_WORD = /(どれ|どの|どっち|どんな|どう|なに|何|なぜ|いつ|どこ|理由|教えて|聞かせて)/;
-    const RE_REQUEST       = /(ください|下さい|お願い|お願いします|おしえて|教えて|伝えて|記入して|回答して|返答して|詳しく|具体的に)/;
-    const RE_IMPERATIVE    = /(して(?:ほしい|欲しい)|してください|してね|しよう|しましょう|してみよう|しなさい)/;
-    const RE_SUGGEST       = /(～?するといい|すると良い|だといい|だと良い|できるといい|できると良い|のほうがいい|の方がいい|が良さそう|がいいと思う|あるといい|あると良い)/;
-    const RE_LEADING       = /(一言で|一語で|教えて|挙げて|示して|書いて|答えて|共有して)/;
-
-    const isProbingLike = (s) => {
-      const t = String(s || "").trim();
-      if (!t) return false;
-      return RE_QUESTION_MARK.test(t)
-          || RE_QUESTION_WORD.test(t)
-          || RE_REQUEST.test(t)
-          || RE_IMPERATIVE.test(t)
-          || RE_SUGGEST.test(t)
-          || RE_LEADING.test(t);
-    };
-
-    let kept = sentences.filter(s => !isProbingLike(s));
-
-    if (kept.length === 0 && sentences.length) {
-      kept = sentences.map(s => s
-        .replace(RE_QUESTION_MARK, "")
-        .replace(RE_REQUEST, "")
-        .replace(RE_IMPERATIVE, "")
-        .replace(RE_SUGGEST, "")
-        .replace(RE_LEADING, "")
-        .trim()
-      ).filter(Boolean);
-    }
-
-    let out = kept.map(p => {
-      let t = p.replace(/[？?]+$/,"").trim();
-      if (!/[。．！!]$/.test(t)) t += "。";
-      return t.replace(/．$/, "。");
-    }).filter(Boolean).join("").replace(/。。+/g, "。").trim();
-
-    if (out.length > 180) {
-      const sents = out.split(/(?<=。|！|!)/).filter(Boolean);
-      out = sents.slice(0, 3).join("").trim();
-      if (out.length > 180) out = out.slice(0, 178) + "。";
-    }
-
-    if (!out) out = fallback;
-    return out;
-  } catch (e) {  
-    return fallback; 
-  }
-}
-
-function _toFW(s){ return String(s||"").replace(/\(/g,"（").replace(/\)/g,"）").replace(/~/g,"～"); }
-function _toHW(s){ return String(s||"").replace(/（/g,"(").replace(/）/g,")").replace(/～/g,"~"); }
-function _scrub(s){ return String(s||"").replace(/[ \t\r\n\u3000、。・／\/＿\u2013\u2014\-~～!?！？。、，．・]/g,""); }
-function _norm(s){ return _scrub(_toHW(_toFW(String(s||"")))); }
-
-function forcePrivateOncallNight(userText = "") {
-  const t = String(userText || "");
-  if (/(オンコール|ｵﾝｺｰﾙ|夜勤)/i.test(t)) {
-    return {
-      category: "プライベートに関すること",
-      options: ["家庭との両立に理解のある職場で働きたい"],
-    };
-  }
-  return null;
-}
-
-function shouldForcePrivate(s){
-  return !(s && s.drill && s.drill.flags && s.drill.flags.privateDeclined);
-}
-
-function hasOncallNight(text = "") {
-  return /(オンコール|ｵﾝｺｰﾙ|夜勤)/i.test(String(text || ""));
-}
-function isYes(text = "") {
-  return /^(はい|うん|そう|ok|了解|そのとおり|そんな感じ|お願いします|それで|求めてる)/i.test(String(text || "").trim());
-}
-
-function enforcePlainEnding(text = '') {
-  let t = String(text).trim();
-  if (!t) return t;
-
-  t = t.replace(/\s+\n/g, '\n').replace(/\n{3,}/g, '\n\n');
-
-  if (!/[。！？!？＞）)\]]$/.test(t)) t += '。';
-  return t;
-}
-
-function joinEmp(a, b) {
-  const emp = String(a || "").trim();
-  const q   = String(b || "").trim();
-  return q ? `${emp}\n\n${q}` : emp;
-}
-
-function isSamePrompt(a, b){
-  const norm = s => String(s || "")
-    .toLowerCase()
-    .replace(/[ \t\r\n\u3000]/g, "")
-    .replace(/[。、，・…\.]/g, "")
-    .replace(/[「」『』（）()［］\[\]\{\}~～]/g, "")
-    .replace(/[！？!？?]/g, "");
-  const A = norm(a), B = norm(b);
-  if (!A || !B) return false;
-  return A === B || A.includes(B) || B.includes(A);
-}
-
-function pickNextAsk(asks = [], s) {
-  const tried = new Set();
-  if (s?.drill?.flags?.last_ask) tried.add(s.drill.flags.last_ask);
-  if (Array.isArray(s?.drill?.flags?.ask_history)) {
-    for (const a of s.drill.flags.ask_history.slice(-5)) tried.add(a);
-  }
-  for (const a of (asks || [])) {
-    const ok = Array.from(tried).every(old => !isSamePrompt(a, old));
-    if (ok) return a;
-  }
-  return null;
-}
-function pushAskHistory(s, ask) {
-  s.drill.flags.ask_history ??= [];
-  if (ask) s.drill.flags.ask_history.push(ask);
-}
-
-function isHumanRelationPrompt(s){
-  const t = String(s || "");
-  return /(人間関係|職場の雰囲気|上司|先輩|同僚|チームワーク)/.test(t);
-}
-function hasBossIssueHint(text=""){
-  const t = String(text || "");
-  return /(上司|管理者|師長|部長|課長|リーダー|陰口|高圧|マウント|パワハラ|理不尽)/.test(t);
-}
-
-function pickAngleFallback(buf="", excludeCategory=""){
-  const t = String(buf || "");
-
-  if (/(動物|アレルギ|花粉|体質|喘息)/.test(t)) return "環境や業務で避けたい条件って何だろう。";
-  if (/(夜勤|夜番|オンコール|ｵﾝｺｰﾙ|コール番|呼び出し)/i.test(t)) return "勤務条件で一番避けたい点って何だろう。";
-  if (/(残業|シフト|連勤|休憩|有給|直行直帰|朝礼|日報|定時)/.test(t)) return "それって時間面？制度面？";
-  if (/(評価|昇給|昇格|査定|反映|不公平|公平|基準)/.test(t)) return "どこが特に気になるかな。";
-  if (/(通勤|距離|移動|直行|直帰|訪問)/.test(t)) return "特に気になっていることを教えて欲しいな。";
-
-  if (excludeCategory === "人間関係") {
-    return "直近でそう思った出来事があれば教えて欲しいな。";
-  }
-  return "一番気になっている条件を教えて！";
-}
-
-function buildStatusBar(st = {}, currentStep = 0) {
-  const maxStep = 10;
-  const steps = [];
-  for (let i = 1; i <= maxStep; i++) {
-    steps.push({
-      id: i,
-      label: STEP_LABELS[i] || `STEP ${i}`,
-      done: i < currentStep,
-      active: i === currentStep,
-      todo: i > currentStep,
-    });
-  }
-
-  const progress =
-    currentStep <= 1 ? 0 :
-    currentStep >= maxStep ? 1 :
-    (currentStep - 1) / (maxStep - 1);
-
-  // ←ここで candidateNumber / number を追加（どちらのキーでも拾えるように）
-  return {
-    current: currentStep,
-    progress,
-    steps,
-    candidateNumber: String(st?.number || ""),
-    number: String(st?.number || ""),
-  };
-}
-
-function withMeta(payload, step) {
-  const statusBar = buildStatusBar(payload.status, step);
-  return {
-    ...payload,
-    meta: {
-      step,
-      step_label: STEP_LABELS[step] ?? "",
-      statusBar,
-      debug: payload.debug,
-    },
-  };
-}
-
-
-function debugState(s) {
-  return {
-    drill: { ...s.drill },
-    reasonCategory: s.drill.category,
-    awaitingChoice: s.drill.awaitingChoice,
-    reasonTag: s.status.reason_tag,
-    mustCount: (s.status.must_ng || []).length, 
-    wantCount: (s.status.want_text || "").length, 
-  };
-} 
-
-function nextAfterId(s) {
-  switch (s.step) {
-    case 2:
-      return "IDは確認済だよ！次に【今の職種（所有資格）】を教えてね。\n（例）正看護師／介護福祉士／初任者研修 など";
-    case 3:
-      return "IDは確認済だよ！次に【今どこで働いてる？】を教えてね。\n（例）○○病院 外来／△△クリニック";
-    case 4:
-      return "IDは確認済だよ！\nはじめに、今回の転職理由を教えてほしいな。きっかけってどんなことだった？\nしんどいと思ったこと、これはもう無理って思ったこと、逆にこういうことに挑戦したい！って思ったこと、何でもOKだよ🤖";
-    default:
-      return "IDは確認済だよ！";
-  }
-}
-
-function mustIntroText() {
-  return "OK！ここから条件の整理に入るね。\n\n" +
-         "まずは【絶対NG】の条件を教えてほしい。\n" +
-         "仕事内容でも制度でもOKで、これは無理！ってやつ。\n\n" +
-         "例えば・・・\n" +
-         "「夜勤は絶対できない！」\n" +
-         "「オンコールは無理！」\n" +
-         "「長時間の残業は嫌だ！」\n\n" +
-         "次に『絶対ないと困るもの』を聞くから、今は“NG”だけ教えてね。";
-}
-
-function noOptionCategory(cat) {
-  return cat === "職場環境・設備" || cat === "職場の安定性" || cat === "給与・待遇";
-}
-
-function pickReasonCategory(text) {
-  const t = (text || "").toLowerCase();
-  let best = null, score = 0;
-  for (const [cat, def] of Object.entries(transferReasonFlow)) {
-    const hit = (def.keywords || []).reduce((acc, kw) => acc + (t.includes(String(kw).toLowerCase()) ? 1 : 0), 0);
-    if (hit > score) { score = hit; best = cat; }
-  }
-  return best;
-}
-
-function matchTags(text, dict) {
-  const t = (text || "").toLowerCase();
-  const hits = [];
-  for (const item of dict) {
-    if (t.includes(item.toLowerCase())) hits.push(item);
-  }
-  return hits;
-}
-
-function normalizePick(text) {
-  return String(text || "").replace(/[［\[\]］]/g, "").trim();
-}
-
-function isNone(text) {
-  const t = (text || "").trim();
-  return /^(ない|特にない|無し|なし|no)$/i.test(t);
-}
-
-function matchLicensesInText(text = "") {
-  const toFW = (s) => String(s || "").replace(/\(/g,"（").replace(/\)/g,"）").replace(/~/g,"～");
-  const toHW = (s) => String(s || "").replace(/（/g,"(").replace(/）/g,")").replace(/～/g,"~");
-  const scrub = (s) =>
-    String(s || "")
-      .toLowerCase()
-      .replace(/[ \t\r\n\u3000、。・／\/＿\u2013\u2014\-~～!?！？。、，．・]/g,"");
-  const norm = (s) => scrub(toHW(toFW(s)));
-
-  const normText = norm(text);
-  if (!normText) return [];
-
-  const out = new Set();
-  for (const [alias, labels] of licenseMap.entries()) {
-    if (!alias || !Array.isArray(labels) || !labels.length) continue;
-    if (normText.includes(norm(alias))) {
-      for (const l of labels) if (l) out.add(l);
-    }
-  }
-  return Array.from(out);
-}
-
-function matchTagIdsInText(text = "") {
-  const raw = String(text || "").trim();
-  if (!raw) return [];
-
-  const toFW = (s) => String(s || "").replace(/\(/g, "（").replace(/\)/g, "）").replace(/~/g, "～");
-  const toHW = (s) => String(s || "").replace(/（/g, "(").replace(/）/g, ")").replace(/～/g, "~");
-  const scrub = (s) =>
-    String(s || "").toLowerCase()
-      .replace(/[ \t\r\n\u3000、。・／\/＿\-–—~～!?！？。、，．・]/g, "");
-  const norm = (s) => scrub(toHW(toFW(s)));
-
-  const normText = norm(raw);
-  const out = new Set();
-  const direct =
-      tagIdByName.get(raw)
-   || tagIdByName.get(toFW(raw))
-   || tagIdByName.get(toHW(raw));
-  if (direct != null) out.add(direct);
-
-  for (const [alias, label] of Object.entries(PLACE_ALIASES || {})) {
-    if (!alias || !label) continue;
-    if (normText.includes(norm(alias))) {
-      const id =
-          tagIdByName.get(label)
-       || tagIdByName.get(toFW(label))
-       || tagIdByName.get(toHW(label));
-      if (id != null) out.add(id);
-    }
-  }
-
-  const normalize = (s) => (s ? norm(s) : "");
-  for (const t of (Array.isArray(tagList) ? tagList : [])) {
-    const name = String(t?.name ?? "");
-    const id   = t?.id;
-    if (!name || id == null) continue;
-    const nTag = normalize(name);
-    if (!nTag) continue;
-    if (normText.includes(nTag) || nTag.includes(normText)) out.add(id);
-  }
-
-  return Array.from(out);
-}
-
-function quickKeywordsToLabels(text = "", mode = "ng") {
-  const t = String(text || "").toLowerCase();
-
-  const out = new Set();
-
-  if (/(ﾎﾞｰﾅｽ|ボーナス|bonus)/.test(t)) out.add("賞与");
-  if (/(有給|有休)/.test(t)) out.add("有給消化率ほぼ100%");
-  if (/残業|定時|ｻﾋﾞ残|サビ残/.test(t)) {
-    out.add("残業0");
-    if (mode === "have") out.add("残業月20時間以内");
-  }
-
-  return Array.from(out);
-}
-
-function mapFreeLabelsToTags(freeLabels = []) {
-  const results = [];
-  const seenIds = new Set();
-
-  const toFW = (s) => String(s || "").replace(/\(/g, "（").replace(/\)/g, "）").replace(/~/g, "～");
-  const toHW = (s) => String(s || "").replace(/（/g, "(").replace(/）/g, ")").replace(/～/g, "~");
-  const scrub = (s) =>
-    String(s || "").toLowerCase()
-      .replace(/[ \t\r\n\u3000、。・／\/＿\-–—~～!?！？。、，．・]/g, "");
-  const norm = (s) => scrub(toHW(toFW(s)));
-
-  for (const raw of (freeLabels || [])) {
-    const q = String(raw || "").trim();
-    if (!q) continue;
-    let id =
-          tagIdByName.get(q)
-       || tagIdByName.get(toFW(q))
-       || tagIdByName.get(toHW(q));
-
-    if (id == null) {
-      const nq = norm(q);
-      for (const t of (Array.isArray(tagList) ? tagList : [])) {
-        const name = String(t?.name ?? "");
-        const tid  = t?.id;
-        if (!name || tid == null) continue;
-        const nt = norm(name);
-        if (!nt) continue;
-        if (nq.includes(nt) || nt.includes(nq)) { id = tid; break; }
-      }
-    }
-
-    if (id != null && !seenIds.has(id)) {
-      seenIds.add(id);
-      results.push({ id, label: tagNameById.get(id) || String(q) });
-    }
-  }
-
-  return results; // [{id, label}] 正式IDと正式ラベル（tags.json準拠）
-}
-
-function getIdsForOfficialLicense(label = "") {
-  if (!label) return [];
-
-  const toFW = (s) => String(s || "").replace(/\(/g, "（").replace(/\)/g, "）").replace(/~/g, "～");
-  const toHW = (s) => String(s || "").replace(/（/g, "(").replace(/）/g, ")").replace(/～/g, "~");
-  const scrub = (s) => String(s || "").trim().toLowerCase()
-    .replace(/[ \t\r\n\u3000、。・／\/＿\u2013\u2014\-~～!?！？。、，．・]/g, "");
-  const normalize = (s) => scrub(toHW(toFW(s)));
-  const exactByLabel =
-      licenseTagIdByName.get(label)
-   || licenseTagIdByName.get(toFW(label))
-   || licenseTagIdByName.get(toHW(label));
-  if (exactByLabel != null) return [exactByLabel];
-
-  const needleSet = new Set([label, toFW(label), toHW(label)]);
-  for (const [alias, labels] of licenseMap.entries()) {
-    if (Array.isArray(labels) && labels.includes(label)) {
-      needleSet.add(alias);
-      needleSet.add(toFW(alias));
-      needleSet.add(toHW(alias));
-    }
-  }
-
-  const exactCandidates = [];
-  for (const n of needleSet) {
-    const id = licenseTagIdByName.get(n);
-    if (id != null) {
-      const name = licenseTagNameById.get(id) || "";
-      exactCandidates.push({ id, name });
-    }
-  }
-  if (exactCandidates.length) {
-    return [exactCandidates[0].id];
-  }
-
+function ensureArray(value) {
+  if (Array.isArray(value)) return value;
+  if (value && typeof value === "object" && Array.isArray(value.items)) return value.items;
+  if (value && typeof value === "object" && Array.isArray(value.qualifications)) return value.qualifications;
   return [];
-} 
+}
+
+const QUALIFICATIONS = ensureArray(loadJson("qualifications.json"));
+const LICENSE_SOURCES = loadJson("licenses.json") || {};
+
+const QUAL_NAME_BY_ID = new Map();
+const QUAL_ID_BY_NORMAL = new Map();
+
+function normKey(value) {
+  return String(value || "")
+    .trim()
+    .normalize("NFKC")
+    .toLowerCase()
+    .replace(/[\s\u3000]/g, "");
+}
+
+function normalizePick(value) {
+  return String(value || "")
+    .trim()
+    .replace(/\(/g, "（")
+    .replace(/\)/g, "）")
+    .replace(/\s+/g, " ");
+}
+
+for (const item of QUALIFICATIONS) {
+  const id = Number(item?.id);
+  const name = typeof item?.name === "string" ? item.name.trim() : "";
+  if (!Number.isInteger(id) || !name) continue;
+  QUAL_NAME_BY_ID.set(id, name);
+  QUAL_ID_BY_NORMAL.set(normKey(name), id);
+}
+
+const LICENSE_LABEL_TO_QUAL_ID = new Map();
+const LICENSE_ALIAS_MAP = new Map();
+
+function addAlias(alias, label) {
+  const normalized = normKey(alias);
+  if (!normalized) return;
+  if (!LICENSE_ALIAS_MAP.has(normalized)) {
+    LICENSE_ALIAS_MAP.set(normalized, []);
+  }
+  const list = LICENSE_ALIAS_MAP.get(normalized);
+  if (!list.includes(label)) {
+    list.push(label);
+  }
+}
+
+function resolveQualificationIdByName(name) {
+  if (!name) return null;
+  return QUAL_ID_BY_NORMAL.get(normKey(name)) || null;
+}
+
+for (const group of Object.values(LICENSE_SOURCES || {})) {
+  if (!Array.isArray(group)) continue;
+  for (const entry of group) {
+    if (!entry) continue;
+    const label = typeof entry === "string" ? entry : String(entry.label || "").trim();
+    if (!label) continue;
+    const aliases = Array.isArray(entry?.aliases) ? entry.aliases : [];
+    const qualId = resolveQualificationIdByName(label);
+    if (qualId) {
+      LICENSE_LABEL_TO_QUAL_ID.set(label, qualId);
+    }
+    addAlias(label, label);
+    for (const alias of aliases) {
+      addAlias(alias, label);
+    }
+  }
+}
+
+function findLicenseLabelsByAlias(text) {
+  const norm = normKey(text);
+  if (!norm) return [];
+  const labels = LICENSE_ALIAS_MAP.get(norm) || [];
+  return labels.slice();
+}
+
+function mapLicenseLabelToQualificationId(label) {
+  if (!label) return null;
+  if (LICENSE_LABEL_TO_QUAL_ID.has(label)) {
+    return LICENSE_LABEL_TO_QUAL_ID.get(label);
+  }
+  return resolveQualificationIdByName(label);
+}
+
+function isKatakana(text) {
+  return /^[\u30A0-\u30FFー]+$/.test(String(text || "").trim());
+}
+
+const sessions = new Map();
+
+function createSession(sessionId) {
+  const base = {
+    id: sessionId || `s_${Math.random().toString(36).slice(2)}`,
+    step: 1,
+    history: [],
+    status: { qual_ids: [], licenses: [] },
+    drill: { phase: null, awaitingChoice: false, options: [] },
+    stage: { turnIndex: 0 },
+    meta: { deepening_attempt_total: 0 },
+  };
+  return normalizeSession(base);
+}
+
+function normalizeSession(session) {
+  if (!session || typeof session !== "object") return createSession();
+  if (typeof session.id !== "string" || !session.id) {
+    session.id = `s_${Math.random().toString(36).slice(2)}`;
+  }
+  if (!Array.isArray(session.history)) session.history = [];
+  if (!session.status || typeof session.status !== "object") session.status = {};
+  if (!Array.isArray(session.status.qual_ids)) session.status.qual_ids = [];
+  if (!Array.isArray(session.status.licenses)) session.status.licenses = [];
+  if (!session.drill || typeof session.drill !== "object") {
+    session.drill = { phase: null, awaitingChoice: false, options: [] };
+  }
+  if (!Array.isArray(session.drill.options)) session.drill.options = [];
+  if (typeof session.drill.awaitingChoice !== "boolean") session.drill.awaitingChoice = false;
+  if (!session.stage || typeof session.stage !== "object") {
+    session.stage = { turnIndex: 0 };
+  }
+  if (typeof session.stage.turnIndex !== "number") session.stage.turnIndex = 0;
+  if (!session.meta || typeof session.meta !== "object") {
+    session.meta = { deepening_attempt_total: 0 };
+  }
+  if (typeof session.meta.deepening_attempt_total !== "number") {
+    session.meta.deepening_attempt_total = 0;
+  }
+  if (!session.step || typeof session.step !== "number") session.step = 1;
+  return session;
+}
+
+function resetDrill(session) {
+  if (!session) return;
+  session.drill = { phase: null, awaitingChoice: false, options: [] };
+}
+
+function formatOptions(options) {
+  return options.map(opt => `［${opt}］`).join("／");
+}
+
+function _extractJsonBlock(rawText) {
+  if (rawText == null) return null;
+  const text = String(rawText).trim();
+  if (!text) return null;
+  const start = text.indexOf("{");
+  const end = text.lastIndexOf("}");
+  if (start === -1 || end === -1 || end <= start) return null;
+  const snippet = text.slice(start, end + 1);
+  try {
+    return JSON.parse(snippet);
+  } catch (err) {
+    return null;
+  }
+}
+
+async function callLLM(stepKey, payload, session, opts = {}) {
+  if (typeof global.__TEST_LLM__ === "function") {
+    try {
+      const raw = await global.__TEST_LLM__({ stepKey, payload, session, opts });
+      const text = typeof raw === "string" ? raw : JSON.stringify(raw);
+      const parsed = _extractJsonBlock(text);
+      return { ok: !!parsed, _raw: text, parsed, error: parsed ? null : "schema_mismatch" };
+    } catch (err) {
+      return { ok: false, error: err?.message || "mock_failure" };
+    }
+  }
+
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) {
+    return { ok: false, error: "missing_api_key" };
+  }
+
+  try {
+    const client = new OpenAI({ apiKey });
+    const messages = [
+      { role: "system", content: COMMON_PROMPT },
+      { role: "system", content: LLM_BRAKE_PROMPT },
+      { role: "system", content: STEP_PROMPTS[stepKey] || "" },
+      { role: "user", content: JSON.stringify(payload) },
+    ];
+    const response = await client.responses.create({
+      model: opts.model || "gpt-4o-mini",
+      input: messages,
+    });
+    const raw = response?.output?.[0]?.content?.[0]?.text || "";
+    const parsed = _extractJsonBlock(raw);
+    return { ok: !!parsed, _raw: raw, parsed, error: parsed ? null : "schema_mismatch" };
+  } catch (err) {
+    return { ok: false, error: err?.message || "llm_failure" };
+  }
+}
+
+function getSession(sessionId) {
+  if (!sessionId) return createSession();
+  const existing = sessions.get(sessionId);
+  if (existing) return normalizeSession(existing);
+  const created = createSession(sessionId);
+  sessions.set(created.id, created);
+  return created;
+}
+
+function saveSession(session) {
+  if (session?.id) {
+    sessions.set(session.id, session);
+  }
+}
+
+function buildSchemaError(step, session, message, errorCode = "schema_mismatch") {
+  return {
+    response: message,
+    status: session.status,
+    meta: { step, error: errorCode },
+    drill: session.drill,
+    _error: errorCode,
+  };
+}
+
+async function handleStep1(session, userText) {
+  session.stage.turnIndex += 1;
+  const trimmed = String(userText || "").trim();
+
+  if (session.drill.awaitingChoice) {
+    const normalized = normalizePick(trimmed);
+    const selected = session.drill.options.find(opt => normalizePick(opt) === normalized);
+    if (!selected) {
+      return {
+        response: `候補から選んでね。『${formatOptions(session.drill.options)}』`,
+        status: session.status,
+        meta: { step: 1 },
+        drill: session.drill,
+      };
+    }
+    const qualId = mapLicenseLabelToQualificationId(selected);
+    if (!qualId) {
+      resetDrill(session);
+      return {
+        response: "IDを付与できなかったよ。別の言い方で教えてみて。",
+        status: session.status,
+        meta: { step: 1 },
+        drill: session.drill,
+      };
+    }
+    const qualName = QUAL_NAME_BY_ID.get(qualId) || selected;
+    session.status.qual_ids = [qualId];
+    session.status.licenses = [qualName];
+    resetDrill(session);
+    session.step = 2;
+    session.stage.turnIndex = 0;
+    return {
+      response: `資格は「${qualName}」で進めるね！次はCanを整理しよう✨`,
+      status: session.status,
+      meta: { step: 2 },
+      drill: session.drill,
+    };
+  }
+
+  if (!trimmed) {
+    return {
+      response: "今の資格や研修名を一言で教えてね！",
+      status: session.status,
+      meta: { step: 1 },
+      drill: session.drill,
+    };
+  }
+
+  const directId = resolveQualificationIdByName(trimmed);
+  if (directId) {
+    const qualName = QUAL_NAME_BY_ID.get(directId) || trimmed;
+    session.status.qual_ids = [directId];
+    session.status.licenses = [qualName];
+    session.step = 2;
+    session.stage.turnIndex = 0;
+    resetDrill(session);
+    return {
+      response: `了解！「${qualName}」として記録したよ。次はCanを一緒に考えよう✨`,
+      status: session.status,
+      meta: { step: 2 },
+      drill: session.drill,
+    };
+  }
+
+  const labels = findLicenseLabelsByAlias(trimmed);
+  if (labels.length > 0) {
+    const uniqueLabels = Array.from(new Set(labels));
+    const resolved = uniqueLabels
+      .map(label => ({ label, id: mapLicenseLabelToQualificationId(label) }))
+      .filter(item => item.id);
+
+    if (uniqueLabels.length === 1 && resolved.length === 1) {
+      const { label, id } = resolved[0];
+      session.status.qual_ids = [id];
+      session.status.licenses = [QUAL_NAME_BY_ID.get(id) || label];
+      session.step = 2;
+      session.stage.turnIndex = 0;
+      resetDrill(session);
+      return {
+        response: `その呼び方なら「${label}」が近いかな！このIDで進めるね✨`,
+        status: session.status,
+        meta: { step: 2 },
+        drill: session.drill,
+      };
+    }
+
+    if (resolved.length === 1) {
+      const { label, id } = resolved[0];
+      session.status.qual_ids = [id];
+      session.status.licenses = [QUAL_NAME_BY_ID.get(id) || label];
+      session.step = 2;
+      session.stage.turnIndex = 0;
+      resetDrill(session);
+      return {
+        response: `その表現なら「${label}」として登録できるよ！このIDで進めよう✨`,
+        status: session.status,
+        meta: { step: 2 },
+        drill: session.drill,
+      };
+    }
+
+    if (resolved.length > 1 && isKatakana(trimmed)) {
+      const sorted = [...resolved].sort((a, b) => a.id - b.id);
+      const { label, id } = sorted[0];
+      session.status.qual_ids = [id];
+      session.status.licenses = [QUAL_NAME_BY_ID.get(id) || label];
+      session.step = 2;
+      session.stage.turnIndex = 0;
+      resetDrill(session);
+      return {
+        response: `その呼び方ならまずは「${label}」を基準に進めてみるね！`,
+        status: session.status,
+        meta: { step: 2 },
+        drill: session.drill,
+      };
+    }
+
+    session.drill.phase = "license";
+    session.drill.awaitingChoice = true;
+    session.drill.options = uniqueLabels;
+    return {
+      response: `候補がいくつかあるよ。どれが一番近い？『${formatOptions(uniqueLabels)}』`,
+      status: session.status,
+      meta: { step: 1 },
+      drill: session.drill,
+    };
+  }
+
+  return {
+    response: "ごめん、まだ登録できる資格が見つからなかったよ。正式名称で教えてみて！",
+    status: session.status,
+    meta: { step: 1 },
+    drill: session.drill,
+  };
+}
+
+function buildStepPayload(session, userText, recentCount) {
+  return {
+    locale: "ja",
+    stage: { turn_index: session.stage.turnIndex },
+    user_text: userText,
+    recent_texts: session.history.slice(-recentCount).map(item => item.text),
+    status: session.status,
+  };
+}
+
+function stringifyResponseParts(parts) {
+  return parts.filter(Boolean).join(" ").trim();
+}
+
+async function handleStep2(session, userText) {
+  session.stage.turnIndex += 1;
+  const payload = buildStepPayload(session, userText, 3);
+  const llm = await callLLM(2, payload, session, { model: "gpt-4o" });
+  if (!llm.ok) {
+    return buildSchemaError(2, session, "Canの整理でエラーが起きたみたい。もう一度話してみて！", llm.error);
+  }
+  const { empathy, paraphrase, ask_next, meta } = llm.parsed || {};
+  if (typeof empathy !== "string" || typeof paraphrase !== "string" || (ask_next != null && typeof ask_next !== "string")) {
+    return buildSchemaError(2, session, "Canの整理でエラーが起きたみたい。もう一度話してみて！");
+  }
+  session.status.can_text = paraphrase;
+  if (!Array.isArray(session.status.can_texts)) {
+    session.status.can_texts = [];
+  }
+  if (!session.status.can_texts.includes(paraphrase)) {
+    session.status.can_texts.push(paraphrase);
+  }
+  const message = stringifyResponseParts([empathy, ask_next]) || "Canについて教えてくれてありがとう！";
+  const nextStep = Number(meta?.step) || 2;
+  if (nextStep !== session.step) {
+    session.step = nextStep;
+    session.stage.turnIndex = 0;
+  }
+  return {
+    response: message,
+    status: session.status,
+    meta: { step: session.step },
+    drill: session.drill,
+  };
+}
+
+async function handleStep3(session, userText) {
+  session.stage.turnIndex += 1;
+  const payload = buildStepPayload(session, userText, 5);
+  const llm = await callLLM(3, payload, session, { model: "gpt-4o" });
+  if (!llm.ok) {
+    return buildSchemaError(3, session, "Willの生成でエラーが発生したよ。少し時間を置いてみてね。", llm.error);
+  }
+  const parsed = llm.parsed || {};
+  if (parsed?.status?.will_text && typeof parsed.status.will_text === "string") {
+    session.status.will_text = parsed.status.will_text;
+    if (!Array.isArray(session.status.will_texts)) {
+      session.status.will_texts = [];
+    }
+    session.status.will_texts.push(parsed.status.will_text);
+    const nextStep = Number(parsed?.meta?.step) || 4;
+    session.step = nextStep;
+    session.stage.turnIndex = 0;
+    return {
+      response: parsed.status.will_text,
+      status: session.status,
+      meta: { step: session.step },
+      drill: session.drill,
+    };
+  }
+  if (typeof parsed?.response === "string") {
+    if (parsed?.control?.phase === "intro") {
+      session.stage.turnIndex = 0;
+    }
+    return {
+      response: parsed.response,
+      status: session.status,
+      meta: { step: 3, phase: parsed?.control?.phase },
+      drill: session.drill,
+    };
+  }
+  return {
+    response: "Willを整理する準備をしてるよ。もう少し話してみて！",
+    status: session.status,
+    meta: { step: 3 },
+    drill: session.drill,
+  };
+}
+
+function applyMustStatus(session, status, meta) {
+  session.status.must_have_ids = Array.isArray(status?.must_ids) ? status.must_ids : [];
+  session.status.ng_ids = Array.isArray(status?.ng_ids) ? status.ng_ids : [];
+  session.status.pending_ids = Array.isArray(status?.pending_ids) ? status.pending_ids : [];
+  session.status.direction_map = status?.direction_map && typeof status.direction_map === "object" ? status.direction_map : {};
+  session.status.status_bar = typeof status?.status_bar === "string" ? status.status_bar : "";
+  session.status.must_text = typeof status?.must_text === "string" ? status.must_text : "";
+  if (meta?.deepening_attempt_total != null) {
+    const total = Number(meta.deepening_attempt_total);
+    if (!Number.isNaN(total)) {
+      session.meta.deepening_attempt_total = total;
+    }
+  }
+}
+
+async function handleStep4(session, userText) {
+  session.stage.turnIndex += 1;
+  const payload = {
+    locale: "ja",
+    stage: { turn_index: session.stage.turnIndex },
+    user_text: userText,
+    recent_texts: session.history.slice(-6).map(item => item.text),
+    status: session.status,
+    deepening_attempt_total: session.meta.deepening_attempt_total,
+  };
+  const llm = await callLLM(4, payload, session, { model: "gpt-4o" });
+  if (!llm.ok) {
+    return buildSchemaError(4, session, "Mustの整理に失敗しちゃった。もう一度教えてもらえる？", llm.error);
+  }
+  const parsed = llm.parsed || {};
+  if (parsed?.status && typeof parsed.status === "object") {
+    applyMustStatus(session, parsed.status, parsed.meta || {});
+    const nextStep = Number(parsed?.meta?.step) || 5;
+    session.step = nextStep;
+    session.stage.turnIndex = 0;
+    return {
+      response: session.status.must_text || "Mustのまとめを更新したよ。",
+      status: session.status,
+      meta: { step: session.step, deepening_attempt_total: session.meta.deepening_attempt_total },
+      drill: session.drill,
+    };
+  }
+  if (parsed?.meta?.deepening_attempt != null) {
+    const increment = Number(parsed.meta.deepening_attempt);
+    if (!Number.isNaN(increment) && increment > 0) {
+      session.meta.deepening_attempt_total += increment;
+      if (session.meta.deepening_attempt_total > 3) {
+        session.meta.deepening_attempt_total = 3;
+      }
+    }
+  }
+  if (parsed?.meta?.deepening_attempt_total != null) {
+    const total = Number(parsed.meta.deepening_attempt_total);
+    if (!Number.isNaN(total)) {
+      session.meta.deepening_attempt_total = Math.min(total, 3);
+    }
+  }
+  if (parsed?.control?.phase) {
+    return {
+      response: parsed.response || "もう少し詳しく聞かせてほしいな。",
+      status: session.status,
+      meta: {
+        step: 4,
+        phase: parsed.control.phase,
+        deepening_attempt_total: session.meta.deepening_attempt_total,
+      },
+      drill: session.drill,
+    };
+  }
+  return {
+    response: "Mustの整理を続けているよ。気になる条件を教えてね。",
+    status: session.status,
+    meta: { step: 4, deepening_attempt_total: session.meta.deepening_attempt_total },
+    drill: session.drill,
+  };
+}
+
+async function handleStep5(session, userText) {
+  session.stage.turnIndex += 1;
+  const payload = buildStepPayload(session, userText, 6);
+  const llm = await callLLM(5, payload, session, { model: "gpt-4o" });
+  if (!llm.ok) {
+    return buildSchemaError(5, session, "Selfの生成で少しつまずいたよ。もう一度話してみてね。", llm.error);
+  }
+  const parsed = llm.parsed || {};
+  if (parsed?.status?.self_text && typeof parsed.status.self_text === "string") {
+    session.status.self_text = parsed.status.self_text;
+    const nextStep = Number(parsed?.meta?.step) || 6;
+    session.step = nextStep;
+    session.stage.turnIndex = 0;
+    return {
+      response: session.status.self_text,
+      status: session.status,
+      meta: { step: session.step },
+      drill: session.drill,
+    };
+  }
+  if (typeof parsed?.response === "string") {
+    return {
+      response: parsed.response,
+      status: session.status,
+      meta: { step: 5, phase: parsed?.control?.phase },
+      drill: session.drill,
+    };
+  }
+  return {
+    response: "あなた自身について、もう少し聞かせてもらえる？",
+    status: session.status,
+    meta: { step: 5 },
+    drill: session.drill,
+  };
+}
+
+async function handleStep6(session, userText) {
+  session.stage.turnIndex += 1;
+  const payload = buildStepPayload(session, userText, 8);
+  const llm = await callLLM(6, payload, session, { model: "gpt-4o" });
+  if (!llm.ok) {
+    return buildSchemaError(6, session, "Doing/Being の生成に失敗しちゃった。少し待って再送してみてね。", llm.error);
+  }
+  const parsed = llm.parsed || {};
+  const doing = parsed?.status?.doing_text;
+  const being = parsed?.status?.being_text;
+  if ((typeof doing === "string" && doing) || (typeof being === "string" && being)) {
+    if (typeof doing === "string" && doing) {
+      session.status.doing_text = doing;
+    }
+    if (typeof being === "string" && being) {
+      session.status.being_text = being;
+    }
+    const nextStep = Number(parsed?.meta?.step) || 7;
+    session.step = nextStep;
+    session.stage.turnIndex = 0;
+    const message = [session.status.doing_text, session.status.being_text].filter(Boolean).join("\n\n");
+    return {
+      response: message || "Doing/Being を更新したよ。",
+      status: session.status,
+      meta: { step: session.step },
+      drill: session.drill,
+    };
+  }
+  if (typeof parsed?.response === "string") {
+    return {
+      response: parsed.response,
+      status: session.status,
+      meta: { step: 6 },
+      drill: session.drill,
+    };
+  }
+  return {
+    response: "これまでの話をまとめるね。少し待ってて。",
+    status: session.status,
+    meta: { step: 6 },
+    drill: session.drill,
+  };
+}
+
+function initialGreeting(session) {
+  return {
+    response: "やっほー！まずは今持っている資格や研修名を教えてね✨",
+    status: session.status,
+    meta: { step: session.step },
+    drill: session.drill,
+  };
+}
+
+async function handler(req, res) {
+  if (req.method !== "POST") {
+    res.status(405).json({ error: "method_not_allowed" });
+    return;
+  }
+
+  const { message, sessionId } = req.body || {};
+  const session = getSession(sessionId);
+  saveSession(session);
+
+  if (!message) {
+    const greeting = initialGreeting(session);
+    res.status(200).json(greeting);
+    return;
+  }
+
+  session.history.push({ role: "user", text: message, step: session.step });
+
+  let result;
+  switch (session.step) {
+    case 1:
+      result = await handleStep1(session, message);
+      break;
+    case 2:
+      result = await handleStep2(session, message);
+      break;
+    case 3:
+      result = await handleStep3(session, message);
+      break;
+    case 4:
+      result = await handleStep4(session, message);
+      break;
+    case 5:
+      result = await handleStep5(session, message);
+      break;
+    default:
+      result = await handleStep6(session, message);
+      break;
+  }
+
+  if (!result || typeof result !== "object") {
+    res.status(500).json({
+      response: "サーバ内部で処理に失敗しちゃった。時間をおいて試してみてね。",
+      status: session.status,
+      meta: { step: session.step, error: "unknown" },
+      drill: session.drill,
+      _error: "unknown",
+    });
+    return;
+  }
+
+  if (result.status) {
+    session.status = result.status;
+  }
+  if (result.meta?.step != null) {
+    session.step = result.meta.step;
+  }
+  if (result.drill) {
+    session.drill = result.drill;
+  }
+  saveSession(session);
+
+  res.status(200).json(result);
+}
+
+module.exports = handler;
