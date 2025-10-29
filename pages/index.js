@@ -24,9 +24,8 @@ export default function Home() {
   const [userEcho, setUserEcho] = useState(""); 
   const [choices, setChoices] = useState([]);
 
-function toBadges(resp, currStep) {
+function toBadges(resp, _currStep) {
   const st = resp?.status ?? {};
-  const step = Number(currStep ?? resp?.meta?.step ?? 0);
 
   const joinIds = (arr) =>
     Array.isArray(arr) && arr.length ? `ID:${arr.join(",")}` : "";
@@ -100,7 +99,7 @@ function toBadges(resp, currStep) {
   }
 
   // Step4 の特定質問タイミングでは固定ボタンを出す
-  function getInlineChoices(step, responseText, meta) {
+  function getInlineChoices(step, responseText, _meta) {
     if (step === 4) {
       const t = String(responseText || "");
       // サーバの定型質問フレーズを検出（文言は現行そのまま）

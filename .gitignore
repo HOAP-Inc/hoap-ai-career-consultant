@@ -1,0 +1,6 @@
+node_modules/
+logs/
+.bak
+pages/api/chat.js.bak
+.next/
+.DS_Store
