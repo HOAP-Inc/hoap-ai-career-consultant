@@ -655,11 +655,12 @@ async function handler(req, res) {
     return;
   }
 
-  const { message, sessionId } = req.body || {};
+  const body = (await req.json?.().catch(() => null)) || req.body || {};
+  const { message, sessionId } = body;
   const session = getSession(sessionId);
   saveSession(session);
 
-  if (!message) {
+  if (!message || message.trim() === "") {
     const greeting = initialGreeting(session);
     res.status(200).json(greeting);
     return;
