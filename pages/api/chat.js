@@ -506,26 +506,75 @@ async function handleStep2(session, userText) {
   session.stage.turnIndex += 1;
   const payload = buildStepPayload(session, userText, 3);
   const llm = await callLLM(2, payload, session, { model: "gpt-4o" });
+
   if (!llm.ok) {
-    return buildSchemaError(2, session, "あなたの「やってきたこと、これからも活かしていきたいこと」の整理でエラーが起きたみたい。もう一度話してみて！", llm.error);
+    return buildSchemaError(2, session, "あなたのやってきたこと、これからも活かしていきたいことの処理でエラーが起きたみたい。もう一度話してみて！", llm.error);
   }
+
   const { empathy, paraphrase, ask_next, meta } = llm.parsed || {};
+
   if (typeof empathy !== "string" || typeof paraphrase !== "string" || (ask_next != null && typeof ask_next !== "string")) {
-    return buildSchemaError(2, session, "あなたの「やってきたこと、これからも活かしていきたいこと」の整理でエラーが起きたみたい。もう一度話してみて！");
+    return buildSchemaError(2, session, "あなたのやってきたこと、これからも活かしていきたいことの処理でエラーが起きたみたい。もう一度話してみて！");
   }
-  session.status.can_text = paraphrase;
-  if (!Array.isArray(session.status.can_texts)) {
-    session.status.can_texts = [];
+
+  const paraphraseNorm = String(paraphrase || "").trim();
+
+  // セッション側の安定判定用フィールド初期化
+  if (!session.meta) session.meta = {};
+  if (typeof session.meta.last_can_paraphrase !== "string") session.meta.last_can_paraphrase = "";
+  if (typeof session.meta.can_repeat_count !== "number") session.meta.can_repeat_count = 0;
+  if (typeof session.meta.deepening_attempt_total !== "number") session.meta.deepening_attempt_total = Number(session.meta.deepening_attempt_total || 0);
+
+  // paraphrase をセッションに保存（履歴）
+  if (!Array.isArray(session.status.can_texts)) session.status.can_texts = [];
+  if (paraphraseNorm && !session.status.can_texts.includes(paraphraseNorm)) {
+    session.status.can_texts.push(paraphraseNorm);
   }
-  if (!session.status.can_texts.includes(paraphrase)) {
-    session.status.can_texts.push(paraphrase);
+
+  // paraphrase の安定判定（同じ paraphrase が連続したらカウント）
+  if (paraphraseNorm && session.meta.last_can_paraphrase === paraphraseNorm) {
+    session.meta.can_repeat_count = (Number(session.meta.can_repeat_count) || 0) + 1;
+  } else {
+    session.meta.can_repeat_count = 1;
+    session.meta.last_can_paraphrase = paraphraseNorm;
   }
-  const message = stringifyResponseParts([empathy, ask_next]) || "あなたの「やってきたこと、これからも活かしていきたいこと」について教えてくれてありがとう！";
-  const nextStep = Number(meta?.step) || 2;
+
+  // LLM が明示的に nextStep を返している場合はそれを優先
+  const llmNextStep = Number(meta?.step) || session.step;
+
+  // 強制遷移判定（LLMが遷移指示をしていない場合に限定）
+  // 主判定：paraphrase が安定（同一 paraphrase が 2 回以上）
+  // 補助判定：deepening_attempt_total が一定以上（例: 3）
+  let nextStep = llmNextStep;
+  if (llmNextStep === session.step) {
+    if (session.meta.can_repeat_count >= 2) {
+      nextStep = 3; 
+    } else if (Number(session.meta.deepening_attempt_total || 0) >= 3) {
+      nextStep = 3; 
+    }
+  }
+
   if (nextStep !== session.step) {
+    session.status.can_text = paraphraseNorm;
     session.step = nextStep;
     session.stage.turnIndex = 0;
+
+    switch (nextStep) {
+      case 3:
+        return await handleStep3(session, "");
+      case 4:
+        return await handleStep4(session, "");
+      default:
+        return {
+          response: stringifyResponseParts([empathy, ask_next]) || paraphraseNorm || "受け取ったよ。",
+          status: session.status,
+          meta: { step: session.step },
+          drill: session.drill,
+        };
+    }
   }
+
+  const message = stringifyResponseParts([empathy, ask_next]) || paraphraseNorm || "ありがとう。もう少し教えて。";
   return {
     response: message,
     status: session.status,
@@ -533,6 +582,7 @@ async function handleStep2(session, userText) {
     drill: session.drill,
   };
 }
+
 
 async function handleStep3(session, userText) {
   session.stage.turnIndex += 1;
@@ -635,7 +685,6 @@ if (parsed?.status && typeof parsed.status === "object") {
       };
   }
 }
-// --- 置換終了 ---
 
   if (parsed?.meta?.deepening_attempt != null) {
     const increment = Number(parsed.meta.deepening_attempt);
