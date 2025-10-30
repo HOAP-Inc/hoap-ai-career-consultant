@@ -447,7 +447,7 @@ async function handleStep1(session, userText) {
 if (uniqueLabels.length === 1 && resolved.length === 0) {
   const label = uniqueLabels[0];
   if (!Array.isArray(session.status.licenses)) session.status.licenses = [];
-  if (!session.status.licenses.includes(label)) session.statu,.licenses.push(label);
+  if (!session.status.licenses.includes(label)) session.statu.licenses.push(label);
   session.stage.turnIndex = 0;
   resetDrill(session);
   return {
