@@ -178,10 +178,6 @@ function mapLicenseLabelToQualificationId(label) {
   return resolveQualificationIdByName(label);
 }
 
-function isKatakana(text) {
-  return /^[\u30A0-\u30FFー]+$/.test(String(text || "").trim());
-}
-
 const sessions = new Map();
 
 function createSession(sessionId) {
