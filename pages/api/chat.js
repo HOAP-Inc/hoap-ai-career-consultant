@@ -311,18 +311,13 @@ async function handleStep1(session, userText) {
   session.stage.turnIndex += 1;
   const trimmed = String(userText || "").trim();
 
-  // ユーザーが「ない」と言ったら STEP2 へ移行（表示は従来のSTEP2開始文に合わせる）
   if (isNoMessage(trimmed)) {
-    session.step = 2;
-    session.stage.turnIndex = 0;
-    resetDrill(session);
-    return {
-      response: "了解！では次はあなたのやってきたこと、これからも活かしていきたいことを整理しよう✨",
-      status: session.status,
-      meta: { step: 2 },
-      drill: session.drill,
-    };
-  }
+  session.step = 2;
+  session.stage.turnIndex = 0;
+  resetDrill(session);
+  // LLM による empathy + ask_next を即返すために handleStep2 を呼ぶ
+  return await handleStep2(session, "");
+}
 
     if (session.drill.awaitingChoice) {
     const normalized = normalizePick(trimmed);
@@ -512,11 +507,11 @@ async function handleStep2(session, userText) {
   const payload = buildStepPayload(session, userText, 3);
   const llm = await callLLM(2, payload, session, { model: "gpt-4o" });
   if (!llm.ok) {
-    return buildSchemaError(2, session, "あなたのやってきたこと、これからも活かしていきたいことの整理でエラーが起きたみたい。もう一度話してみて！", llm.error);
+    return buildSchemaError(2, session, "あなたの「やってきたこと、これからも活かしていきたいこと」の整理でエラーが起きたみたい。もう一度話してみて！", llm.error);
   }
   const { empathy, paraphrase, ask_next, meta } = llm.parsed || {};
   if (typeof empathy !== "string" || typeof paraphrase !== "string" || (ask_next != null && typeof ask_next !== "string")) {
-    return buildSchemaError(2, session, "あなたやってきたこと、これからも活かしていきたいことの整理でエラーが起きたみたい。もう一度話してみて！");
+    return buildSchemaError(2, session, "あなたの「やってきたこと、これからも活かしていきたいこと」の整理でエラーが起きたみたい。もう一度話してみて！");
   }
   session.status.can_text = paraphrase;
   if (!Array.isArray(session.status.can_texts)) {
@@ -525,7 +520,7 @@ async function handleStep2(session, userText) {
   if (!session.status.can_texts.includes(paraphrase)) {
     session.status.can_texts.push(paraphrase);
   }
-  const message = stringifyResponseParts([empathy, ask_next]) || "あなたのやってきたこと、これからも活かしていきたいことについて教えてくれてありがとう！";
+  const message = stringifyResponseParts([empathy, ask_next]) || "あなたの「やってきたこと、これからも活かしていきたいこと」について教えてくれてありがとう！";
   const nextStep = Number(meta?.step) || 2;
   if (nextStep !== session.step) {
     session.step = nextStep;
@@ -544,7 +539,7 @@ async function handleStep3(session, userText) {
   const payload = buildStepPayload(session, userText, 5);
   const llm = await callLLM(3, payload, session, { model: "gpt-4o" });
   if (!llm.ok) {
-    return buildSchemaError(3, session, "あなたのこれから挑戦したいことの生成でエラーが発生したよ。少し時間を置いてみてね。", llm.error);
+    return buildSchemaError(3, session, "あなたの「これから挑戦したいこと」の生成でエラーが発生したよ。少し時間を置いてみてね。", llm.error);
   }
   const parsed = llm.parsed || {};
   if (parsed?.status?.will_text && typeof parsed.status.will_text === "string") {
@@ -575,11 +570,11 @@ async function handleStep3(session, userText) {
     };
   }
   return {
-    response: "あなたのこれから挑戦したいことを整理する準備をしてるよ。もう少し話してみて！",
-    status: session.status,
-    meta: { step: 3 },
-    drill: session.drill,
-  };
+  response: "これから挑戦したいことについて、もう少し具体的に教えてほしい。短くで良いから、やってみたいことの概要を教えて。",
+  status: session.status,
+  meta: { step: 3 },
+  drill: session.drill,
+};
 }
 
 function applyMustStatus(session, status, meta) {
@@ -612,18 +607,36 @@ async function handleStep4(session, userText) {
     return buildSchemaError(4, session, "あなたの譲れない条件の整理に失敗しちゃった。もう一度教えてもらえる？", llm.error);
   }
   const parsed = llm.parsed || {};
-  if (parsed?.status && typeof parsed.status === "object") {
-    applyMustStatus(session, parsed.status, parsed.meta || {});
-    const nextStep = Number(parsed?.meta?.step) || 5;
-    session.step = nextStep;
-    session.stage.turnIndex = 0;
-    return {
-      response: session.status.must_text || "まとめを更新したよ。",
-      status: session.status,
-      meta: { step: session.step, deepening_attempt_total: session.meta.deepening_attempt_total },
-      drill: session.drill,
-    };
+  
+if (parsed?.status && typeof parsed.status === "object") {
+  // LLM から帰ってきた譲れない条件をセッションへ適用
+  applyMustStatus(session, parsed.status, parsed.meta || {});
+  // 次のステップは LLM の meta から決定（デフォルトは 5）
+  const nextStep = Number(parsed?.meta?.step) || 5;
+
+  // セッションを次STEPにセットして、ただちに次STEPのハンドラを呼ぶ
+  session.step = nextStep;
+  session.stage.turnIndex = 0;
+
+  switch (nextStep) {
+    case 5:
+      // STEP5（Self）を即実行し、その出力をそのまま返す
+      return await handleStep5(session, "");
+    case 6:
+      // STEP6（Doing/Being）を即実行
+      return await handleStep6(session, "");
+    default:
+      // 想定外の nextStep の場合は譲れない条件を保存した旨だけ返す（余計な確認はしない）
+      return {
+        response: session.status.must_text || "譲れない条件を受け取ったよ。",
+        status: session.status,
+        meta: { step: session.step, deepening_attempt_total: session.meta.deepening_attempt_total },
+        drill: session.drill,
+      };
   }
+}
+// --- 置換終了 ---
+
   if (parsed?.meta?.deepening_attempt != null) {
     const increment = Number(parsed.meta.deepening_attempt);
     if (!Number.isNaN(increment) && increment > 0) {
@@ -700,7 +713,7 @@ async function handleStep6(session, userText) {
   const payload = buildStepPayload(session, userText, 8);
   const llm = await callLLM(6, payload, session, { model: "gpt-4o" });
   if (!llm.ok) {
-    return buildSchemaError(6, session, "Doing/Being の生成に失敗しちゃった。少し待って再送してみてね。", llm.error);
+    return buildSchemaError(6, session, "作成に失敗しちゃった。少し待って再送してみてね。", llm.error);
   }
   const parsed = llm.parsed || {};
   const doing = parsed?.status?.doing_text;
@@ -741,7 +754,7 @@ async function handleStep6(session, userText) {
 
 function initialGreeting(session) {
   return {
-    response: "こんにちは！AIキャリアデザイナーのほーぷちゃんだよ✨\n今日はあなたのこれまでキャリアの説明書をあなたの言葉で作っていくね！\nそれじゃあ、まずは持っている資格を教えて欲しいな🌱\n複数ある場合は1つずつ教えてね。",
+    response: "こんにちは！AIキャリアデザイナーのほーぷちゃんだよ✨\n今日はあなたのこれまでキャリアの説明書をあなたの言葉で作っていくね！\nそれじゃあ、まずは持っている資格を教えて欲しいな🌱\n複数ある場合は1つずつ教えてね。\n資格がない場合は「資格なし」でOKだよ◎",
     status: session.status,
     meta: { step: session.step },
     drill: session.drill,
