@@ -25,15 +25,23 @@ const COMMON_PROMPT = safeRead(path.join(PROMPTS_DIR, "common_instructions.txt")
 const LLM_BRAKE_PROMPT = safeRead(path.join(PROMPTS_DIR, "llm_brake_system.txt"));
 
 function loadJson(fileName) {
-  const filePath = path.join(process.cwd(), fileName);
-  try {
-    const raw = fs.readFileSync(filePath, "utf8");
-    return JSON.parse(raw);
-  } catch (err) {
-    console.error("json_read_failed", fileName, err);
-    return null;
+  const primaryPath = path.join(process.cwd(), fileName);
+  const fallbackPath = path.join(__dirname, "..", "..", fileName);
+
+  const candidates = [primaryPath, fallbackPath];
+
+  for (const filePath of candidates) {
+    try {
+      const raw = fs.readFileSync(filePath, "utf8");
+      return JSON.parse(raw);
+    } catch (err) {
+      console.error("json_read_failed", fileName, filePath, err && err.message);
+    }
   }
+
+  return null;
 }
+
 
 function ensureArray(value) {
   if (Array.isArray(value)) return value;
