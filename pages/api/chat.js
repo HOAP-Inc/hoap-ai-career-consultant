@@ -650,84 +650,89 @@ function initialGreeting(session) {
 }
 
 async function handler(req, res) {
-if (req.method === "OPTIONS") {
-  res.setHeader("Allow", "POST, OPTIONS");
+  // 全レスポンスで共通の CORS ヘッダを出す（恒久対応）
+  res.setHeader("Access-Control-Allow-Origin", "*"); // 本番はワイルドカードではなく許可する origin を指定する
   res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type");
-  res.setHeader("Access-Control-Allow-Origin", "*"); // 開発時は *、本番は origin を限定する
-  res.status(204).end();
-  return;
-}
 
-// 既存の POST 判定
-if (req.method !== "POST") {
-  res.status(405).json({ error: "method_not_allowed" });
-  return;
-}
+  // プリフライト（OPTIONS）に正しく応答
+  if (req.method === "OPTIONS") {
+    res.setHeader("Allow", "POST, OPTIONS");
+    res.status(204).end();
+    return;
+  }
 
+  // POST のみ許可
   if (req.method !== "POST") {
     res.status(405).json({ error: "method_not_allowed" });
     return;
   }
 
+  // body 取得の保険（Edge/Node 両対応）
   const body = (await req.json?.().catch(() => null)) || req.body || {};
   const { message, sessionId } = body;
   const session = getSession(sessionId);
   saveSession(session);
 
-  if (!message || message.trim() === "") {
-    const greeting = initialGreeting(session);
-    res.status(200).json(greeting);
-    return;
-  }
+  try {
+    if (!message || message.trim() === "") {
+      const greeting = initialGreeting(session);
+      // ここでも CORS ヘッダは既にセット済み
+      res.status(200).json(greeting);
+      return;
+    }
 
-  session.history.push({ role: "user", text: message, step: session.step });
+    session.history.push({ role: "user", text: message, step: session.step });
 
-  let result;
-  switch (session.step) {
-    case 1:
-      result = await handleStep1(session, message);
-      break;
-    case 2:
-      result = await handleStep2(session, message);
-      break;
-    case 3:
-      result = await handleStep3(session, message);
-      break;
-    case 4:
-      result = await handleStep4(session, message);
-      break;
-    case 5:
-      result = await handleStep5(session, message);
-      break;
-    default:
-      result = await handleStep6(session, message);
-      break;
-  }
+    let result;
+    switch (session.step) {
+      case 1:
+        result = await handleStep1(session, message);
+        break;
+      case 2:
+        result = await handleStep2(session, message);
+        break;
+      case 3:
+        result = await handleStep3(session, message);
+        break;
+      case 4:
+        result = await handleStep4(session, message);
+        break;
+      case 5:
+        result = await handleStep5(session, message);
+        break;
+      default:
+        result = await handleStep6(session, message);
+        break;
+    }
 
-  if (!result || typeof result !== "object") {
+    if (!result || typeof result !== "object") {
+      res.status(500).json({
+        response: "サーバ内部で処理に失敗しちゃった。時間をおいて試してみてね。",
+        status: session.status,
+        meta: { step: session.step, error: "unknown" },
+        drill: session.drill,
+        _error: "unknown",
+      });
+      return;
+    }
+
+    if (result.status) session.status = result.status;
+    if (result.meta?.step != null) session.step = result.meta.step;
+    if (result.drill) session.drill = result.drill;
+    saveSession(session);
+
+    res.status(200).json(result);
+  } catch (err) {
+    // 本番で出るスタックや詳細はログへ。ユーザー向けは汎用メッセージ。
+    console.error("handler_unexpected_error", err);
     res.status(500).json({
-      response: "サーバ内部で処理に失敗しちゃった。時間をおいて試してみてね。",
+      response: "サーバ内部で例外が発生しました。もう一度試してみてください。",
       status: session.status,
-      meta: { step: session.step, error: "unknown" },
+      meta: { step: session.step, error: "exception" },
       drill: session.drill,
-      _error: "unknown",
+      _error: "exception",
     });
-    return;
   }
-
-  if (result.status) {
-    session.status = result.status;
-  }
-  if (result.meta?.step != null) {
-    session.step = result.meta.step;
-  }
-  if (result.drill) {
-    session.drill = result.drill;
-  }
-  saveSession(session);
-
-  res.status(200).json(result);
 }
-
 module.exports = handler;
