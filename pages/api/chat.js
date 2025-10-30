@@ -24,24 +24,59 @@ const STEP_PROMPTS = {
 const COMMON_PROMPT = safeRead(path.join(PROMPTS_DIR, "common_instructions.txt"));
 const LLM_BRAKE_PROMPT = safeRead(path.join(PROMPTS_DIR, "llm_brake_system.txt"));
 
-function loadJson(fileName) {
-  const primaryPath = path.join(process.cwd(), fileName);
-  const fallbackPath = path.join(__dirname, "..", "..", fileName);
 
-  const candidates = [primaryPath, fallbackPath];
+function loadJson(fileName) {
+  const tried = [];
+  try {
+    const relRequirePath = path.join(__dirname, "..", "..", fileName);
+    try {
+      return require(relRequirePath);
+    } catch (e) {
+      tried.push({ step: "require_rel_error", path: relRequirePath, error: e && e.message });
+    }
+  } catch (err) {
+    tried.push({ step: "require_rel_setup_error", error: err && err.message });
+  }
+  try {
+    const abs = path.join(process.cwd(), fileName);
+    if (fs.existsSync(abs)) {
+      try {
+        return require(abs);
+      } catch (e) {
+        const raw = fs.readFileSync(abs, "utf8");
+        return JSON.parse(raw);
+      }
+    } else {
+      tried.push({ step: "cwd_not_exist", path: abs });
+    }
+  } catch (err) {
+    tried.push({ step: "require_cwd_error", error: err && err.message });
+  }
+
+  const candidates = [
+    path.join(process.cwd(), fileName),
+    path.join(__dirname, "..", "..", fileName),
+    path.join(__dirname, "..", "..", "..", fileName),
+    path.join(process.cwd(), "public", fileName),
+  ];
 
   for (const filePath of candidates) {
     try {
-      const raw = fs.readFileSync(filePath, "utf8");
-      return JSON.parse(raw);
+      if (fs.existsSync(filePath)) {
+        const raw = fs.readFileSync(filePath, "utf8");
+        return JSON.parse(raw);
+      } else {
+        tried.push({ step: "not_exist", path: filePath });
+      }
     } catch (err) {
+      tried.push({ step: "fs_read_error", path: filePath, error: err && err.message });
       console.error("json_read_failed", fileName, filePath, err && err.message);
     }
   }
 
+  console.error("json_read_failed_all", fileName, JSON.stringify(tried));
   return null;
 }
-
 
 function ensureArray(value) {
   if (Array.isArray(value)) return value;
@@ -117,6 +152,13 @@ for (const group of Object.values(LICENSE_SOURCES || {})) {
     }
   }
 }
+
+// デバッグ（デプロイ後にログを見てください）
+console.log("licenses keys:", Object.keys(LICENSE_SOURCES || {}));
+console.log("LICENSE_ALIAS_MAP size:", LICENSE_ALIAS_MAP.size);
+console.log("LICENSE_LABEL_TO_QUAL_ID size:", LICENSE_LABEL_TO_QUAL_ID.size);
+console.log("lookup for 「看護師」 (normalized):", LICENSE_ALIAS_MAP.get(normKey("看護師")));
+
 
 function findLicenseLabelsByAlias(text) {
   const norm = normKey(text);
