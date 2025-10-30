@@ -100,6 +100,23 @@ function normalizePick(value) {
     .replace(/\s+/g, " ");
 }
 
+function isNoMessage(text) {
+  if (!text) return false;
+  const n = String(text || "")
+    .trim()
+    .replace(/\s+/g, "")
+    .replace(/[。、．,]/g, "")
+    .toLowerCase();
+  return (
+    n === "ない" ||
+    n === "無い" ||
+    n === "ありません" ||
+    n === "ないです" ||
+    n === "なし" ||
+    n === "無し"
+  );
+}
+
 for (const item of QUALIFICATIONS) {
   const id = Number(item?.id);
   const name = typeof item?.name === "string" ? item.name.trim() : "";
@@ -298,6 +315,19 @@ async function handleStep1(session, userText) {
   session.stage.turnIndex += 1;
   const trimmed = String(userText || "").trim();
 
+  // ユーザーが「ない」と言ったら STEP2 へ移行（表示は従来のSTEP2開始文に合わせる）
+  if (isNoMessage(trimmed)) {
+    session.step = 2;
+    session.stage.turnIndex = 0;
+    resetDrill(session);
+    return {
+      response: "了解！では次はあなたのやってきたこと、これからも活かしていきたいことを整理しよう✨",
+      status: session.status,
+      meta: { step: 2 },
+      drill: session.drill,
+    };
+  }
+
   if (session.drill.awaitingChoice) {
     const normalized = normalizePick(trimmed);
     const selected = session.drill.options.find(opt => normalizePick(opt) === normalized);
@@ -320,22 +350,29 @@ async function handleStep1(session, userText) {
       };
     }
     const qualName = QUAL_NAME_BY_ID.get(qualId) || selected;
-    session.status.qual_ids = [qualId];
-    session.status.licenses = [qualName];
+
+    // IDベースで未登録なら追加（現行のID設計を尊重）
+    if (!Array.isArray(session.status.qual_ids)) session.status.qual_ids = [];
+    if (!session.status.qual_ids.includes(qualId)) {
+      session.status.qual_ids.push(qualId);
+      if (!Array.isArray(session.status.licenses)) session.status.licenses = [];
+      if (!session.status.licenses.includes(qualName)) session.status.licenses.push(qualName);
+    }
+
     resetDrill(session);
-    session.step = 2;
     session.stage.turnIndex = 0;
+    // 継続：step は上げない（ユーザーに追加有無を確認する）
     return {
-      response: `資格は「${qualName}」で進めるね！次はあなたのやってきたこと、これからも活かしていきたいことを整理しよう✨`,
+      response: `「${qualName}」だね！他にもある？あれば教えて！なければ「ない」と言ってね`,
       status: session.status,
-      meta: { step: 2 },
+      meta: { step: 1 },
       drill: session.drill,
     };
   }
 
   if (!trimmed) {
     return {
-      response: "今持っている資格や研修名を一言で教えてね！",
+      response: "今持っている資格や研修名を一言で教えてね！複数ある場合は1つずつ教えてね。",
       status: session.status,
       meta: { step: 1 },
       drill: session.drill,
@@ -345,15 +382,30 @@ async function handleStep1(session, userText) {
   const directId = resolveQualificationIdByName(trimmed);
   if (directId) {
     const qualName = QUAL_NAME_BY_ID.get(directId) || trimmed;
-    session.status.qual_ids = [directId];
-    session.status.licenses = [qualName];
-    session.step = 2;
-    session.stage.turnIndex = 0;
-    resetDrill(session);
+
+    if (!Array.isArray(session.status.qual_ids)) session.status.qual_ids = [];
+
+    if (!session.status.qual_ids.includes(directId)) {
+      // 新規追加（IDベース）
+      session.status.qual_ids.push(directId);
+      if (!Array.isArray(session.status.licenses)) session.status.licenses = [];
+      if (!session.status.licenses.includes(qualName)) session.status.licenses.push(qualName);
+
+      session.stage.turnIndex = 0;
+      resetDrill(session);
+      return {
+        response: `了解！「${qualName}」だね。次、他にもある？あれば教えて！なければ「ない」と言ってね`,
+        status: session.status,
+        meta: { step: 1 },
+        drill: session.drill,
+      };
+    }
+
+    // 既に登録済み
     return {
-      response: `了解！「${qualName}」として記録したよ。次はあなたのやってきたこと、これからも活かしていきたいことを一緒に考えよう✨`,
+      response: `その資格は既に登録済みだよ。他にもある？あれば教えて！なければ「ない」と言ってね`,
       status: session.status,
-      meta: { step: 2 },
+      meta: { step: 1 },
       drill: session.drill,
     };
   }
@@ -367,30 +419,38 @@ async function handleStep1(session, userText) {
 
     if (uniqueLabels.length === 1 && resolved.length === 1) {
       const { label, id } = resolved[0];
-      session.status.qual_ids = [id];
-      session.status.licenses = [QUAL_NAME_BY_ID.get(id) || label];
-      session.step = 2;
+      const qualName = QUAL_NAME_BY_ID.get(id) || label;
+      if (!Array.isArray(session.status.qual_ids)) session.status.qual_ids = [];
+      if (!session.status.qual_ids.includes(id)) {
+        session.status.qual_ids.push(id);
+        if (!Array.isArray(session.status.licenses)) session.status.licenses = [];
+        if (!session.status.licenses.includes(qualName)) session.status.licenses.push(qualName);
+      }
       session.stage.turnIndex = 0;
       resetDrill(session);
       return {
-        response: `その呼び方なら「${label}」が近いかな！これで進めるね✨`,
+        response: `「${label}」だね！他にもある？あれば教えて！なければ「ない」と言ってね`,
         status: session.status,
-        meta: { step: 2 },
+        meta: { step: 1 },
         drill: session.drill,
       };
     }
 
     if (resolved.length === 1) {
       const { label, id } = resolved[0];
-      session.status.qual_ids = [id];
-      session.status.licenses = [QUAL_NAME_BY_ID.get(id) || label];
-      session.step = 2;
+      const qualName = QUAL_NAME_BY_ID.get(id) || label;
+      if (!Array.isArray(session.status.qual_ids)) session.status.qual_ids = [];
+      if (!session.status.qual_ids.includes(id)) {
+        session.status.qual_ids.push(id);
+        if (!Array.isArray(session.status.licenses)) session.status.licenses = [];
+        if (!session.status.licenses.includes(qualName)) session.status.licenses.push(qualName);
+      }
       session.stage.turnIndex = 0;
       resetDrill(session);
       return {
-        response: `その表現なら「${label}」として登録できるよ！これで進めよう✨`,
+        response: `「${label}」だね！他にもある？あれば教えて！なければ「ない」と言ってね`,
         status: session.status,
-        meta: { step: 2 },
+        meta: { step: 1 },
         drill: session.drill,
       };
     }
@@ -398,15 +458,19 @@ async function handleStep1(session, userText) {
     if (resolved.length > 1 && isKatakana(trimmed)) {
       const sorted = [...resolved].sort((a, b) => a.id - b.id);
       const { label, id } = sorted[0];
-      session.status.qual_ids = [id];
-      session.status.licenses = [QUAL_NAME_BY_ID.get(id) || label];
-      session.step = 2;
+      const qualName = QUAL_NAME_BY_ID.get(id) || label;
+      if (!Array.isArray(session.status.qual_ids)) session.status.qual_ids = [];
+      if (!session.status.qual_ids.includes(id)) {
+        session.status.qual_ids.push(id);
+        if (!Array.isArray(session.status.licenses)) session.status.licenses = [];
+        if (!session.status.licenses.includes(qualName)) session.status.licenses.push(qualName);
+      }
       session.stage.turnIndex = 0;
       resetDrill(session);
       return {
-        response: `その呼び方ならまずは「${label}」を基準に進めてみるね！`,
+        response: `その呼び方ならまずは「${label}」を基準に登録して進めるね！他にもある？あれば教えて！なければ「ない」と言ってね`,
         status: session.status,
-        meta: { step: 2 },
+        meta: { step: 1 },
         drill: session.drill,
       };
     }
@@ -678,7 +742,7 @@ async function handleStep6(session, userText) {
 
 function initialGreeting(session) {
   return {
-    response: "こんにちは！AIキャリアデザイナーのほーぷちゃんだよ✨\n今日はあなたのこれまでキャリアの説明書をあなたの言葉で作っていくね！\nそれじゃあ、まずは持っている資格を教えて欲しいな🌱",
+    response: "こんにちは！AIキャリアデザイナーのほーぷちゃんだよ✨\n今日はあなたのこれまでキャリアの説明書をあなたの言葉で作っていくね！\nそれじゃあ、まずは持っている資格を教えて欲しいな🌱\n複数ある場合は1つずつ教えてね。",
     status: session.status,
     meta: { step: session.step },
     drill: session.drill,
