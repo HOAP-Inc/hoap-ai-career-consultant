@@ -328,7 +328,7 @@ async function handleStep1(session, userText) {
     };
   }
 
-  if (session.drill.awaitingChoice) {
+    if (session.drill.awaitingChoice) {
     const normalized = normalizePick(trimmed);
     const selected = session.drill.options.find(opt => normalizePick(opt) === normalized);
     if (!selected) {
@@ -339,16 +339,24 @@ async function handleStep1(session, userText) {
         drill: session.drill,
       };
     }
+
     const qualId = mapLicenseLabelToQualificationId(selected);
+
+    // ID に紐づかない場合はエラーメッセージを返さず、そのままテキスト保存する
     if (!qualId) {
+      if (!Array.isArray(session.status.licenses)) session.status.licenses = [];
+      if (!session.status.licenses.includes(selected)) session.status.licenses.push(selected);
+
       resetDrill(session);
+      session.stage.turnIndex = 0;
       return {
-        response: "ほーぷちゃんの中にはその資格名が見つからないみたい。別の言い方で教えてみて。",
+        response: `「${selected}」はIDに紐づかなかったので、そのまま登録したよ。ほかにあれば教えて！なければ「ない」と言ってね`,
         status: session.status,
         meta: { step: 1 },
         drill: session.drill,
       };
     }
+
     const qualName = QUAL_NAME_BY_ID.get(qualId) || selected;
 
     // IDベースで未登録なら追加（現行のID設計を尊重）
@@ -436,6 +444,21 @@ async function handleStep1(session, userText) {
       };
     }
 
+if (uniqueLabels.length === 1 && resolved.length === 0) {
+  const label = uniqueLabels[0];
+  if (!Array.isArray(session.status.licenses)) session.status.licenses = [];
+  if (!session.status.licenses.includes(label)) session.statu,.licenses.push(label);
+  session.stage.turnIndex = 0;
+  resetDrill(session);
+  return {
+    response: `「${label}」だね。他にもある？あれば教えて！なければ「ない」と言ってね`,
+    status: session.status,
+    meta: { step: 1 },
+    drill: session.drill,
+  };
+}
+
+
     if (resolved.length === 1) {
       const { label, id } = resolved[0];
       const qualName = QUAL_NAME_BY_ID.get(id) || label;
@@ -449,26 +472,6 @@ async function handleStep1(session, userText) {
       resetDrill(session);
       return {
         response: `「${label}」だね！他にもある？あれば教えて！なければ「ない」と言ってね`,
-        status: session.status,
-        meta: { step: 1 },
-        drill: session.drill,
-      };
-    }
-
-    if (resolved.length > 1 && isKatakana(trimmed)) {
-      const sorted = [...resolved].sort((a, b) => a.id - b.id);
-      const { label, id } = sorted[0];
-      const qualName = QUAL_NAME_BY_ID.get(id) || label;
-      if (!Array.isArray(session.status.qual_ids)) session.status.qual_ids = [];
-      if (!session.status.qual_ids.includes(id)) {
-        session.status.qual_ids.push(id);
-        if (!Array.isArray(session.status.licenses)) session.status.licenses = [];
-        if (!session.status.licenses.includes(qualName)) session.status.licenses.push(qualName);
-      }
-      session.stage.turnIndex = 0;
-      resetDrill(session);
-      return {
-        response: `その呼び方ならまずは「${label}」を基準に登録して進めるね！他にもある？あれば教えて！なければ「ない」と言ってね`,
         status: session.status,
         meta: { step: 1 },
         drill: session.drill,
