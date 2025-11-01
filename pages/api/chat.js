@@ -498,10 +498,6 @@ function buildStepPayload(session, userText, recentCount) {
   };
 }
 
-function stringifyResponseParts(parts) {
-  return parts.filter(Boolean).join(" ").trim();
-}
-
 async function handleStep2(session, userText) {
   session.stage.turnIndex += 1;
   const payload = buildStepPayload(session, userText, 3);
