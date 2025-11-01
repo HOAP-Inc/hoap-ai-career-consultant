@@ -387,6 +387,19 @@ async function handleStep1(session, userText) {
 
   const directId = resolveQualificationIdByName(trimmed);
   if (directId) {
+    // ID 57 (資格なし) が検出された場合、STEP2へ強制移行
+    if (directId === 57) {
+      session.step = 2;
+      session.stage.turnIndex = 0;
+      resetDrill(session);
+      return {
+        response: "ありがとう！\n\n次は、あなたが今までやってきたことでこれからも活かしていきたいこと、あなたの強みを教えて！",
+        status: session.status,
+        meta: { step: 2 },
+        drill: session.drill,
+      };
+    }
+
     const qualName = QUAL_NAME_BY_ID.get(directId) || trimmed;
 
     if (!Array.isArray(session.status.qual_ids)) session.status.qual_ids = [];
