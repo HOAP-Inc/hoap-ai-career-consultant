@@ -312,12 +312,17 @@ async function handleStep1(session, userText) {
   const trimmed = String(userText || "").trim();
 
   if (isNoMessage(trimmed)) {
-  session.step = 2;
-  session.stage.turnIndex = 0;
-  resetDrill(session);
-  // STEP2の初回質問を取得（空文字を渡してintroフェーズを引き出す）
-  return await handleStep2(session, "");
-}
+    session.step = 2;
+    session.stage.turnIndex = 0;
+    resetDrill(session);
+    // 資格なしの場合は「ありがとう！」だけを表示してSTEP2へ強制移行
+    return {
+      response: "ありがとう！\n\n次は、あなたが今までやってきたことでこれからも活かしていきたいこと、あなたの強みを教えて！",
+      status: session.status,
+      meta: { step: 2 },
+      drill: session.drill,
+    };
+  }
 
     if (session.drill.awaitingChoice) {
     const normalized = normalizePick(trimmed);
