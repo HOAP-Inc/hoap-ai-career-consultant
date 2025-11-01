@@ -829,7 +829,7 @@ async function handleStep5(session, userText) {
   // intro フェーズ（初回質問）
   if (parsed?.control?.phase === "intro") {
     return {
-      response: parsed.response || "あなた自身を一言で言うと、どんな人？周りからよく言われる"あなたらしさ"もあれば教えて😊",
+      response: parsed.response || "あなた自身を一言で言うと、どんな人？周りからよく言われる「あなたらしさ」もあれば教えて😊",
       status: session.status,
       meta: { step: 5, phase: "intro" },
       drill: session.drill,
