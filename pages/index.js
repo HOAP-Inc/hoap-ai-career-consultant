@@ -310,15 +310,15 @@ setChoices(isChoiceStep(next) ? uniqueByNormalized(inline) : []);
         setAiTexts([responseParts[0]]);
         setIsTyping(false);
       } else {
-        // 複数ある場合は順次表示（別々の吹き出しとして）
+        // 複数ある場合は順次表示（差し替え形式）
         setAiTexts([responseParts[0]]); // 最初の吹き出しを即座に表示
         setIsTyping(false);
 
-        // 2つ目以降を3秒ずつ遅延して別の吹き出しとして追加
+        // 2つ目以降を3秒ずつ遅延して差し替え（追加ではなく置き換え）
         for (let i = 1; i < responseParts.length; i++) {
           const index = i;
           setTimeout(() => {
-            setAiTexts(prev => [...prev, responseParts[index]]);
+            setAiTexts([responseParts[index]]); // 配列全体を差し替え
           }, 3000 * index);
         }
       }
