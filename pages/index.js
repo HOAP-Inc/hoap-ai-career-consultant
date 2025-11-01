@@ -143,7 +143,7 @@ const raw = await res.text();
 const data = raw ? JSON.parse(raw) : null;
         if (aborted) return;
 
-        // 初回メッセージも \n\n で分割して順次表示（別々の吹き出しとして）
+        // 初回メッセージも \n\n で分割して順次表示（差し替え形式）
         const responseParts = (data.response || "").split("\n\n").filter(Boolean);
         if (responseParts.length === 0) {
           setAiTexts([]);
@@ -152,11 +152,11 @@ const data = raw ? JSON.parse(raw) : null;
         } else {
           // 最初の吹き出しを即座に表示
           setAiTexts([responseParts[0]]);
-          // 2つ目以降を3秒ずつ遅延して別の吹き出しとして追加
+          // 2つ目以降を3秒ずつ遅延して差し替え（追加ではなく）
           for (let i = 1; i < responseParts.length; i++) {
             const index = i;
             setTimeout(() => {
-              setAiTexts(prev => [...prev, responseParts[index]]);
+              setAiTexts([responseParts[index]]); // 配列全体を差し替え
             }, 3000 * index);
           }
         }
