@@ -143,7 +143,21 @@ const raw = await res.text();
 const data = raw ? JSON.parse(raw) : null;
         if (aborted) return;
 
-        setAiText(data.response);
+        // 初回メッセージも \n\n で分割して順次表示
+        const responseParts = (data.response || "").split("\n\n").filter(Boolean);
+        if (responseParts.length === 0) {
+          setAiText("");
+        } else if (responseParts.length === 1) {
+          setAiText(responseParts[0]);
+        } else {
+          setAiText(responseParts[0]);
+          for (let i = 1; i < responseParts.length; i++) {
+            const index = i;
+            setTimeout(() => {
+              setAiText(prev => prev + "\n\n" + responseParts[index]);
+            }, 3000 * index);
+          }
+        }
 
         const next = data?.meta?.step ?? 0;
         setStatus(toBadges(data, next));
@@ -283,9 +297,29 @@ setChoices(isChoiceStep(next) ? uniqueByNormalized(inline) : []);
         return;
       }
 
-      // 本文反映
-      setAiText(data.response);
-      setIsTyping(false);
+      // 本文反映（\n\n で分割して順次表示）
+      const responseParts = (data.response || "").split("\n\n").filter(Boolean);
+
+      if (responseParts.length === 0) {
+        setAiText("");
+        setIsTyping(false);
+      } else if (responseParts.length === 1) {
+        // 1つだけの場合は即座に表示
+        setAiText(responseParts[0]);
+        setIsTyping(false);
+      } else {
+        // 複数ある場合は順次表示
+        setAiText(responseParts[0]); // 最初の部分を即座に表示
+        setIsTyping(false);
+
+        // 2つ目以降を3秒ずつ遅延して追加
+        for (let i = 1; i < responseParts.length; i++) {
+          const index = i;
+          setTimeout(() => {
+            setAiText(prev => prev + "\n\n" + responseParts[index]);
+          }, 3000 * index);
+        }
+      }
 
       // 次ステップ
       const nextStep = data.meta && data.meta.step != null ? data.meta.step : step;

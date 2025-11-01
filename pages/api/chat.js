@@ -315,7 +315,7 @@ async function handleStep1(session, userText) {
   session.step = 2;
   session.stage.turnIndex = 0;
   resetDrill(session);
-  // LLM による empathy + ask_next を即返すために handleStep2 を呼ぶ
+  // STEP2の初回質問を取得（空文字を渡してintroフェーズを引き出す）
   return await handleStep2(session, "");
 }
 
@@ -511,7 +511,19 @@ async function handleStep2(session, userText) {
     return buildSchemaError(2, session, "あなたの「やってきたこと、これからも活かしていきたいこと」の処理でエラーが起きたみたい。もう一度話してみて！", llm.error);
   }
 
-  const { empathy, paraphrase, ask_next, meta } = llm.parsed || {};
+  const parsed = llm.parsed || {};
+
+  // intro フェーズの処理（STEP2初回質問）
+  if (parsed?.control?.phase === "intro") {
+    return {
+      response: parsed.response || "次は、あなたが今までやってきたことでこれからも活かしていきたいこと、あなたの強みを教えて！",
+      status: session.status,
+      meta: { step: 2 },
+      drill: session.drill,
+    };
+  }
+
+  const { empathy, paraphrase, ask_next, meta } = parsed;
 
   // 基本検査
   if (typeof empathy !== "string" || typeof paraphrase !== "string" || (ask_next != null && typeof ask_next !== "string")) {
@@ -562,13 +574,32 @@ async function handleStep2(session, userText) {
     session.stage.turnIndex = 0;
 
     switch (nextStep) {
-      case 3:
-        return await handleStep3(session, "");
-      case 4:
-        return await handleStep4(session, "");
+      case 3: {
+        // STEP3の初回質問を取得
+        const step3Response = await handleStep3(session, "");
+        // STEP2の共感 + STEP3の初回質問を結合して返す
+        const combinedResponse = [empathy, step3Response.response].filter(Boolean).join("\n\n");
+        return {
+          response: combinedResponse || step3Response.response,
+          status: step3Response.status,
+          meta: step3Response.meta,
+          drill: step3Response.drill,
+        };
+      }
+      case 4: {
+        // STEP4の初回質問を取得
+        const step4Response = await handleStep4(session, "");
+        const combinedResponse = [empathy, step4Response.response].filter(Boolean).join("\n\n");
+        return {
+          response: combinedResponse || step4Response.response,
+          status: step4Response.status,
+          meta: step4Response.meta,
+          drill: step4Response.drill,
+        };
+      }
       default:
         return {
-          response: stringifyResponseParts([empathy, ask_next]) || paraphraseDisplay || "受け取ったよ。",
+          response: [empathy, ask_next].filter(Boolean).join("\n\n") || paraphraseDisplay || "受け取ったよ。",
           status: session.status,
           meta: { step: session.step },
           drill: session.drill,
@@ -576,7 +607,8 @@ async function handleStep2(session, userText) {
     }
   }
 
-  const message = stringifyResponseParts([empathy, ask_next]) || paraphraseDisplay || "ありがとう。もう少し教えて。";
+  // 通常の会話フェーズ（empathy と ask_next を \n\n で結合）
+  const message = [empathy, ask_next].filter(Boolean).join("\n\n") || paraphraseDisplay || "ありがとう。もう少し教えて。";
   return {
     response: message,
     status: session.status,
@@ -594,6 +626,8 @@ async function handleStep3(session, userText) {
     return buildSchemaError(3, session, "あなたの「これから挑戦したいこと」の生成でエラーが発生したよ。少し時間を置いてみてね。", llm.error);
   }
   const parsed = llm.parsed || {};
+
+  // generation フェーズ（Will確定、STEP4へ移行）
   if (parsed?.status?.will_text && typeof parsed.status.will_text === "string") {
     session.status.will_text = parsed.status.will_text;
     if (!Array.isArray(session.status.will_texts)) {
@@ -603,17 +637,31 @@ async function handleStep3(session, userText) {
     const nextStep = Number(parsed?.meta?.step) || 4;
     session.step = nextStep;
     session.stage.turnIndex = 0;
+
+    // STEP4の初回質問を取得して結合
+    const step4Response = await handleStep4(session, "");
+    const combinedResponse = [parsed.status.will_text, step4Response.response].filter(Boolean).join("\n\n");
     return {
-      response: parsed.status.will_text,
+      response: combinedResponse || step4Response.response,
       status: session.status,
       meta: { step: session.step },
+      drill: step4Response.drill,
+    };
+  }
+
+  // intro フェーズ（初回質問）
+  if (parsed?.control?.phase === "intro") {
+    session.stage.turnIndex = 0;
+    return {
+      response: parsed.response || "これから挑戦してみたいことや、やってみたい仕事を教えて！まったくやったことがないものでも大丈夫。ちょっと気になってることでもOKだよ✨",
+      status: session.status,
+      meta: { step: 3, phase: "intro" },
       drill: session.drill,
     };
   }
+
+  // empathy または deepening フェーズ
   if (typeof parsed?.response === "string") {
-    if (parsed?.control?.phase === "intro") {
-      session.stage.turnIndex = 0;
-    }
     return {
       response: parsed.response,
       status: session.status,
@@ -621,12 +669,13 @@ async function handleStep3(session, userText) {
       drill: session.drill,
     };
   }
+
   return {
-  response: "これから挑戦したいことについて、もう少し具体的に教えてほしい。短くで良いから、やってみたいことの概要を教えて。",
-  status: session.status,
-  meta: { step: 3 },
-  drill: session.drill,
-};
+    response: "これから挑戦したいことについて、もう少し具体的に教えてほしい。短くで良いから、やってみたいことの概要を教えて。",
+    status: session.status,
+    meta: { step: 3 },
+    drill: session.drill,
+  };
 }
 
 function applyMustStatus(session, status, meta) {
@@ -659,34 +708,61 @@ async function handleStep4(session, userText) {
     return buildSchemaError(4, session, "あなたの譲れない条件の整理に失敗しちゃった。もう一度教えてもらえる？", llm.error);
   }
   const parsed = llm.parsed || {};
-  
-if (parsed?.status && typeof parsed.status === "object") {
-  // LLM から帰ってきた譲れない条件をセッションへ適用
-  applyMustStatus(session, parsed.status, parsed.meta || {});
-  // 次のステップは LLM の meta から決定（デフォルトは 5）
-  const nextStep = Number(parsed?.meta?.step) || 5;
 
-  // セッションを次STEPにセットして、ただちに次STEPのハンドラを呼ぶ
-  session.step = nextStep;
-  session.stage.turnIndex = 0;
-
-  switch (nextStep) {
-    case 5:
-      // STEP5（Self）を即実行し、その出力をそのまま返す
-      return await handleStep5(session, "");
-    case 6:
-      // STEP6（Doing/Being）を即実行
-      return await handleStep6(session, "");
-    default:
-      // 想定外の nextStep の場合は譲れない条件を保存した旨だけ返す（余計な確認はしない）
-      return {
-        response: session.status.must_text || "譲れない条件を受け取ったよ。",
-        status: session.status,
-        meta: { step: session.step, deepening_attempt_total: session.meta.deepening_attempt_total },
-        drill: session.drill,
-      };
+  // intro フェーズ（初回質問）
+  if (parsed?.control?.phase === "intro") {
+    return {
+      response: parsed.response || "働く上で『ここだけは譲れないな』って思うこと、ある？職場の雰囲気でも働き方でもOKだよ✨",
+      status: session.status,
+      meta: { step: 4, phase: "intro" },
+      drill: session.drill,
+    };
   }
-}
+
+  // generation フェーズ（Must確定、STEP5へ移行）
+  if (parsed?.status && typeof parsed.status === "object") {
+    // LLM から帰ってきた譲れない条件をセッションへ適用
+    applyMustStatus(session, parsed.status, parsed.meta || {});
+    // 次のステップは LLM の meta から決定（デフォルトは 5）
+    const nextStep = Number(parsed?.meta?.step) || 5;
+
+    // セッションを次STEPにセットして、次STEPの初回質問を取得
+    session.step = nextStep;
+    session.stage.turnIndex = 0;
+
+    switch (nextStep) {
+      case 5: {
+        // STEP5（Self）の初回質問を取得して結合
+        const step5Response = await handleStep5(session, "");
+        const combinedResponse = [session.status.must_text, step5Response.response].filter(Boolean).join("\n\n");
+        return {
+          response: combinedResponse || step5Response.response,
+          status: session.status,
+          meta: { step: session.step, deepening_attempt_total: session.meta.deepening_attempt_total },
+          drill: step5Response.drill,
+        };
+      }
+      case 6: {
+        // STEP6（Doing/Being）を即実行
+        const step6Response = await handleStep6(session, "");
+        const combinedResponse = [session.status.must_text, step6Response.response].filter(Boolean).join("\n\n");
+        return {
+          response: combinedResponse || step6Response.response,
+          status: session.status,
+          meta: { step: session.step, deepening_attempt_total: session.meta.deepening_attempt_total },
+          drill: step6Response.drill,
+        };
+      }
+      default:
+        // 想定外の nextStep の場合は譲れない条件を保存した旨だけ返す（余計な確認はしない）
+        return {
+          response: session.status.must_text || "譲れない条件を受け取ったよ。",
+          status: session.status,
+          meta: { step: session.step, deepening_attempt_total: session.meta.deepening_attempt_total },
+          drill: session.drill,
+        };
+    }
+  }
 
   if (parsed?.meta?.deepening_attempt != null) {
     const increment = Number(parsed.meta.deepening_attempt);
@@ -731,18 +807,36 @@ async function handleStep5(session, userText) {
     return buildSchemaError(5, session, "Selfの生成で少しつまずいたよ。もう一度話してみてね。", llm.error);
   }
   const parsed = llm.parsed || {};
+
+  // generation フェーズ（Self確定、STEP6へ移行）
   if (parsed?.status?.self_text && typeof parsed.status.self_text === "string") {
     session.status.self_text = parsed.status.self_text;
     const nextStep = Number(parsed?.meta?.step) || 6;
     session.step = nextStep;
     session.stage.turnIndex = 0;
+
+    // STEP6の処理を取得して結合
+    const step6Response = await handleStep6(session, "");
+    const combinedResponse = [session.status.self_text, step6Response.response].filter(Boolean).join("\n\n");
     return {
-      response: session.status.self_text,
+      response: combinedResponse || step6Response.response,
       status: session.status,
       meta: { step: session.step },
       drill: session.drill,
     };
   }
+
+  // intro フェーズ（初回質問）
+  if (parsed?.control?.phase === "intro") {
+    return {
+      response: parsed.response || "あなた自身を一言で言うと、どんな人？周りからよく言われる"あなたらしさ"もあれば教えて😊",
+      status: session.status,
+      meta: { step: 5, phase: "intro" },
+      drill: session.drill,
+    };
+  }
+
+  // empathy または deepening フェーズ
   if (typeof parsed?.response === "string") {
     return {
       response: parsed.response,
@@ -751,6 +845,7 @@ async function handleStep5(session, userText) {
       drill: session.drill,
     };
   }
+
   return {
     response: "あなた自身について、もう少し聞かせてもらえる？",
     status: session.status,
@@ -769,6 +864,8 @@ async function handleStep6(session, userText) {
   const parsed = llm.parsed || {};
   const doing = parsed?.status?.doing_text;
   const being = parsed?.status?.being_text;
+
+  // generation フェーズ（Doing/Being生成完了）
   if ((typeof doing === "string" && doing) || (typeof being === "string" && being)) {
     if (typeof doing === "string" && doing) {
       session.status.doing_text = doing;
@@ -779,7 +876,17 @@ async function handleStep6(session, userText) {
     const nextStep = Number(parsed?.meta?.step) || 7;
     session.step = nextStep;
     session.stage.turnIndex = 0;
-    const message = [session.status.doing_text, session.status.being_text].filter(Boolean).join("\n\n");
+
+    // Doing と Being を \n\n で結合して返す（フロント側で順次表示）
+    const parts = [];
+    if (session.status.doing_text) {
+      parts.push("【Doing（あなたの行動・実践）】\n" + session.status.doing_text);
+    }
+    if (session.status.being_text) {
+      parts.push("【Being（あなたの価値観・関わり方）】\n" + session.status.being_text);
+    }
+    const message = parts.join("\n\n");
+
     return {
       response: message || "Doing/Being を更新したよ。",
       status: session.status,
@@ -787,6 +894,8 @@ async function handleStep6(session, userText) {
       drill: session.drill,
     };
   }
+
+  // 会話フェーズ（念のため）
   if (typeof parsed?.response === "string") {
     return {
       response: parsed.response,
@@ -795,6 +904,7 @@ async function handleStep6(session, userText) {
       drill: session.drill,
     };
   }
+
   return {
     response: "これまでの話をまとめるね。少し待ってて。",
     status: session.status,
