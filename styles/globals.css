@@ -259,10 +259,22 @@ html, body, #__next { height: 100%; }
   50%    { transform: rotate(-1.6deg) translateY(2px) }
 }
 
-.duo-stage__bubble{
-  position: absolute; 
+/* 吹き出しコンテナ（複数の吹き出しを縦に並べる） */
+.duo-stage__bubbles-container {
+  position: absolute;
   left: 6%; top: 8%;
   max-width: 56%;
+  max-height: calc(100% - 40px);
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  z-index: 2;
+}
+
+.duo-stage__bubble{
+  position: relative; /* absoluteから変更 */
   background: #fff;
   border: 1px solid #f3e8ff;
   border-radius: 16px;
@@ -271,9 +283,6 @@ html, body, #__next { height: 100%; }
   line-height: 1.8;
   white-space: pre-wrap;
   box-shadow: var(--card-shadow);
-  max-height: calc(100% - 40px);
-  overflow-y: auto;
-  -webkit-overflow-scrolling: touch;
 }
 .duo-stage__bubble::before{
   content:"";
@@ -404,19 +413,22 @@ html, body, #__next { height: 100%; }
     z-index: 1;
   }
 
-  .duo-stage__bubble{
+  .duo-stage__bubbles-container{
     left: 6%;
     top: 6%;
     width: 84vw;
     max-width: 84vw;
-    font-size:14px;
-    line-height:1.6;
-    padding:12px 14px;
-    z-index: 2;
     max-height: calc(100% - 28px);
     overflow-y: auto;
     -webkit-overflow-scrolling: touch;
     overscroll-behavior: contain;
+    z-index: 2;
+  }
+
+  .duo-stage__bubble{
+    font-size:14px;
+    line-height:1.6;
+    padding:12px 14px;
   }
   .duo-stage__bubble::before{ display:none; }
 

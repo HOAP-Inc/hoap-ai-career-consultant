@@ -405,25 +405,27 @@ setChoices(isChoiceStep(next) ? uniqueByNormalized(inline) : []);
         <div className="duo-stage__bg" />
         <div className="duo-stage__wrap">
           <img className="duo-stage__hoap" src={hoapSrc} alt="ほーぷちゃん" />
-          {isTyping ? (
-            <div className="duo-stage__bubble typing" aria-live="polite">
-              <span className="dots"><span>・</span><span>・</span><span>・</span></span>
-            </div>
-          ) : showChoices ? (
-            <div className="duo-stage__bubble" aria-live="polite">
-              下のボタンから選んでね！
-            </div>
-          ) : aiTexts.length === 0 ? (
-            <div className="duo-stage__bubble" aria-live="polite">
-              …
-            </div>
-          ) : (
-            aiTexts.map((text, index) => (
-              <div key={index} className="duo-stage__bubble" aria-live="polite" style={{ marginBottom: index < aiTexts.length - 1 ? '12px' : '0' }}>
-                {text}
+          <div className="duo-stage__bubbles-container">
+            {isTyping ? (
+              <div className="duo-stage__bubble typing" aria-live="polite">
+                <span className="dots"><span>・</span><span>・</span><span>・</span></span>
               </div>
-            ))
-          )}
+            ) : showChoices ? (
+              <div className="duo-stage__bubble" aria-live="polite">
+                下のボタンから選んでね！
+              </div>
+            ) : aiTexts.length === 0 ? (
+              <div className="duo-stage__bubble" aria-live="polite">
+                …
+              </div>
+            ) : (
+              aiTexts.map((text, index) => (
+                <div key={index} className="duo-stage__bubble" aria-live="polite">
+                  {text}
+                </div>
+              ))
+            )}
+          </div>
         </div>
       </section>
 
