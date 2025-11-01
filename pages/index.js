@@ -339,7 +339,7 @@ setChoices(isChoiceStep(next) ? uniqueByNormalized(inline) : []);
       );
     } catch (err) {
       console.error(err);
-      setAiText('通信エラーが発生したよ🙏');
+      setAiTexts(['通信エラーが発生したよ🙏']);
       setIsTyping(false);
     } finally {
       setSending(false);

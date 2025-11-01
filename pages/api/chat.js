@@ -623,6 +623,16 @@ async function handleStep3(session, userText) {
   }
   const parsed = llm.parsed || {};
 
+  // intro フェーズ（初回質問）
+  if (parsed?.control?.phase === "intro") {
+    return {
+      response: parsed.response || "これから挑戦してみたいことや、やってみたい仕事を教えて！まったくやったことがないものでも大丈夫。ちょっと気になってることでもOKだよ✨",
+      status: session.status,
+      meta: { step: 3 },
+      drill: session.drill,
+    };
+  }
+
   // generation フェーズ（Will確定、STEP4へ移行）
   if (parsed?.status?.will_text && typeof parsed.status.will_text === "string") {
     session.status.will_text = parsed.status.will_text;
@@ -645,23 +655,39 @@ async function handleStep3(session, userText) {
     };
   }
 
-  // intro フェーズ（初回質問）
-  if (parsed?.control?.phase === "intro") {
-    session.stage.turnIndex = 0;
-    return {
-      response: parsed.response || "これから挑戦してみたいことや、やってみたい仕事を教えて！まったくやったことがないものでも大丈夫。ちょっと気になってることでもOKだよ✨",
-      status: session.status,
-      meta: { step: 3, phase: "intro" },
-      drill: session.drill,
-    };
-  }
+  // empathy + deepening フェーズ（STEP2と同じ構造）
+  const { empathy, ask_next, meta } = parsed;
+  if (typeof empathy === "string") {
+    const llmNextStep = Number(meta?.step) || session.step;
+    let nextStep = llmNextStep;
 
-  // empathy または deepening フェーズ
-  if (typeof parsed?.response === "string") {
+    // サーバー側の暴走停止装置（フェイルセーフ）
+    const deepeningCount = Number(meta?.deepening_count) || 0;
+    if (llmNextStep === session.step && deepeningCount >= 3) {
+      nextStep = 4;
+    }
+
+    if (nextStep !== session.step) {
+      // STEP4へ移行
+      session.step = nextStep;
+      session.stage.turnIndex = 0;
+
+      const step4Response = await handleStep4(session, "");
+      const combinedResponse = [empathy, step4Response.response].filter(Boolean).join("\n\n");
+      return {
+        response: combinedResponse || step4Response.response,
+        status: session.status,
+        meta: { step: session.step },
+        drill: step4Response.drill,
+      };
+    }
+
+    // 通常の会話フェーズ（empathy と ask_next を \n\n で結合）
+    const message = [empathy, ask_next].filter(Boolean).join("\n\n") || empathy || "ありがとう。もう少し教えて。";
     return {
-      response: parsed.response,
+      response: message,
       status: session.status,
-      meta: { step: 3, phase: parsed?.control?.phase },
+      meta: { step: session.step },
       drill: session.drill,
     };
   }
@@ -804,6 +830,16 @@ async function handleStep5(session, userText) {
   }
   const parsed = llm.parsed || {};
 
+  // intro フェーズ（初回質問）
+  if (parsed?.control?.phase === "intro") {
+    return {
+      response: parsed.response || "あなた自身を一言で言うと、どんな人？周りからよく言われる「あなたらしさ」もあれば教えて😊",
+      status: session.status,
+      meta: { step: 5 },
+      drill: session.drill,
+    };
+  }
+
   // generation フェーズ（Self確定、STEP6へ移行）
   if (parsed?.status?.self_text && typeof parsed.status.self_text === "string") {
     session.status.self_text = parsed.status.self_text;
@@ -822,22 +858,39 @@ async function handleStep5(session, userText) {
     };
   }
 
-  // intro フェーズ（初回質問）
-  if (parsed?.control?.phase === "intro") {
-    return {
-      response: parsed.response || "あなた自身を一言で言うと、どんな人？周りからよく言われる「あなたらしさ」もあれば教えて😊",
-      status: session.status,
-      meta: { step: 5, phase: "intro" },
-      drill: session.drill,
-    };
-  }
+  // empathy + deepening フェーズ（STEP2/3と同じ構造）
+  const { empathy, ask_next, meta } = parsed;
+  if (typeof empathy === "string") {
+    const llmNextStep = Number(meta?.step) || session.step;
+    let nextStep = llmNextStep;
 
-  // empathy または deepening フェーズ
-  if (typeof parsed?.response === "string") {
+    // サーバー側の暴走停止装置（フェイルセーフ）
+    const deepeningCount = Number(meta?.deepening_count) || 0;
+    if (llmNextStep === session.step && deepeningCount >= 3) {
+      nextStep = 6;
+    }
+
+    if (nextStep !== session.step) {
+      // STEP6へ移行
+      session.step = nextStep;
+      session.stage.turnIndex = 0;
+
+      const step6Response = await handleStep6(session, "");
+      const combinedResponse = [empathy, step6Response.response].filter(Boolean).join("\n\n");
+      return {
+        response: combinedResponse || step6Response.response,
+        status: session.status,
+        meta: { step: session.step },
+        drill: session.drill,
+      };
+    }
+
+    // 通常の会話フェーズ（empathy と ask_next を \n\n で結合）
+    const message = [empathy, ask_next].filter(Boolean).join("\n\n") || empathy || "ありがとう。もう少し教えて。";
     return {
-      response: parsed.response,
+      response: message,
       status: session.status,
-      meta: { step: 5, phase: parsed?.control?.phase },
+      meta: { step: session.step },
       drill: session.drill,
     };
   }
