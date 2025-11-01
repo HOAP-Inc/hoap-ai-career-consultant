@@ -19,9 +19,9 @@ export default function Home() {
   const [sessionId] = useState(() => Math.random().toString(36).slice(2));
   const [step, setStep] = useState(0);
   const [isComposing, setIsComposing] = useState(false);
-  const [aiText, setAiText] = useState("");
+  const [aiTexts, setAiTexts] = useState([]); // 複数の吹き出しを格納
   const [isTyping, setIsTyping] = useState(false);
-  const [userEcho, setUserEcho] = useState(""); 
+  const [userEcho, setUserEcho] = useState("");
   const [choices, setChoices] = useState([]);
 
 function toBadges(resp, _currStep) {
@@ -143,18 +143,20 @@ const raw = await res.text();
 const data = raw ? JSON.parse(raw) : null;
         if (aborted) return;
 
-        // 初回メッセージも \n\n で分割して順次表示
+        // 初回メッセージも \n\n で分割して順次表示（別々の吹き出しとして）
         const responseParts = (data.response || "").split("\n\n").filter(Boolean);
         if (responseParts.length === 0) {
-          setAiText("");
+          setAiTexts([]);
         } else if (responseParts.length === 1) {
-          setAiText(responseParts[0]);
+          setAiTexts([responseParts[0]]);
         } else {
-          setAiText(responseParts[0]);
+          // 最初の吹き出しを即座に表示
+          setAiTexts([responseParts[0]]);
+          // 2つ目以降を3秒ずつ遅延して別の吹き出しとして追加
           for (let i = 1; i < responseParts.length; i++) {
             const index = i;
             setTimeout(() => {
-              setAiText(prev => prev + "\n\n" + responseParts[index]);
+              setAiTexts(prev => [...prev, responseParts[index]]);
             }, 3000 * index);
           }
         }
@@ -204,7 +206,7 @@ setChoices(isChoiceStep(next) ? uniqueByNormalized(inline) : []);
 
   // AI応答が更新されるたびに、ランダムで「手を広げる」を短時間表示
   useEffect(() => {
-    if (!aiText) return;
+    if (aiTexts.length === 0) return;
 
     // すでに「バンザイ」表示中なら邪魔しない（競合回避）
     if (hoapSrc === "/hoap-up.png") return;
@@ -222,7 +224,7 @@ setChoices(isChoiceStep(next) ? uniqueByNormalized(inline) : []);
         revertTimerRef.current = null;
       }, 1600);
     }
-  }, [aiText, hoapSrc]);
+  }, [aiTexts, hoapSrc]);
 
   // スマホのキーボード高さを CSS 変数 --kb に同期
   useEffect(() => {
@@ -270,7 +272,7 @@ setChoices(isChoiceStep(next) ? uniqueByNormalized(inline) : []);
 
     // タイピング開始
     setIsTyping(true);
-    setAiText('');
+    setAiTexts([]);
 
     try {
       const res = await fetch('/api/chat', {
@@ -292,31 +294,31 @@ setChoices(isChoiceStep(next) ? uniqueByNormalized(inline) : []);
         // サーバが JSON を返さない時は落とさず画面に可視化
         const statusLine = `サーバ応答: ${res.status}`;
         const bodyLine = raw ? `本文: ${raw.slice(0, 200)}` : '本文なし';
-        setAiText(`${statusLine}\n${bodyLine}`);
+        setAiTexts([`${statusLine}\n${bodyLine}`]);
         setIsTyping(false);
         return;
       }
 
-      // 本文反映（\n\n で分割して順次表示）
+      // 本文反映（\n\n で分割して別々の吹き出しとして順次表示）
       const responseParts = (data.response || "").split("\n\n").filter(Boolean);
 
       if (responseParts.length === 0) {
-        setAiText("");
+        setAiTexts([]);
         setIsTyping(false);
       } else if (responseParts.length === 1) {
         // 1つだけの場合は即座に表示
-        setAiText(responseParts[0]);
+        setAiTexts([responseParts[0]]);
         setIsTyping(false);
       } else {
-        // 複数ある場合は順次表示
-        setAiText(responseParts[0]); // 最初の部分を即座に表示
+        // 複数ある場合は順次表示（別々の吹き出しとして）
+        setAiTexts([responseParts[0]]); // 最初の吹き出しを即座に表示
         setIsTyping(false);
 
-        // 2つ目以降を3秒ずつ遅延して追加
+        // 2つ目以降を3秒ずつ遅延して別の吹き出しとして追加
         for (let i = 1; i < responseParts.length; i++) {
           const index = i;
           setTimeout(() => {
-            setAiText(prev => prev + "\n\n" + responseParts[index]);
+            setAiTexts(prev => [...prev, responseParts[index]]);
           }, 3000 * index);
         }
       }
@@ -403,13 +405,25 @@ setChoices(isChoiceStep(next) ? uniqueByNormalized(inline) : []);
         <div className="duo-stage__bg" />
         <div className="duo-stage__wrap">
           <img className="duo-stage__hoap" src={hoapSrc} alt="ほーぷちゃん" />
-          <div className={`duo-stage__bubble ${isTyping ? "typing" : ""}`} aria-live="polite">
-            {isTyping ? (
-  <span className="dots"><span>・</span><span>・</span><span>・</span></span>
-) : (
-  showChoices ? "下のボタンから選んでね！" : (aiText || "…")
-)}
-          </div>
+          {isTyping ? (
+            <div className="duo-stage__bubble typing" aria-live="polite">
+              <span className="dots"><span>・</span><span>・</span><span>・</span></span>
+            </div>
+          ) : showChoices ? (
+            <div className="duo-stage__bubble" aria-live="polite">
+              下のボタンから選んでね！
+            </div>
+          ) : aiTexts.length === 0 ? (
+            <div className="duo-stage__bubble" aria-live="polite">
+              …
+            </div>
+          ) : (
+            aiTexts.map((text, index) => (
+              <div key={index} className="duo-stage__bubble" aria-live="polite" style={{ marginBottom: index < aiTexts.length - 1 ? '12px' : '0' }}>
+                {text}
+              </div>
+            ))
+          )}
         </div>
       </section>
 
