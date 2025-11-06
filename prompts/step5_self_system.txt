@@ -62,7 +62,7 @@ user_text に何か内容がある場合は、必ず Phase 2（empathy + deepeni
 empathy と ask_next（深堀り質問）を**必ず両方**出力すること。
 
 {
-  "empathy": "string(40〜70字・疑問文禁止)",
+  "empathy": "string(60〜100字・3〜4文・疑問文禁止)",
   "ask_next": "string|null（深堀り質問・句点で終える・疑問符禁止）",
   "meta": {
     "step": "number | null（Self確定時は 6 を返す）",
@@ -71,7 +71,7 @@ empathy と ask_next（深堀り質問）を**必ず両方**出力すること�
 }
 
 ■ empathy（共感）
-- エコー＋受け止めの一文。質問は禁止。40〜70字
+- エコー＋受け止め。質問は禁止。60〜100字、3〜4文で丁寧に
 - 原文キーワードを短く引用する
 
 例：
