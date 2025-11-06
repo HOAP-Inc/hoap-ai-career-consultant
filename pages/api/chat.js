@@ -744,6 +744,14 @@ async function handleStep3(session, userText) {
 
     if (nextStep !== session.step) {
       // STEP4へ移行
+      // フェイルセーフで遷移する場合、簡易的にwill_textを生成
+      const fallbackWill = userText || "これから挑戦したいことについて伺いました。";
+      session.status.will_text = fallbackWill;
+      if (!Array.isArray(session.status.will_texts)) {
+        session.status.will_texts = [];
+      }
+      session.status.will_texts.push(fallbackWill);
+
       session.step = nextStep;
       session.stage.turnIndex = 0;
       // deepening_countをリセット
@@ -932,6 +940,16 @@ async function handleStep4(session, userText) {
   }
 
   // フォールバック
+  // userTextが空（STEP遷移時）の場合は、intro質問を返す
+  if (!userText || !userText.trim()) {
+    return {
+      response: "働く上で『ここだけは譲れないな』って思うこと、ある？職場の雰囲気でも働き方でもOKだよ✨",
+      status: session.status,
+      meta: { step: 4, phase: "intro" },
+      drill: session.drill,
+    };
+  }
+
   return {
     response: "あなたの譲れない条件の整理を続けているよ。気になる条件を教えてね。",
     status: session.status,
