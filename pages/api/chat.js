@@ -531,6 +531,9 @@ async function handleStep2(session, userText) {
 
   // intro フェーズの処理（STEP2初回質問）
   if (parsed?.control?.phase === "intro") {
+    // deepening_countをリセット
+    if (!session.meta) session.meta = {};
+    session.meta.step2_deepening_count = 0;
     return {
       response: parsed.response || "次は、あなたが今までやってきたことでこれからも活かしていきたいこと、あなたの強みを教えて！",
       status: session.status,
@@ -573,14 +576,27 @@ async function handleStep2(session, userText) {
     session.meta.last_can_paraphrase_norm = paraphraseNorm;
   }
 
+  // サーバー側でdeepening_countを管理（フェイルセーフ）
+  if (!session.meta) session.meta = {};
+  if (typeof session.meta.step2_deepening_count !== "number") {
+    session.meta.step2_deepening_count = 0;
+  }
+  session.meta.step2_deepening_count += 1;
+
   const llmNextStep = Number(meta?.step) || session.step;
 
   let nextStep = llmNextStep;
   if (llmNextStep === session.step) {
+    // サーバー側の暴走停止装置（フェイルセーフ）
+    const deepeningCount = Number(meta?.deepening_count) || 0;
+    const serverCount = session.meta.step2_deepening_count || 0;
+
     if (session.meta.can_repeat_count >= 2) {
       nextStep = 3;
-    } else if (Number(session.meta.deepening_attempt_total || 0) >= 3) {
+    } else if (deepeningCount >= 3 || serverCount >= 3) {
+      // LLMのdeepening_countまたはサーバー側カウントが3回に達したら強制終了
       nextStep = 3;
+      console.log(`[STEP2 FAILSAFE] Forcing transition to STEP3. LLM count: ${deepeningCount}, Server count: ${serverCount}`);
     }
   }
 
@@ -588,6 +604,8 @@ async function handleStep2(session, userText) {
     session.status.can_text = paraphraseDisplay;
     session.step = nextStep;
     session.stage.turnIndex = 0;
+    // deepening_countをリセット
+    if (session.meta) session.meta.step2_deepening_count = 0;
 
     switch (nextStep) {
       case 3: {
@@ -645,6 +663,9 @@ async function handleStep3(session, userText) {
 
   // intro フェーズ（初回質問）
   if (parsed?.control?.phase === "intro") {
+    // deepening_countをリセット
+    if (!session.meta) session.meta = {};
+    session.meta.step3_deepening_count = 0;
     return {
       response: parsed.response || "これから挑戦してみたいことや、やってみたい仕事を教えて！まったくやったことがないものでも大丈夫。ちょっと気になってることでもOKだよ✨",
       status: session.status,
@@ -663,6 +684,8 @@ async function handleStep3(session, userText) {
     const nextStep = Number(parsed?.meta?.step) || 4;
     session.step = nextStep;
     session.stage.turnIndex = 0;
+    // deepening_countをリセット
+    if (session.meta) session.meta.step3_deepening_count = 0;
 
     // STEP4の初回質問を取得して結合
     const step4Response = await handleStep4(session, "");
@@ -679,19 +702,33 @@ async function handleStep3(session, userText) {
   // empathy + deepening フェーズ（STEP2と同じ構造）
   const { empathy, ask_next, meta } = parsed;
   if (typeof empathy === "string") {
+    // サーバー側でdeepening_countを管理（フェイルセーフ）
+    if (!session.meta) session.meta = {};
+    if (typeof session.meta.step3_deepening_count !== "number") {
+      session.meta.step3_deepening_count = 0;
+    }
+    session.meta.step3_deepening_count += 1;
+
     const llmNextStep = Number(meta?.step) || session.step;
     let nextStep = llmNextStep;
 
     // サーバー側の暴走停止装置（フェイルセーフ）
+    // LLMのdeepening_countとサーバー側のカウントの両方をチェック
     const deepeningCount = Number(meta?.deepening_count) || 0;
-    if (llmNextStep === session.step && deepeningCount >= 3) {
+    const serverCount = session.meta.step3_deepening_count || 0;
+
+    if (llmNextStep === session.step && (deepeningCount >= 3 || serverCount >= 3)) {
+      // 3回に達したら強制的にSTEP4へ
       nextStep = 4;
+      console.log(`[STEP3 FAILSAFE] Forcing transition to STEP4. LLM count: ${deepeningCount}, Server count: ${serverCount}`);
     }
 
     if (nextStep !== session.step) {
       // STEP4へ移行
       session.step = nextStep;
       session.stage.turnIndex = 0;
+      // deepening_countをリセット
+      session.meta.step3_deepening_count = 0;
 
       const step4Response = await handleStep4(session, "");
       const combinedResponse = [empathy, step4Response.response].filter(Boolean).join("\n\n");
@@ -853,6 +890,9 @@ async function handleStep5(session, userText) {
 
   // intro フェーズ（初回質問）
   if (parsed?.control?.phase === "intro") {
+    // deepening_countをリセット
+    if (!session.meta) session.meta = {};
+    session.meta.step5_deepening_count = 0;
     return {
       response: parsed.response || "あなた自身を一言で言うと、どんな人？周りからよく言われる「あなたらしさ」もあれば教えて😊",
       status: session.status,
@@ -867,6 +907,8 @@ async function handleStep5(session, userText) {
     const nextStep = Number(parsed?.meta?.step) || 6;
     session.step = nextStep;
     session.stage.turnIndex = 0;
+    // deepening_countをリセット
+    if (session.meta) session.meta.step5_deepening_count = 0;
 
     // STEP6の処理を取得して結合
     const step6Response = await handleStep6(session, "");
@@ -883,19 +925,33 @@ async function handleStep5(session, userText) {
   // empathy + deepening フェーズ（STEP2/3と同じ構造）
   const { empathy, ask_next, meta } = parsed;
   if (typeof empathy === "string") {
+    // サーバー側でdeepening_countを管理（フェイルセーフ）
+    if (!session.meta) session.meta = {};
+    if (typeof session.meta.step5_deepening_count !== "number") {
+      session.meta.step5_deepening_count = 0;
+    }
+    session.meta.step5_deepening_count += 1;
+
     const llmNextStep = Number(meta?.step) || session.step;
     let nextStep = llmNextStep;
 
     // サーバー側の暴走停止装置（フェイルセーフ）
+    // LLMのdeepening_countとサーバー側のカウントの両方をチェック
     const deepeningCount = Number(meta?.deepening_count) || 0;
-    if (llmNextStep === session.step && deepeningCount >= 3) {
+    const serverCount = session.meta.step5_deepening_count || 0;
+
+    if (llmNextStep === session.step && (deepeningCount >= 3 || serverCount >= 3)) {
+      // 3回に達したら強制的にSTEP6へ
       nextStep = 6;
+      console.log(`[STEP5 FAILSAFE] Forcing transition to STEP6. LLM count: ${deepeningCount}, Server count: ${serverCount}`);
     }
 
     if (nextStep !== session.step) {
       // STEP6へ移行
       session.step = nextStep;
       session.stage.turnIndex = 0;
+      // deepening_countをリセット
+      session.meta.step5_deepening_count = 0;
 
       const step6Response = await handleStep6(session, "");
       // 共感 → 中間メッセージ → STEP6の初回質問を結合
