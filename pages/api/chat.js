@@ -801,29 +801,32 @@ function applyMustStatus(session, status, meta) {
 }
 
 async function handleStep4(session, userText) {
+  // サーバー側カウンター初期化（LLM呼び出し前に確実に初期化）
+  if (!session.meta) session.meta = {};
+  if (typeof session.meta.step4_deepening_count !== "number") {
+    session.meta.step4_deepening_count = 0;
+  }
+
   // userTextがある場合のみturnIndexをインクリメント（STEP遷移時はインクリメントしない）
   if (userText && userText.trim()) {
     session.stage.turnIndex += 1;
   }
+
+  // LLMにはサーバー側カウンターを送る（step4_deepening_countをdeepeningCountとして送信）
   const payload = {
     locale: "ja",
     stage: { turn_index: session.stage.turnIndex },
     user_text: userText,
     recent_texts: session.history.slice(-6).map(item => item.text),
     status: session.status,
-    deepening_attempt_total: session.meta.deepening_attempt_total,
+    deepening_attempt_total: session.meta.step4_deepening_count,  // サーバー側カウンターを送る
   };
+
   const llm = await callLLM(4, payload, session, { model: "gpt-4o" });
   if (!llm.ok) {
     return buildSchemaError(4, session, "あなたの譲れない条件の整理に失敗しちゃった。もう一度教えてもらえる？", llm.error);
   }
   const parsed = llm.parsed || {};
-
-  // サーバー側カウンター初期化
-  if (!session.meta) session.meta = {};
-  if (typeof session.meta.step4_deepening_count !== "number") {
-    session.meta.step4_deepening_count = 0;
-  }
 
   // intro フェーズ（初回質問）
   if (parsed?.control?.phase === "intro") {
@@ -832,7 +835,7 @@ async function handleStep4(session, userText) {
     return {
       response: parsed.response || "働く上で『ここだけは譲れないな』って思うこと、ある？職場の雰囲気でも働き方でもOKだよ✨",
       status: session.status,
-      meta: { step: 4, phase: "intro" },
+      meta: { step: 4, phase: "intro", deepening_count: 0 },
       drill: session.drill,
     };
   }
@@ -840,6 +843,7 @@ async function handleStep4(session, userText) {
   // ユーザーが応答した場合（intro以外）、カウンターを増やす
   if (userText && userText.trim()) {
     session.meta.step4_deepening_count += 1;
+    console.log(`[STEP4] User responded. Counter: ${session.meta.step4_deepening_count}`);
   }
 
   // サーバー側の暴走停止装置（フェイルセーフ） - generationより前にチェック
@@ -858,7 +862,7 @@ async function handleStep4(session, userText) {
     return {
       response: combinedResponse || step5Response.response,
       status: session.status,
-      meta: { step: session.step, deepening_attempt_total: session.meta.deepening_attempt_total },
+      meta: { step: session.step, deepening_count: serverCount },
       drill: step5Response.drill,
     };
   }
@@ -884,7 +888,7 @@ async function handleStep4(session, userText) {
         return {
           response: combinedResponse || step5Response.response,
           status: session.status,
-          meta: { step: session.step, deepening_attempt_total: session.meta.deepening_attempt_total },
+          meta: { step: session.step, deepening_count: 0 },
           drill: step5Response.drill,
         };
       }
@@ -895,7 +899,7 @@ async function handleStep4(session, userText) {
         return {
           response: combinedResponse || step6Response.response,
           status: session.status,
-          meta: { step: session.step, deepening_attempt_total: session.meta.deepening_attempt_total },
+          meta: { step: session.step, deepening_count: 0 },
           drill: step6Response.drill,
         };
       }
@@ -904,27 +908,12 @@ async function handleStep4(session, userText) {
         return {
           response: session.status.must_text || "譲れない条件を受け取ったよ。",
           status: session.status,
-          meta: { step: session.step, deepening_attempt_total: session.meta.deepening_attempt_total },
+          meta: { step: session.step, deepening_count: 0 },
           drill: session.drill,
         };
     }
   }
 
-  if (parsed?.meta?.deepening_attempt != null) {
-    const increment = Number(parsed.meta.deepening_attempt);
-    if (!Number.isNaN(increment) && increment > 0) {
-      session.meta.deepening_attempt_total += increment;
-      if (session.meta.deepening_attempt_total > 3) {
-        session.meta.deepening_attempt_total = 3;
-      }
-    }
-  }
-  if (parsed?.meta?.deepening_attempt_total != null) {
-    const total = Number(parsed.meta.deepening_attempt_total);
-    if (!Number.isNaN(total)) {
-      session.meta.deepening_attempt_total = Math.min(total, 3);
-    }
-  }
   // 通常の会話フェーズ（empathy, candidate_extraction, direction_check, deepening など）
   if (parsed?.control?.phase) {
     return {
@@ -933,7 +922,7 @@ async function handleStep4(session, userText) {
       meta: {
         step: 4,
         phase: parsed.control.phase,
-        deepening_attempt_total: session.meta.deepening_attempt_total,
+        deepening_count: serverCount,
       },
       drill: session.drill,
     };
@@ -945,7 +934,7 @@ async function handleStep4(session, userText) {
     return {
       response: "働く上で『ここだけは譲れないな』って思うこと、ある？職場の雰囲気でも働き方でもOKだよ✨",
       status: session.status,
-      meta: { step: 4, phase: "intro" },
+      meta: { step: 4, phase: "intro", deepening_count: 0 },
       drill: session.drill,
     };
   }
@@ -953,7 +942,7 @@ async function handleStep4(session, userText) {
   return {
     response: "あなたの譲れない条件の整理を続けているよ。気になる条件を教えてね。",
     status: session.status,
-    meta: { step: 4, deepening_attempt_total: session.meta.deepening_attempt_total },
+    meta: { step: 4, deepening_count: serverCount },
     drill: session.drill,
   };
 }
