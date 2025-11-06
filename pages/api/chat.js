@@ -532,7 +532,10 @@ function buildStepPayload(session, userText, recentCount) {
 }
 
 async function handleStep2(session, userText) {
-  session.stage.turnIndex += 1;
+  // userTextがある場合のみturnIndexをインクリメント（STEP遷移時はインクリメントしない）
+  if (userText && userText.trim()) {
+    session.stage.turnIndex += 1;
+  }
   const payload = buildStepPayload(session, userText, 3);
   const llm = await callLLM(2, payload, session, { model: "gpt-4o" });
 
@@ -666,7 +669,10 @@ async function handleStep2(session, userText) {
 
 
 async function handleStep3(session, userText) {
-  session.stage.turnIndex += 1;
+  // userTextがある場合のみturnIndexをインクリメント（STEP遷移時はインクリメントしない）
+  if (userText && userText.trim()) {
+    session.stage.turnIndex += 1;
+  }
   const payload = buildStepPayload(session, userText, 5);
   const llm = await callLLM(3, payload, session, { model: "gpt-4o" });
   if (!llm.ok) {
@@ -787,7 +793,10 @@ function applyMustStatus(session, status, meta) {
 }
 
 async function handleStep4(session, userText) {
-  session.stage.turnIndex += 1;
+  // userTextがある場合のみturnIndexをインクリメント（STEP遷移時はインクリメントしない）
+  if (userText && userText.trim()) {
+    session.stage.turnIndex += 1;
+  }
   const payload = {
     locale: "ja",
     stage: { turn_index: session.stage.turnIndex },
@@ -932,7 +941,10 @@ async function handleStep4(session, userText) {
 }
 
 async function handleStep5(session, userText) {
-  session.stage.turnIndex += 1;
+  // userTextがある場合のみturnIndexをインクリメント（STEP遷移時はインクリメントしない）
+  if (userText && userText.trim()) {
+    session.stage.turnIndex += 1;
+  }
   const payload = buildStepPayload(session, userText, 6);
   const llm = await callLLM(5, payload, session, { model: "gpt-4o" });
   if (!llm.ok) {
