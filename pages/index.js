@@ -19,9 +19,9 @@ export default function Home() {
   const [sessionId] = useState(() => Math.random().toString(36).slice(2));
   const [step, setStep] = useState(0);
   const [isComposing, setIsComposing] = useState(false);
-  const [aiText, setAiText] = useState("");
+  const [aiTexts, setAiTexts] = useState([]); // 複数の吹き出しを格納
   const [isTyping, setIsTyping] = useState(false);
-  const [userEcho, setUserEcho] = useState(""); 
+  const [userEcho, setUserEcho] = useState("");
   const [choices, setChoices] = useState([]);
 
 function toBadges(resp, _currStep) {
@@ -34,12 +34,12 @@ function toBadges(resp, _currStep) {
     Array.isArray(arr) && arr.length ? arr.join("／") : "";
 
   return {
-    // 資格：当面は role_ids を仮に表示。後で qual_ids に差し替え可。
-    資格: joinIds(st?.qual_ids) || joinIds(st?.role_ids) || "未入力",
+    // 資格：licenses配列を表示（資格名）、なければqual_ids（ID）、なければrole_ids（ID）
+    資格: joinTxt(st?.licenses) || joinIds(st?.qual_ids) || joinIds(st?.role_ids) || "未入力",
     // Can / Will：配列でも単文でも受ける
     Can: Array.isArray(st?.can_texts) ? st.can_texts.join("／")
        : (st?.can_text ? String(st.can_text) : "未入力"),
-    
+
     Will: Array.isArray(st?.will_texts) ? st.will_texts.join("／")
         : (st?.will_text ? String(st.will_text) : "未入力"),
     Must: (joinIds(st?.must_have_ids) || joinTxt(st?.memo?.must_have_raw) || "未入力"),
@@ -143,7 +143,23 @@ const raw = await res.text();
 const data = raw ? JSON.parse(raw) : null;
         if (aborted) return;
 
-        setAiText(data.response);
+        // 初回メッセージも \n\n で分割して順次表示（差し替え形式）
+        const responseParts = (data.response || "").split("\n\n").filter(Boolean);
+        if (responseParts.length === 0) {
+          setAiTexts([]);
+        } else if (responseParts.length === 1) {
+          setAiTexts([responseParts[0]]);
+        } else {
+          // 最初の吹き出しを即座に表示
+          setAiTexts([responseParts[0]]);
+          // 2つ目以降を3秒ずつ遅延して差し替え（追加ではなく）
+          for (let i = 1; i < responseParts.length; i++) {
+            const index = i;
+            setTimeout(() => {
+              setAiTexts([responseParts[index]]); // 配列全体を差し替え
+            }, 3000 * index);
+          }
+        }
 
         const next = data?.meta?.step ?? 0;
         setStatus(toBadges(data, next));
@@ -190,7 +206,7 @@ setChoices(isChoiceStep(next) ? uniqueByNormalized(inline) : []);
 
   // AI応答が更新されるたびに、ランダムで「手を広げる」を短時間表示
   useEffect(() => {
-    if (!aiText) return;
+    if (aiTexts.length === 0) return;
 
     // すでに「バンザイ」表示中なら邪魔しない（競合回避）
     if (hoapSrc === "/hoap-up.png") return;
@@ -208,7 +224,7 @@ setChoices(isChoiceStep(next) ? uniqueByNormalized(inline) : []);
         revertTimerRef.current = null;
       }, 1600);
     }
-  }, [aiText, hoapSrc]);
+  }, [aiTexts, hoapSrc]);
 
   // スマホのキーボード高さを CSS 変数 --kb に同期
   useEffect(() => {
@@ -256,7 +272,7 @@ setChoices(isChoiceStep(next) ? uniqueByNormalized(inline) : []);
 
     // タイピング開始
     setIsTyping(true);
-    setAiText('');
+    setAiTexts([]);
 
     try {
       const res = await fetch('/api/chat', {
@@ -278,14 +294,34 @@ setChoices(isChoiceStep(next) ? uniqueByNormalized(inline) : []);
         // サーバが JSON を返さない時は落とさず画面に可視化
         const statusLine = `サーバ応答: ${res.status}`;
         const bodyLine = raw ? `本文: ${raw.slice(0, 200)}` : '本文なし';
-        setAiText(`${statusLine}\n${bodyLine}`);
+        setAiTexts([`${statusLine}\n${bodyLine}`]);
         setIsTyping(false);
         return;
       }
 
-      // 本文反映
-      setAiText(data.response);
-      setIsTyping(false);
+      // 本文反映（\n\n で分割して別々の吹き出しとして順次表示）
+      const responseParts = (data.response || "").split("\n\n").filter(Boolean);
+
+      if (responseParts.length === 0) {
+        setAiTexts([]);
+        setIsTyping(false);
+      } else if (responseParts.length === 1) {
+        // 1つだけの場合は即座に表示
+        setAiTexts([responseParts[0]]);
+        setIsTyping(false);
+      } else {
+        // 複数ある場合は順次表示（差し替え形式）
+        setAiTexts([responseParts[0]]); // 最初の吹き出しを即座に表示
+        setIsTyping(false);
+
+        // 2つ目以降を3秒ずつ遅延して差し替え（追加ではなく置き換え）
+        for (let i = 1; i < responseParts.length; i++) {
+          const index = i;
+          setTimeout(() => {
+            setAiTexts([responseParts[index]]); // 配列全体を差し替え
+          }, 3000 * index);
+        }
+      }
 
       // 次ステップ
       const nextStep = data.meta && data.meta.step != null ? data.meta.step : step;
@@ -303,7 +339,7 @@ setChoices(isChoiceStep(next) ? uniqueByNormalized(inline) : []);
       );
     } catch (err) {
       console.error(err);
-      setAiText('通信エラーが発生したよ🙏');
+      setAiTexts(['通信エラーが発生したよ🙏']);
       setIsTyping(false);
     } finally {
       setSending(false);
@@ -369,12 +405,26 @@ setChoices(isChoiceStep(next) ? uniqueByNormalized(inline) : []);
         <div className="duo-stage__bg" />
         <div className="duo-stage__wrap">
           <img className="duo-stage__hoap" src={hoapSrc} alt="ほーぷちゃん" />
-          <div className={`duo-stage__bubble ${isTyping ? "typing" : ""}`} aria-live="polite">
+          <div className="duo-stage__bubbles-container">
             {isTyping ? (
-  <span className="dots"><span>・</span><span>・</span><span>・</span></span>
-) : (
-  showChoices ? "下のボタンから選んでね！" : (aiText || "…")
-)}
+              <div className="duo-stage__bubble typing" aria-live="polite">
+                <span className="dots"><span>・</span><span>・</span><span>・</span></span>
+              </div>
+            ) : showChoices ? (
+              <div className="duo-stage__bubble" aria-live="polite">
+                下のボタンから選んでね！
+              </div>
+            ) : aiTexts.length === 0 ? (
+              <div className="duo-stage__bubble" aria-live="polite">
+                …
+              </div>
+            ) : (
+              aiTexts.map((text, index) => (
+                <div key={index} className="duo-stage__bubble" aria-live="polite">
+                  {text}
+                </div>
+              ))
+            )}
           </div>
         </div>
       </section>
