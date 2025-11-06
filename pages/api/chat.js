@@ -514,7 +514,7 @@ if (uniqueLabels.length === 1 && resolved.length === 0) {
   }
 
   return {
-    response: "ごめん、ほーぷちゃんの中にはその資格名がないみたい。正式名称で教えてみて！",
+    response: "ごめん、その資格名が見つからなかったよ。正式名称で教えてくれる？（まだ資格の登録中だよ）",
     status: session.status,
     meta: { step: 1 },
     drill: session.drill,
@@ -625,7 +625,7 @@ async function handleStep2(session, userText) {
         // STEP3の初回質問を取得
         const step3Response = await handleStep3(session, "");
         // STEP2の共感 → 中間メッセージ → STEP3の初回質問を結合して返す
-        const combinedResponse = [empathy, "ありがとう！それじゃあ次に進むね", step3Response.response].filter(Boolean).join("\n\n");
+        const combinedResponse = [empathy, "ありがとう！", step3Response.response].filter(Boolean).join("\n\n");
         return {
           response: combinedResponse || step3Response.response,
           status: step3Response.status,
@@ -703,7 +703,7 @@ async function handleStep3(session, userText) {
     // STEP4の初回質問を取得して結合
     const step4Response = await handleStep4(session, "");
     // Will生成文 → 中間メッセージ → STEP4の初回質問を結合
-    const combinedResponse = [parsed.status.will_text, "ありがとう！それじゃあ次に進むね", step4Response.response].filter(Boolean).join("\n\n");
+    const combinedResponse = [parsed.status.will_text, "ありがとう！", step4Response.response].filter(Boolean).join("\n\n");
     return {
       response: combinedResponse || step4Response.response,
       status: session.status,
@@ -904,7 +904,7 @@ async function handleStep4(session, userText) {
       session.meta.step4_deepening_count = 0;
 
       const step5Response = await handleStep5(session, "");
-      const combinedResponse = [session.status.must_text, "ありがとう！それじゃあ次に進むね", step5Response.response].filter(Boolean).join("\n\n");
+      const combinedResponse = [session.status.must_text, "ありがとう！", step5Response.response].filter(Boolean).join("\n\n");
       return {
         response: combinedResponse || step5Response.response,
         status: session.status,
@@ -966,7 +966,7 @@ async function handleStep5(session, userText) {
     // STEP6の処理を取得して結合
     const step6Response = await handleStep6(session, "");
     // Self生成文 → 中間メッセージ → STEP6の初回質問を結合
-    const combinedResponse = [session.status.self_text, "ありがとう！それじゃあ次に進むね", step6Response.response].filter(Boolean).join("\n\n");
+    const combinedResponse = [session.status.self_text, "ありがとう！", step6Response.response].filter(Boolean).join("\n\n");
     return {
       response: combinedResponse || step6Response.response,
       status: session.status,
@@ -1008,7 +1008,7 @@ async function handleStep5(session, userText) {
 
       const step6Response = await handleStep6(session, "");
       // 共感 → 中間メッセージ → STEP6の初回質問を結合
-      const combinedResponse = [empathy, "ありがとう！それじゃあ次に進むね", step6Response.response].filter(Boolean).join("\n\n");
+      const combinedResponse = [empathy, "ありがとう！", step6Response.response].filter(Boolean).join("\n\n");
       return {
         response: combinedResponse || step6Response.response,
         status: session.status,
