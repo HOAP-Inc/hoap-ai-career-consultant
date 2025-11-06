@@ -593,8 +593,8 @@ async function handleStep2(session, userText) {
       case 3: {
         // STEP3の初回質問を取得
         const step3Response = await handleStep3(session, "");
-        // STEP2の共感 + STEP3の初回質問を結合して返す
-        const combinedResponse = [empathy, step3Response.response].filter(Boolean).join("\n\n");
+        // STEP2の共感 → 中間メッセージ → STEP3の初回質問を結合して返す
+        const combinedResponse = [empathy, "ありがとう！それじゃあ次に進むね", step3Response.response].filter(Boolean).join("\n\n");
         return {
           response: combinedResponse || step3Response.response,
           status: step3Response.status,
@@ -666,7 +666,8 @@ async function handleStep3(session, userText) {
 
     // STEP4の初回質問を取得して結合
     const step4Response = await handleStep4(session, "");
-    const combinedResponse = [parsed.status.will_text, step4Response.response].filter(Boolean).join("\n\n");
+    // Will生成文 → 中間メッセージ → STEP4の初回質問を結合
+    const combinedResponse = [parsed.status.will_text, "ありがとう！それじゃあ次に進むね", step4Response.response].filter(Boolean).join("\n\n");
     return {
       response: combinedResponse || step4Response.response,
       status: session.status,
@@ -869,7 +870,8 @@ async function handleStep5(session, userText) {
 
     // STEP6の処理を取得して結合
     const step6Response = await handleStep6(session, "");
-    const combinedResponse = [session.status.self_text, step6Response.response].filter(Boolean).join("\n\n");
+    // Self生成文 → 中間メッセージ → STEP6の初回質問を結合
+    const combinedResponse = [session.status.self_text, "ありがとう！それじゃあ次に進むね", step6Response.response].filter(Boolean).join("\n\n");
     return {
       response: combinedResponse || step6Response.response,
       status: session.status,
@@ -896,7 +898,8 @@ async function handleStep5(session, userText) {
       session.stage.turnIndex = 0;
 
       const step6Response = await handleStep6(session, "");
-      const combinedResponse = [empathy, step6Response.response].filter(Boolean).join("\n\n");
+      // 共感 → 中間メッセージ → STEP6の初回質問を結合
+      const combinedResponse = [empathy, "ありがとう！それじゃあ次に進むね", step6Response.response].filter(Boolean).join("\n\n");
       return {
         response: combinedResponse || step6Response.response,
         status: session.status,
