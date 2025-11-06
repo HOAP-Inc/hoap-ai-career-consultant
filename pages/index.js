@@ -34,13 +34,8 @@ function toBadges(resp, _currStep) {
     Array.isArray(arr) && arr.length ? arr.join("／") : "";
 
   return {
-    // 資格：licenses配列（資格名）とqual_ids（ID）を両方表示
-    資格: (() => {
-      const names = joinTxt(st?.licenses);
-      const ids = joinIds(st?.qual_ids) || joinIds(st?.role_ids);
-      if (names && ids) return `${names} (${ids})`;
-      return names || ids || "未入力";
-    })(),
+    // 資格：qual_ids（ID）、なければrole_ids（ID）のみを表示
+    資格: joinIds(st?.qual_ids) || joinIds(st?.role_ids) || "未入力",
     // Can / Will：配列でも単文でも受ける
     Can: Array.isArray(st?.can_texts) ? st.can_texts.join("／")
        : (st?.can_text ? String(st.can_text) : "未入力"),

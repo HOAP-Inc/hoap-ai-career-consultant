@@ -219,6 +219,16 @@ function normalizeSession(session) {
   if (typeof session.meta.deepening_attempt_total !== "number") {
     session.meta.deepening_attempt_total = 0;
   }
+  // セッション移行：既存セッションに新しいカウンターフィールドを初期化
+  if (typeof session.meta.step2_deepening_count !== "number") {
+    session.meta.step2_deepening_count = 0;
+  }
+  if (typeof session.meta.step3_deepening_count !== "number") {
+    session.meta.step3_deepening_count = 0;
+  }
+  if (typeof session.meta.step5_deepening_count !== "number") {
+    session.meta.step5_deepening_count = 0;
+  }
   if (!session.step || typeof session.step !== "number") session.step = 1;
   return session;
 }
