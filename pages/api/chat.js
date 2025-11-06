@@ -645,6 +645,9 @@ async function handleStep3(session, userText) {
 
   // intro フェーズ（初回質問）
   if (parsed?.control?.phase === "intro") {
+    // deepening_countをリセット
+    if (!session.meta) session.meta = {};
+    session.meta.step3_deepening_count = 0;
     return {
       response: parsed.response || "これから挑戦してみたいことや、やってみたい仕事を教えて！まったくやったことがないものでも大丈夫。ちょっと気になってることでもOKだよ✨",
       status: session.status,
@@ -663,6 +666,8 @@ async function handleStep3(session, userText) {
     const nextStep = Number(parsed?.meta?.step) || 4;
     session.step = nextStep;
     session.stage.turnIndex = 0;
+    // deepening_countをリセット
+    if (session.meta) session.meta.step3_deepening_count = 0;
 
     // STEP4の初回質問を取得して結合
     const step4Response = await handleStep4(session, "");
@@ -679,19 +684,33 @@ async function handleStep3(session, userText) {
   // empathy + deepening フェーズ（STEP2と同じ構造）
   const { empathy, ask_next, meta } = parsed;
   if (typeof empathy === "string") {
+    // サーバー側でdeepening_countを管理（フェイルセーフ）
+    if (!session.meta) session.meta = {};
+    if (typeof session.meta.step3_deepening_count !== "number") {
+      session.meta.step3_deepening_count = 0;
+    }
+    session.meta.step3_deepening_count += 1;
+
     const llmNextStep = Number(meta?.step) || session.step;
     let nextStep = llmNextStep;
 
     // サーバー側の暴走停止装置（フェイルセーフ）
+    // LLMのdeepening_countとサーバー側のカウントの両方をチェック
     const deepeningCount = Number(meta?.deepening_count) || 0;
-    if (llmNextStep === session.step && deepeningCount >= 3) {
+    const serverCount = session.meta.step3_deepening_count || 0;
+
+    if (llmNextStep === session.step && (deepeningCount >= 3 || serverCount >= 3)) {
+      // 3回に達したら強制的にSTEP4へ
       nextStep = 4;
+      console.log(`[STEP3 FAILSAFE] Forcing transition to STEP4. LLM count: ${deepeningCount}, Server count: ${serverCount}`);
     }
 
     if (nextStep !== session.step) {
       // STEP4へ移行
       session.step = nextStep;
       session.stage.turnIndex = 0;
+      // deepening_countをリセット
+      session.meta.step3_deepening_count = 0;
 
       const step4Response = await handleStep4(session, "");
       const combinedResponse = [empathy, step4Response.response].filter(Boolean).join("\n\n");
