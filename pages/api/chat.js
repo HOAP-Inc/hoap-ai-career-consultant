@@ -226,6 +226,9 @@ function normalizeSession(session) {
   if (typeof session.meta.step3_deepening_count !== "number") {
     session.meta.step3_deepening_count = 0;
   }
+  if (typeof session.meta.step4_deepening_count !== "number") {
+    session.meta.step4_deepening_count = 0;
+  }
   if (typeof session.meta.step5_deepening_count !== "number") {
     session.meta.step5_deepening_count = 0;
   }
@@ -801,6 +804,9 @@ async function handleStep4(session, userText) {
 
   // intro フェーズ（初回質問）
   if (parsed?.control?.phase === "intro") {
+    // deepening_countをリセット
+    if (!session.meta) session.meta = {};
+    session.meta.step4_deepening_count = 0;
     return {
       response: parsed.response || "働く上で『ここだけは譲れないな』って思うこと、ある？職場の雰囲気でも働き方でもOKだよ✨",
       status: session.status,
@@ -819,6 +825,8 @@ async function handleStep4(session, userText) {
     // セッションを次STEPにセットして、次STEPの初回質問を取得
     session.step = nextStep;
     session.stage.turnIndex = 0;
+    // deepening_countをリセット
+    if (session.meta) session.meta.step4_deepening_count = 0;
 
     switch (nextStep) {
       case 5: {
@@ -870,6 +878,41 @@ async function handleStep4(session, userText) {
     }
   }
   if (parsed?.control?.phase) {
+    // サーバー側でdeepening_countを管理（フェイルセーフ）
+    if (!session.meta) session.meta = {};
+    if (typeof session.meta.step4_deepening_count !== "number") {
+      session.meta.step4_deepening_count = 0;
+    }
+
+    // deepeningフェーズの場合のみカウンターを増やす
+    if (parsed.control.phase === "deepening") {
+      session.meta.step4_deepening_count += 1;
+    }
+
+    // サーバー側の暴走停止装置（フェイルセーフ）
+    const serverCount = session.meta.step4_deepening_count || 0;
+    const totalAttempt = session.meta.deepening_attempt_total || 0;
+
+    if (serverCount >= 3 || totalAttempt >= 3) {
+      // 3回に達したら強制的にSTEP5へ（フォールバック）
+      console.log(`[STEP4 FAILSAFE] Forcing transition to STEP5. Server count: ${serverCount}, Total attempt: ${totalAttempt}`);
+
+      // 簡単なmust_textを生成してSTEP5に遷移
+      session.status.must_text = userText || "譲れない条件について伺いました。";
+      session.step = 5;
+      session.stage.turnIndex = 0;
+      session.meta.step4_deepening_count = 0;
+
+      const step5Response = await handleStep5(session, "");
+      const combinedResponse = [session.status.must_text, "ありがとう！それじゃあ次に進むね", step5Response.response].filter(Boolean).join("\n\n");
+      return {
+        response: combinedResponse || step5Response.response,
+        status: session.status,
+        meta: { step: session.step, deepening_attempt_total: session.meta.deepening_attempt_total },
+        drill: step5Response.drill,
+      };
+    }
+
     return {
       response: parsed.response || "もう少し詳しく聞かせてほしいな。",
       status: session.status,
