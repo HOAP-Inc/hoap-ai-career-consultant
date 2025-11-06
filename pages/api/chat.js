@@ -1080,5 +1080,6 @@ async function handler(req, res) {
     });
   }
 }
-export default handler;
-module.exports = handler; // CommonJS互換性のためテスト用に追加
+
+// Next.jsとJest両方に対応するためCommonJS形式を使用
+module.exports = handler;
