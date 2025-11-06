@@ -1081,5 +1081,4 @@ async function handler(req, res) {
   }
 }
 
-// Next.jsとJest両方に対応するためCommonJS形式を使用
-module.exports = handler;
+export default handler;
