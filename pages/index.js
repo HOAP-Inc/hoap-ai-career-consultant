@@ -34,12 +34,12 @@ function toBadges(resp, _currStep) {
     Array.isArray(arr) && arr.length ? arr.join("／") : "";
 
   return {
-    // 資格：当面は role_ids を仮に表示。後で qual_ids に差し替え可。
-    資格: joinIds(st?.qual_ids) || joinIds(st?.role_ids) || "未入力",
+    // 資格：licenses配列を表示（資格名）、なければqual_ids（ID）、なければrole_ids（ID）
+    資格: joinTxt(st?.licenses) || joinIds(st?.qual_ids) || joinIds(st?.role_ids) || "未入力",
     // Can / Will：配列でも単文でも受ける
     Can: Array.isArray(st?.can_texts) ? st.can_texts.join("／")
        : (st?.can_text ? String(st.can_text) : "未入力"),
-    
+
     Will: Array.isArray(st?.will_texts) ? st.will_texts.join("／")
         : (st?.will_text ? String(st.will_text) : "未入力"),
     Must: (joinIds(st?.must_have_ids) || joinTxt(st?.memo?.must_have_raw) || "未入力"),
