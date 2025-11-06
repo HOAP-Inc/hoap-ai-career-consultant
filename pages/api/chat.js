@@ -744,7 +744,7 @@ async function handleStep3(session, userText) {
       session.meta.step3_deepening_count = 0;
 
       const step4Response = await handleStep4(session, "");
-      const combinedResponse = [empathy, step4Response.response].filter(Boolean).join("\n\n");
+      const combinedResponse = [empathy, "ありがとう！次の質問に移るね", step4Response.response].filter(Boolean).join("\n\n");
       return {
         response: combinedResponse || step4Response.response,
         status: session.status,
@@ -802,16 +802,47 @@ async function handleStep4(session, userText) {
   }
   const parsed = llm.parsed || {};
 
+  // サーバー側カウンター初期化
+  if (!session.meta) session.meta = {};
+  if (typeof session.meta.step4_deepening_count !== "number") {
+    session.meta.step4_deepening_count = 0;
+  }
+
   // intro フェーズ（初回質問）
   if (parsed?.control?.phase === "intro") {
     // deepening_countをリセット
-    if (!session.meta) session.meta = {};
     session.meta.step4_deepening_count = 0;
     return {
       response: parsed.response || "働く上で『ここだけは譲れないな』って思うこと、ある？職場の雰囲気でも働き方でもOKだよ✨",
       status: session.status,
       meta: { step: 4, phase: "intro" },
       drill: session.drill,
+    };
+  }
+
+  // ユーザーが応答した場合（intro以外）、カウンターを増やす
+  if (userText && userText.trim()) {
+    session.meta.step4_deepening_count += 1;
+  }
+
+  // サーバー側の暴走停止装置（フェイルセーフ） - generationより前にチェック
+  const serverCount = session.meta.step4_deepening_count || 0;
+  if (serverCount >= 3) {
+    console.log(`[STEP4 FAILSAFE] Forcing transition to STEP5. Server count: ${serverCount}`);
+
+    // 簡単なmust_textを生成してSTEP5に遷移
+    session.status.must_text = userText || "譲れない条件について伺いました。";
+    session.step = 5;
+    session.stage.turnIndex = 0;
+    session.meta.step4_deepening_count = 0;
+
+    const step5Response = await handleStep5(session, "");
+    const combinedResponse = [session.status.must_text, "ありがとう！次の質問に移るね", step5Response.response].filter(Boolean).join("\n\n");
+    return {
+      response: combinedResponse || step5Response.response,
+      status: session.status,
+      meta: { step: session.step, deepening_attempt_total: session.meta.deepening_attempt_total },
+      drill: step5Response.drill,
     };
   }
 
@@ -877,42 +908,8 @@ async function handleStep4(session, userText) {
       session.meta.deepening_attempt_total = Math.min(total, 3);
     }
   }
+  // 通常の会話フェーズ（empathy, candidate_extraction, direction_check, deepening など）
   if (parsed?.control?.phase) {
-    // サーバー側でdeepening_countを管理（フェイルセーフ）
-    if (!session.meta) session.meta = {};
-    if (typeof session.meta.step4_deepening_count !== "number") {
-      session.meta.step4_deepening_count = 0;
-    }
-
-    // deepeningフェーズの場合のみカウンターを増やす
-    if (parsed.control.phase === "deepening") {
-      session.meta.step4_deepening_count += 1;
-    }
-
-    // サーバー側の暴走停止装置（フェイルセーフ）
-    const serverCount = session.meta.step4_deepening_count || 0;
-    const totalAttempt = session.meta.deepening_attempt_total || 0;
-
-    if (serverCount >= 3 || totalAttempt >= 3) {
-      // 3回に達したら強制的にSTEP5へ（フォールバック）
-      console.log(`[STEP4 FAILSAFE] Forcing transition to STEP5. Server count: ${serverCount}, Total attempt: ${totalAttempt}`);
-
-      // 簡単なmust_textを生成してSTEP5に遷移
-      session.status.must_text = userText || "譲れない条件について伺いました。";
-      session.step = 5;
-      session.stage.turnIndex = 0;
-      session.meta.step4_deepening_count = 0;
-
-      const step5Response = await handleStep5(session, "");
-      const combinedResponse = [session.status.must_text, "ありがとう！", step5Response.response].filter(Boolean).join("\n\n");
-      return {
-        response: combinedResponse || step5Response.response,
-        status: session.status,
-        meta: { step: session.step, deepening_attempt_total: session.meta.deepening_attempt_total },
-        drill: step5Response.drill,
-      };
-    }
-
     return {
       response: parsed.response || "もう少し詳しく聞かせてほしいな。",
       status: session.status,
@@ -924,6 +921,8 @@ async function handleStep4(session, userText) {
       drill: session.drill,
     };
   }
+
+  // フォールバック
   return {
     response: "あなたの譲れない条件の整理を続けているよ。気になる条件を教えてね。",
     status: session.status,
