@@ -225,7 +225,7 @@ html, body, #__next { height: 100%; }
 .duo-stage{
   margin: 8px 0 12px;
   position: relative;
-  height: 460px; 
+  height: 360px;
   border-radius: 16px;
   overflow: visible;
   box-shadow: var(--card-shadow);
@@ -246,7 +246,7 @@ html, body, #__next { height: 100%; }
  padding: 12px 20px;
 }
 .duo-stage__hoap{
-  width: min(420px, 40vw);
+  width: min(350px, 36vw);
   position: absolute;
   right: 6%; bottom: -8%;
   display:block;
