@@ -1081,3 +1081,4 @@ async function handler(req, res) {
   }
 }
 export default handler;
+module.exports = handler; // CommonJS互換性のためテスト用に追加
