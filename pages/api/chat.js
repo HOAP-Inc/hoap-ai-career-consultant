@@ -923,8 +923,32 @@ async function handleStep4(session, userText) {
 
   // 通常の会話フェーズ（empathy, candidate_extraction, direction_check, deepening など）
   if (parsed?.control?.phase) {
+    let responseText = parsed.response || "";
+
+    // 【安全装置】曖昧な質問を検出して具体的な質問に置き換える
+    const vaguePatterns = [
+      /もう少し詳しく/,
+      /もっと具体的に/,
+      /詳しく教えて/,
+      /もう少し話して/,
+      /具体的に聞かせて/
+    ];
+
+    const isVague = vaguePatterns.some(pattern => pattern.test(responseText));
+
+    if (isVague || !responseText) {
+      // カウンターに応じて具体的な質問を生成
+      if (serverCount === 0) {
+        responseText = "例えば働き方で言うと、『リモートワークができる』『フレックスタイム』『残業なし』とか、どれが一番大事？";
+      } else if (serverCount === 1) {
+        responseText = "それってどのくらい重要？『絶対必須』『あれば嬉しい』ならどっち？";
+      } else {
+        responseText = "最後に確認！今の話と『職場の雰囲気』を比べたら、どっちの方が譲れない？";
+      }
+    }
+
     return {
-      response: parsed.response || "もう少し詳しく聞かせてほしいな。",
+      response: responseText,
       status: session.status,
       meta: {
         step: 4,
@@ -937,7 +961,7 @@ async function handleStep4(session, userText) {
 
   // 最終フォールバック（通常はここに到達しない）
   return {
-    response: "あなたの譲れない条件の整理を続けているよ。気になる条件を教えてね。",
+    response: "働く上で『ここだけは譲れない』って条件、他にもある？例えば働き方、職場の雰囲気、給与、休日とか。",
     status: session.status,
     meta: { step: 4, deepening_count: serverCount },
     drill: session.drill,
@@ -1073,18 +1097,64 @@ async function handleStep6(session, userText) {
     session.step = nextStep;
     session.stage.turnIndex = 0;
 
-    // Doing と Being を \n\n で結合して返す（フロント側で順次表示）
+    // 各STEPの情報を整形して表示
     const parts = [];
+
+    // STEP1（資格）: IDをタグ名に変換
+    if (Array.isArray(session.status.qual_ids) && session.status.qual_ids.length > 0) {
+      const qualNames = session.status.qual_ids
+        .map(id => QUAL_NAME_BY_ID.get(Number(id)))
+        .filter(Boolean)
+        .join("、");
+      if (qualNames) {
+        parts.push("【資格】\n" + qualNames);
+      }
+    }
+
+    // STEP2（Can）: LLM生成文言
+    if (Array.isArray(session.status.can_texts) && session.status.can_texts.length > 0) {
+      parts.push("【Can（活かせる強み）】\n" + session.status.can_texts.join("\n"));
+    } else if (session.status.can_text) {
+      parts.push("【Can（活かせる強み）】\n" + session.status.can_text);
+    }
+
+    // STEP3（Will）: LLM生成文言
+    if (Array.isArray(session.status.will_texts) && session.status.will_texts.length > 0) {
+      parts.push("【Will（やりたいこと）】\n" + session.status.will_texts.join("\n"));
+    } else if (session.status.will_text) {
+      parts.push("【Will（やりたいこと）】\n" + session.status.will_text);
+    }
+
+    // STEP4（Must）: IDをタグ名に変換
+    if (Array.isArray(session.status.must_have_ids) && session.status.must_have_ids.length > 0) {
+      const mustNames = session.status.must_have_ids
+        .map(id => QUAL_NAME_BY_ID.get(Number(id)))
+        .filter(Boolean)
+        .join("、");
+      if (mustNames) {
+        parts.push("【Must（譲れない条件）】\n" + mustNames);
+      }
+    } else if (session.status.must_text) {
+      parts.push("【Must（譲れない条件）】\n" + session.status.must_text);
+    }
+
+    // STEP5（Self）: LLM生成文言
+    if (session.status.self_text) {
+      parts.push("【私はこんな人】\n" + session.status.self_text);
+    }
+
+    // STEP6（Doing/Being）
     if (session.status.doing_text) {
       parts.push("【Doing（あなたの行動・実践）】\n" + session.status.doing_text);
     }
     if (session.status.being_text) {
       parts.push("【Being（あなたの価値観・関わり方）】\n" + session.status.being_text);
     }
+
     const message = parts.join("\n\n");
 
     return {
-      response: message || "Doing/Being を更新したよ。",
+      response: message || "キャリアの説明書を更新しました。",
       status: session.status,
       meta: { step: session.step },
       drill: session.drill,

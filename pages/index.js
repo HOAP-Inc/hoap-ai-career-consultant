@@ -43,7 +43,7 @@ function toBadges(resp, _currStep) {
     Will: Array.isArray(st?.will_texts) ? st.will_texts.join("／")
         : (st?.will_text ? String(st.will_text) : "未入力"),
     Must: (joinIds(st?.must_have_ids) || joinTxt(st?.memo?.must_have_raw) || "未入力"),
-    私はこんな人: st?.self_intro || st?.self_text || "未入力",
+    // 私はこんな人欄は削除（STEP5はステータスバーに表示しない）
     Doing: st?.doing_text ? String(st.doing_text) : "未入力",
     Being: st?.being_text ? String(st.being_text) : "未入力",
   };
@@ -126,7 +126,7 @@ function toBadges(resp, _currStep) {
   const revertTimerRef = useRef(null);
 
   // 進捗バー
-  const MAX_STEP = 6;
+  const MAX_STEP = 7;
   const progress = Math.min(100, Math.max(0, Math.round((step / MAX_STEP) * 100)));
 
   // ★最初の挨拶をサーバーから1回だけ取得
