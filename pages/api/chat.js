@@ -1271,6 +1271,37 @@ async function handleStep5(session, userText) {
 
     if (llmNextStep === session.step && (deepeningCount >= 3 || serverCount >= 3)) {
       // 3回に達したら強制的にSTEP6へ
+      // ただし、self_textが生成されていない場合は先に生成する
+      if (!session.status.self_text) {
+        console.log(`[STEP5 FAILSAFE] Forcing self_text generation before transition to STEP6.`);
+        // session.historyからSTEP5のユーザー発話を取得
+        const step5Texts = session.history
+          .filter(h => h.step === 5 && h.role === "user")
+          .map(h => h.text)
+          .filter(Boolean);
+
+        // LLMにgenerationを依頼（強制的にself_text生成）
+        const genPayload = {
+          locale: "ja",
+          stage: { turn_index: 999 },
+          user_text: step5Texts.join("。"),
+          recent_texts: step5Texts,
+          status: session.status,
+          force_generation: true,
+        };
+
+        const genLLM = await callLLM(5, genPayload, session, { model: "gpt-4o" });
+
+        if (genLLM.ok && genLLM.parsed?.status?.self_text) {
+          session.status.self_text = genLLM.parsed.status.self_text;
+        } else if (step5Texts.length > 0) {
+          // LLM失敗時：最後の発話を整形してself_textに設定
+          const lastText = step5Texts[step5Texts.length - 1];
+          session.status.self_text = lastText.length > 50 ? lastText : `${lastText}という自分らしさがあります。`;
+        } else {
+          session.status.self_text = "あなたらしさについて伺いました。";
+        }
+      }
       nextStep = 6;
       console.log(`[STEP5 FAILSAFE] Forcing transition to STEP6. LLM count: ${deepeningCount}, Server count: ${serverCount}`);
     }

@@ -23,6 +23,9 @@ export default function Home() {
   const [isTyping, setIsTyping] = useState(false);
   const [userEcho, setUserEcho] = useState("");
   const [choices, setChoices] = useState([]);
+  const [showSummary, setShowSummary] = useState(false);
+  const [summaryData, setSummaryData] = useState(null);
+  const [tagsMap, setTagsMap] = useState(new Map());
 
 function toBadges(resp, _currStep) {
   const st = resp?.status ?? {};
@@ -128,6 +131,34 @@ function toBadges(resp, _currStep) {
   // 進捗バー
   const MAX_STEP = 7;
   const progress = Math.min(100, Math.max(0, Math.round((step / MAX_STEP) * 100)));
+
+  // tags.jsonを読み込んでIDからラベルに変換するマップを作成
+  useEffect(() => {
+    fetch('/tags.json')
+      .then(res => res.json())
+      .then(data => {
+        const map = new Map();
+        if (data.tags && Array.isArray(data.tags)) {
+          data.tags.forEach(tag => {
+            if (tag.id && tag.name) {
+              map.set(tag.id, tag.name);
+            }
+          });
+        }
+        setTagsMap(map);
+      })
+      .catch(err => console.error('Failed to load tags.json:', err));
+  }, []);
+
+  // ID文字列をラベルに変換する関数
+  function convertIdsToLabels(idString) {
+    if (!idString || !idString.startsWith('ID:')) {
+      return idString;
+    }
+    const ids = idString.replace('ID:', '').split(',').map(id => parseInt(id.trim())).filter(id => !isNaN(id));
+    const labels = ids.map(id => tagsMap.get(id)).filter(Boolean);
+    return labels.length > 0 ? labels.join('、') : idString;
+  }
 
   // ★最初の挨拶をサーバーから1回だけ取得
   useEffect(() => {
@@ -302,15 +333,16 @@ setChoices(isChoiceStep(next) ? uniqueByNormalized(inline) : []);
       // 本文反映（\n\n で分割して別々の吹き出しとして順次表示）
       const responseParts = (data.response || "").split("\n\n").filter(Boolean);
 
-      // 【特殊処理】STEP6完了時：最終メッセージ → 1.5秒後 → 一覧表示
+      // 【特殊処理】STEP6完了時：最終メッセージ → 1.5秒後 → 仮シートをタブで表示
       if (data.meta?.show_summary_after_delay && data.meta?.summary_data) {
         // 最初に最終メッセージを表示
         setAiTexts([data.response]);
         setIsTyping(false);
 
-        // 指定時間後に一覧データを表示
+        // 指定時間後に仮シートをタブで表示
         setTimeout(() => {
-          setAiTexts([data.meta.summary_data]);
+          setSummaryData(data.meta.summary_data);
+          setShowSummary(true);
         }, data.meta.show_summary_after_delay);
       } else if (responseParts.length === 0) {
         setAiTexts([]);
@@ -457,90 +489,141 @@ setChoices(isChoiceStep(next) ? uniqueByNormalized(inline) : []);
         </div>
       )}
 
-      {/* ステータスバッジ */}
-      <div className="status-row">
-       {[
-  "資格",
-  "Can",
-  "Will",
-  "Must",
-  "私はこんな人",
-  "Doing",
-  "Being",
-].map((k) => (
-  <span key={k} className="badge">
-    {k}：{displayBadgeValue(k, status[k])}
-  </span>
-))}
-      </div>
+      {/* ステータスバッジ（仮シート表示時は非表示） */}
+      {!showSummary && (
+        <>
+          <div className="status-row">
+            {[
+              "資格",
+              "Can",
+              "Will",
+              "Must",
+              "私はこんな人",
+              "Doing",
+              "Being",
+            ].map((k) => {
+              const value = displayBadgeValue(k, status[k]);
+              const displayValue = k === "資格" || k === "Must" ? convertIdsToLabels(value) : value;
+              return (
+                <span key={k} className="badge">
+                  {k}：{displayValue}
+                </span>
+              );
+            })}
+          </div>
 
-      {/* ステータス進捗バー */}
-      <div className="status-progress">
-        <div
-          className="status-progress__inner"
-          style={{ width: `${progress}%` }}
-        />
-      </div>
-{/* 最終確認（step>=6で表示）：全STEPの折りたたみ一覧 */}
-{step >= 6 && (
-  <section aria-label="最終確認" style={{ padding: "12px 16px" }}>
-    {/* 1) 資格 */}
-    <details>
-      <summary style={{ cursor: "pointer", fontWeight: 700 }}>資格</summary>
-      <div style={{ marginTop: 8 }}>
-        {displayBadgeValue("資格", status["資格"]) || "未入力"}
-      </div>
-    </details>
+          {/* ステータス進捗バー */}
+          <div className="status-progress">
+            <div
+              className="status-progress__inner"
+              style={{ width: `${progress}%` }}
+            />
+          </div>
+        </>
+      )}
 
-    {/* 2) Can */}
-    <details style={{ marginTop: 12 }}>
-      <summary style={{ cursor: "pointer", fontWeight: 700 }}>Can（今後も活かしたい強み）</summary>
-      <div style={{ marginTop: 8, whiteSpace: "pre-wrap" }}>
-        {displayBadgeValue("Can", status["Can"]) || "未入力"}
-      </div>
-    </details>
-
-    {/* 3) Will */}
-    <details style={{ marginTop: 12 }}>
-      <summary style={{ cursor: "pointer", fontWeight: 700 }}>Will（これから挑戦したいこと）</summary>
-      <div style={{ marginTop: 8, whiteSpace: "pre-wrap" }}>
-        {displayBadgeValue("Will", status["Will"]) || "未入力"}
-      </div>
-    </details>
-
-    {/* 4) Must */}
-    <details style={{ marginTop: 12 }}>
-      <summary style={{ cursor: "pointer", fontWeight: 700 }}>Must（Have）</summary>
-      <div style={{ marginTop: 8, whiteSpace: "pre-wrap" }}>
-        {displayBadgeValue("Must", status["Must"]) || "未入力"}
-      </div>
-    </details>
-
-    {/* 5) 私はこんな人 */}
-    <details style={{ marginTop: 12 }}>
-      <summary style={{ cursor: "pointer", fontWeight: 700 }}>私はこんな人</summary>
-      <div style={{ marginTop: 8, whiteSpace: "pre-wrap" }}>
-        {displayBadgeValue("私はこんな人", status["私はこんな人"]) || "未入力"}
-      </div>
-    </details>
-
-    {/* 6) Doing（初期は閉じる／好みでopenに） */}
-    <details style={{ marginTop: 12 }}>
-      <summary style={{ cursor: "pointer", fontWeight: 700 }}>Doing（行動・実践）</summary>
-      <div style={{ marginTop: 8, whiteSpace: "pre-wrap" }}>
-        {displayBadgeValue("Doing", status["Doing"]) || "未入力"}
-      </div>
-    </details>
-
-    {/* 7) Being（初期は開く） */}
-    <details open style={{ marginTop: 12 }}>
-      <summary style={{ cursor: "pointer", fontWeight: 700 }}>Being（価値観・関わり方）</summary>
-      <div style={{ marginTop: 8, whiteSpace: "pre-wrap" }}>
-        {displayBadgeValue("Being", status["Being"]) || "未入力"}
-      </div>
-    </details>
-  </section>
-)}
+      {/* 仮シート（タブで表示） */}
+      {showSummary && summaryData && (
+        <div style={{
+          position: "fixed",
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: "rgba(0, 0, 0, 0.5)",
+          zIndex: 1000,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          padding: "20px"
+        }}>
+          <div style={{
+            backgroundColor: "white",
+            borderRadius: "8px",
+            padding: "20px",
+            maxWidth: "90vw",
+            maxHeight: "90vh",
+            overflow: "auto",
+            position: "relative"
+          }}>
+            <button
+              onClick={() => {
+                setShowSummary(false);
+                setSummaryData(null);
+              }}
+              style={{
+                position: "absolute",
+                top: "10px",
+                right: "10px",
+                background: "none",
+                border: "none",
+                fontSize: "24px",
+                cursor: "pointer"
+              }}
+            >
+              ×
+            </button>
+            <h2 style={{ marginTop: 0, marginBottom: "20px" }}>キャリアの説明書</h2>
+            <div style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(4, 1fr)",
+              gap: "16px",
+              marginBottom: "16px"
+            }}>
+              {/* 1段目：4列 */}
+              <div>
+                <h3 style={{ marginTop: 0, fontSize: "14px", fontWeight: 700 }}>資格</h3>
+                <div style={{ fontSize: "12px", whiteSpace: "pre-wrap" }}>
+                  {convertIdsToLabels(displayBadgeValue("資格", status["資格"])) || "未入力"}
+                </div>
+              </div>
+              <div>
+                <h3 style={{ marginTop: 0, fontSize: "14px", fontWeight: 700 }}>Can（今後も活かしたい強み）</h3>
+                <div style={{ fontSize: "12px", whiteSpace: "pre-wrap" }}>
+                  {displayBadgeValue("Can", status["Can"]) || "未入力"}
+                </div>
+              </div>
+              <div>
+                <h3 style={{ marginTop: 0, fontSize: "14px", fontWeight: 700 }}>Will（これから挑戦したいこと）</h3>
+                <div style={{ fontSize: "12px", whiteSpace: "pre-wrap" }}>
+                  {displayBadgeValue("Will", status["Will"]) || "未入力"}
+                </div>
+              </div>
+              <div>
+                <h3 style={{ marginTop: 0, fontSize: "14px", fontWeight: 700 }}>Must（譲れない条件）</h3>
+                <div style={{ fontSize: "12px", whiteSpace: "pre-wrap" }}>
+                  {convertIdsToLabels(displayBadgeValue("Must", status["Must"])) || "未入力"}
+                </div>
+              </div>
+            </div>
+            <div style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(3, 1fr)",
+              gap: "16px"
+            }}>
+              {/* 2段目：3列 */}
+              <div>
+                <h3 style={{ marginTop: 0, fontSize: "14px", fontWeight: 700 }}>私はこんな人</h3>
+                <div style={{ fontSize: "12px", whiteSpace: "pre-wrap" }}>
+                  {displayBadgeValue("私はこんな人", status["私はこんな人"]) || "未入力"}
+                </div>
+              </div>
+              <div>
+                <h3 style={{ marginTop: 0, fontSize: "14px", fontWeight: 700 }}>Doing（行動・実践）</h3>
+                <div style={{ fontSize: "12px", whiteSpace: "pre-wrap" }}>
+                  {displayBadgeValue("Doing", status["Doing"]) || "未入力"}
+                </div>
+              </div>
+              <div>
+                <h3 style={{ marginTop: 0, fontSize: "14px", fontWeight: 700 }}>Being（価値観・関わり方）</h3>
+                <div style={{ fontSize: "12px", whiteSpace: "pre-wrap" }}>
+                  {displayBadgeValue("Being", status["Being"]) || "未入力"}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
 
       {/* チャット画面 */}
