@@ -26,6 +26,7 @@ export default function Home() {
   const [showSummary, setShowSummary] = useState(false);
   const [summaryData, setSummaryData] = useState(null);
   const [tagsMap, setTagsMap] = useState(new Map());
+  const [qualificationsMap, setQualificationsMap] = useState(new Map());
 
 function toBadges(resp, _currStep) {
   const st = resp?.status ?? {};
@@ -134,8 +135,9 @@ function toBadges(resp, _currStep) {
   const MAX_STEP = 7;
   const progress = Math.min(100, Math.max(0, Math.round((step / MAX_STEP) * 100)));
 
-  // tags.jsonを読み込んでIDからラベルに変換するマップを作成
+  // tags.jsonとqualifications.jsonを読み込んでIDからラベルに変換するマップを作成
   useEffect(() => {
+    // tags.json（職場タグ用）
     fetch('/tags.json')
       .then(res => res.json())
       .then(data => {
@@ -150,15 +152,32 @@ function toBadges(resp, _currStep) {
         setTagsMap(map);
       })
       .catch(err => console.error('Failed to load tags.json:', err));
+
+    // qualifications.json（資格用）
+    fetch('/qualifications.json')
+      .then(res => res.json())
+      .then(data => {
+        const map = new Map();
+        if (data.qualifications && Array.isArray(data.qualifications)) {
+          data.qualifications.forEach(qual => {
+            if (qual.id && qual.name) {
+              map.set(qual.id, qual.name);
+            }
+          });
+        }
+        setQualificationsMap(map);
+      })
+      .catch(err => console.error('Failed to load qualifications.json:', err));
   }, []);
 
-  // ID文字列をラベルに変換する関数
-  function convertIdsToLabels(idString) {
+  // ID文字列をラベルに変換する関数（資格用とタグ用で使い分け）
+  function convertIdsToLabels(idString, isQualification = false) {
     if (!idString || !idString.startsWith('ID:')) {
       return idString;
     }
+    const map = isQualification ? qualificationsMap : tagsMap;
     const ids = idString.replace('ID:', '').split(',').map(id => parseInt(id.trim())).filter(id => !isNaN(id));
-    const labels = ids.map(id => tagsMap.get(id)).filter(Boolean);
+    const labels = ids.map(id => map.get(id)).filter(Boolean);
     return labels.length > 0 ? labels.join('、') : idString;
   }
 
@@ -505,7 +524,14 @@ setChoices(isChoiceStep(next) ? uniqueByNormalized(inline) : []);
               "Being",
             ].map((k) => {
               const value = displayBadgeValue(k, status[k]);
-              const displayValue = k === "資格" || k === "Must" ? convertIdsToLabels(value) : value;
+              let displayValue = value;
+              if (k === "資格") {
+                // 資格はqualifications.jsonを使う
+                displayValue = convertIdsToLabels(value, true);
+              } else if (k === "Must") {
+                // Mustはtags.jsonを使う
+                displayValue = convertIdsToLabels(value, false);
+              }
               return (
                 <span key={k} className="badge">
                   {k}：{displayValue}
@@ -576,7 +602,7 @@ setChoices(isChoiceStep(next) ? uniqueByNormalized(inline) : []);
               <div>
                 <h3 style={{ marginTop: 0, fontSize: "14px", fontWeight: 700 }}>資格</h3>
                 <div style={{ fontSize: "12px", whiteSpace: "pre-wrap" }}>
-                  {convertIdsToLabels(displayBadgeValue("資格", status["資格"])) || "未入力"}
+                  {convertIdsToLabels(displayBadgeValue("資格", status["資格"]), true) || "未入力"}
                 </div>
               </div>
               <div>
@@ -594,7 +620,7 @@ setChoices(isChoiceStep(next) ? uniqueByNormalized(inline) : []);
               <div>
                 <h3 style={{ marginTop: 0, fontSize: "14px", fontWeight: 700 }}>Must（譲れない条件）</h3>
                 <div style={{ fontSize: "12px", whiteSpace: "pre-wrap" }}>
-                  {convertIdsToLabels(displayBadgeValue("Must", status["Must"])) || "未入力"}
+                  {convertIdsToLabels(displayBadgeValue("Must", status["Must"]), false) || "未入力"}
                 </div>
               </div>
             </div>
