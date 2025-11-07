@@ -1056,6 +1056,12 @@ async function handleStep4(session, userText) {
     }
 
     // LLMの応答をそのまま返す（ID化/方向確定の質問はLLMに任せる）
+    // ただしresponseが空の場合は最小限のフォールバック
+    if (!responseText || responseText.trim() === "") {
+      console.warn(`[STEP4 WARNING] Empty response from LLM (phase: ${parsed.control.phase}). Using fallback.`);
+      responseText = "ありがとう。その条件について確認させてね";
+    }
+
     return {
       response: responseText,
       status: session.status,
