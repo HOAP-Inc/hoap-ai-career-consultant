@@ -923,8 +923,32 @@ async function handleStep4(session, userText) {
 
   // 通常の会話フェーズ（empathy, candidate_extraction, direction_check, deepening など）
   if (parsed?.control?.phase) {
+    let responseText = parsed.response || "";
+
+    // 【安全装置】曖昧な質問を検出して具体的な質問に置き換える
+    const vaguePatterns = [
+      /もう少し詳しく/,
+      /もっと具体的に/,
+      /詳しく教えて/,
+      /もう少し話して/,
+      /具体的に聞かせて/
+    ];
+
+    const isVague = vaguePatterns.some(pattern => pattern.test(responseText));
+
+    if (isVague || !responseText) {
+      // カウンターに応じて具体的な質問を生成
+      if (serverCount === 0) {
+        responseText = "例えば働き方で言うと、『リモートワークができる』『フレックスタイム』『残業なし』とか、どれが一番大事？";
+      } else if (serverCount === 1) {
+        responseText = "それってどのくらい重要？『絶対必須』『あれば嬉しい』ならどっち？";
+      } else {
+        responseText = "最後に確認！今の話と『職場の雰囲気』を比べたら、どっちの方が譲れない？";
+      }
+    }
+
     return {
-      response: parsed.response || "もう少し詳しく聞かせてほしいな。",
+      response: responseText,
       status: session.status,
       meta: {
         step: 4,
@@ -937,7 +961,7 @@ async function handleStep4(session, userText) {
 
   // 最終フォールバック（通常はここに到達しない）
   return {
-    response: "あなたの譲れない条件の整理を続けているよ。気になる条件を教えてね。",
+    response: "働く上で『ここだけは譲れない』って条件、他にもある？例えば働き方、職場の雰囲気、給与、休日とか。",
     status: session.status,
     meta: { step: 4, deepening_count: serverCount },
     drill: session.drill,
