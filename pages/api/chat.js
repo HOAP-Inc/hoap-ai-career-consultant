@@ -1336,8 +1336,39 @@ async function handler(req, res) {
       return;
     }
 
-    if (result.status) session.status = result.status;
-    if (result.meta?.step != null) session.step = result.meta.step;
+    if (result.status) {
+      // 【安全装置】session.statusを上書きする前に、qual_idsを保護
+      // STEP1で登録したqual_idsが後続のSTEPで消えないようにする
+      const existingQualIds = session.status?.qual_ids;
+      const existingLicenses = session.status?.licenses;
+      session.status = result.status;
+
+      // result.statusにqual_idsが含まれていない場合、既存の値を復元
+      if (existingQualIds && existingQualIds.length > 0 && !session.status.qual_ids) {
+        session.status.qual_ids = existingQualIds;
+        console.log(`[HANDLER] Restored qual_ids: ${existingQualIds}`);
+      }
+      if (existingLicenses && existingLicenses.length > 0 && !session.status.licenses) {
+        session.status.licenses = existingLicenses;
+        console.log(`[HANDLER] Restored licenses: ${existingLicenses}`);
+      }
+    }
+    if (result.meta?.step != null) {
+      const beforeStep = session.step;
+      const proposedStep = result.meta.step;
+
+      // 【安全装置】result.meta.step が現在のステップより小さい値の場合は拒否
+      // ステップは必ず前進するか維持されるべきで、後退してはならない
+      if (proposedStep < beforeStep) {
+        console.error(`[HANDLER ERROR] Attempted to go backwards: ${beforeStep} -> ${proposedStep}. REJECTING step change.`);
+        // ステップ変更を拒否して現在のステップを維持
+      } else {
+        session.step = proposedStep;
+        if (beforeStep !== session.step) {
+          console.log(`[HANDLER] Step changed: ${beforeStep} -> ${session.step}`);
+        }
+      }
+    }
     if (result.drill) session.drill = result.drill;
     saveSession(session);
 
