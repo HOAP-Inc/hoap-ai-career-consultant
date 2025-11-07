@@ -1055,8 +1055,48 @@ async function handleStep4(session, userText) {
       responseText = responseText ? `${responseText}\n\n${question}` : question;
     }
 
-    // LLMの応答をそのまま返す（ID化/方向確定の質問はLLMに任せる）
-    // ただしresponseが空の場合は最小限のフォールバック
+    // 【安全装置2】曖昧な質問を検出して具体的な質問に置き換える
+    const vaguePatterns = [
+      /もう少し詳しく/,
+      /もっと具体的に/,
+      /詳しく教えて/,
+      /もう少し話して/,
+      /具体的に聞かせて/
+    ];
+
+    const isVague = vaguePatterns.some(pattern => pattern.test(responseText));
+
+    if (isVague || (!responseText && parsed.control.phase !== "empathy")) {
+      // ユーザーの発話内容を取得
+      const recentTexts = session.history.slice(-3).map(item => item.text).join(" ");
+      const currentText = userText || "";
+      const combinedText = `${currentText} ${recentTexts}`;
+
+      // カウンターに応じて具体的な質問を生成（ユーザーの発話内容に基づく）
+      if (serverCount === 0) {
+        responseText = "例えば働き方で言うと、『リモートワークができる』『フレックスタイム』『残業なし』とか、どれが一番大事？";
+      } else if (serverCount === 1) {
+        responseText = "それってどのくらい重要？『絶対必須』『あれば嬉しい』ならどっち？";
+      } else {
+        // 3回目以降：ユーザーの発話内容に基づいて適切な比較質問を生成
+        let comparisonQuestion;
+        if (combinedText.includes("残業") || combinedText.includes("働き方") || combinedText.includes("時間")) {
+          comparisonQuestion = "今の話と『職場の雰囲気』を比べたら、どっちの方が譲れない？";
+        } else if (combinedText.includes("雰囲気") || combinedText.includes("人間関係") || combinedText.includes("コミュニケーション")) {
+          comparisonQuestion = "今の話と『働き方（リモートワークや残業など）』を比べたら、どっちの方が譲れない？";
+        } else if (combinedText.includes("給与") || combinedText.includes("給料") || combinedText.includes("待遇")) {
+          comparisonQuestion = "今の話と『働き方』を比べたら、どっちの方が譲れない？";
+        } else if (combinedText.includes("休日") || combinedText.includes("休み") || combinedText.includes("休暇")) {
+          comparisonQuestion = "今の話と『職場の雰囲気』を比べたら、どっちの方が譲れない？";
+        } else {
+          // デフォルト：ユーザーが話している内容を確認する質問
+          comparisonQuestion = "それって、どのくらい譲れない条件？『絶対必須』レベル？";
+        }
+        responseText = comparisonQuestion;
+      }
+    }
+
+    // LLMの応答が空の場合のフォールバック（origin/mainから追加）
     if (!responseText || responseText.trim() === "") {
       console.warn(`[STEP4 WARNING] Empty response from LLM (phase: ${parsed.control.phase}). Using fallback.`);
       responseText = "ありがとう。その条件について確認させてね";
