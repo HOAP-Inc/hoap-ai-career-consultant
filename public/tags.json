@@ -1,0 +1,2306 @@
+{
+  "meta": {
+    "version": "2025-09-19",
+    "total_tags": 383
+  },
+  "tags": [
+    {
+      "id": 1,
+      "category": "サービス形態",
+      "subcategory": "医療",
+      "name": "急性期病棟"
+    },
+    {
+      "id": 2,
+      "category": "サービス形態",
+      "subcategory": "医療",
+      "name": "回復期病棟"
+    },
+    {
+      "id": 3,
+      "category": "サービス形態",
+      "subcategory": "医療",
+      "name": "慢性期・療養型病院"
+    },
+    {
+      "id": 4,
+      "category": "サービス形態",
+      "subcategory": "医療",
+      "name": "一般病院"
+    },
+    {
+      "id": 5,
+      "category": "サービス形態",
+      "subcategory": "医療",
+      "name": "地域包括ケア病棟"
+    },
+    {
+      "id": 6,
+      "category": "サービス形態",
+      "subcategory": "医療",
+      "name": "療養病棟"
+    },
+    {
+      "id": 7,
+      "category": "サービス形態",
+      "subcategory": "医療",
+      "name": "緩和ケア病棟（ホスピス）"
+    },
+    {
+      "id": 8,
+      "category": "サービス形態",
+      "subcategory": "医療",
+      "name": "クリニック"
+    },
+    {
+      "id": 9,
+      "category": "サービス形態",
+      "subcategory": "医療",
+      "name": "精神科病院"
+    },
+    {
+      "id": 10,
+      "category": "サービス形態",
+      "subcategory": "医療",
+      "name": "訪問看護ステーション"
+    },
+    {
+      "id": 11,
+      "category": "サービス形態",
+      "subcategory": "医療",
+      "name": "精神科特化型訪問看護ステーション"
+    },
+    {
+      "id": 12,
+      "category": "サービス形態",
+      "subcategory": "医療",
+      "name": "機能強化型訪問看護ステーション"
+    },
+    {
+      "id": 13,
+      "category": "サービス形態",
+      "subcategory": "医療",
+      "name": "訪問リハビリテーション"
+    },
+    {
+      "id": 14,
+      "category": "サービス形態",
+      "subcategory": "医療",
+      "name": "訪問栄養指導"
+    },
+    {
+      "id": 15,
+      "category": "サービス形態",
+      "subcategory": "介護",
+      "name": "通所介護（デイサービス）"
+    },
+    {
+      "id": 16,
+      "category": "サービス形態",
+      "subcategory": "介護",
+      "name": "認知症対応型通所介護（認知症専門デイサービス）"
+    },
+    {
+      "id": 17,
+      "category": "サービス形態",
+      "subcategory": "介護",
+      "name": "地域密着型通所介護（定員18名以下）"
+    },
+    {
+      "id": 18,
+      "category": "サービス形態",
+      "subcategory": "介護",
+      "name": "通所リハビリテーション（デイケア）"
+    },
+    {
+      "id": 19,
+      "category": "サービス形態",
+      "subcategory": "介護",
+      "name": "訪問介護"
+    },
+    {
+      "id": 20,
+      "category": "サービス形態",
+      "subcategory": "介護",
+      "name": "定期巡回・随時対応型訪問介護看護"
+    },
+    {
+      "id": 21,
+      "category": "サービス形態",
+      "subcategory": "介護",
+      "name": "訪問入浴"
+    },
+    {
+      "id": 22,
+      "category": "サービス形態",
+      "subcategory": "介護",
+      "name": "小規模多機能型居宅介護"
+    },
+    {
+      "id": 23,
+      "category": "サービス形態",
+      "subcategory": "介護",
+      "name": "看護小規模多機能型居宅介護"
+    },
+    {
+      "id": 24,
+      "category": "サービス形態",
+      "subcategory": "介護",
+      "name": "特別養護老人ホーム"
+    },
+    {
+      "id": 25,
+      "category": "サービス形態",
+      "subcategory": "介護",
+      "name": "地域密着型特別養護老人ホーム（定員29名以下）"
+    },
+    {
+      "id": 26,
+      "category": "サービス形態",
+      "subcategory": "介護",
+      "name": "介護老人保健施設"
+    },
+    {
+      "id": 27,
+      "category": "サービス形態",
+      "subcategory": "介護",
+      "name": "介護付き有料老人ホーム"
+    },
+    {
+      "id": 28,
+      "category": "サービス形態",
+      "subcategory": "介護",
+      "name": "ショートステイ（短期入所生活介護）"
+    },
+    {
+      "id": 29,
+      "category": "サービス形態",
+      "subcategory": "介護",
+      "name": "サービス付き高齢者向け住宅（サ高住）"
+    },
+    {
+      "id": 30,
+      "category": "サービス形態",
+      "subcategory": "介護",
+      "name": "住宅型有料老人ホーム"
+    },
+    {
+      "id": 31,
+      "category": "サービス形態",
+      "subcategory": "介護",
+      "name": "軽費老人ホーム（ケアハウス）"
+    },
+    {
+      "id": 32,
+      "category": "サービス形態",
+      "subcategory": "介護",
+      "name": "健康型有料老人ホーム"
+    },
+    {
+      "id": 33,
+      "category": "サービス形態",
+      "subcategory": "介護",
+      "name": "シニア向け分譲マンション"
+    },
+    {
+      "id": 34,
+      "category": "サービス形態",
+      "subcategory": "障害福祉",
+      "name": "放課後等デイサービス"
+    },
+    {
+      "id": 35,
+      "category": "サービス形態",
+      "subcategory": "障害福祉",
+      "name": "生活介護（障害者の日中活動）"
+    },
+    {
+      "id": 36,
+      "category": "サービス形態",
+      "subcategory": "障害福祉",
+      "name": "就労継続支援A型"
+    },
+    {
+      "id": 37,
+      "category": "サービス形態",
+      "subcategory": "障害福祉",
+      "name": "就労継続支援B型"
+    },
+    {
+      "id": 38,
+      "category": "サービス形態",
+      "subcategory": "障害福祉",
+      "name": "短期入所（障害者向けショートステイ）"
+    },
+    {
+      "id": 39,
+      "category": "サービス形態",
+      "subcategory": "歯科",
+      "name": "歯科クリニック"
+    },
+    {
+      "id": 40,
+      "category": "サービス形態",
+      "subcategory": "歯科",
+      "name": "訪問歯科"
+    },
+    {
+      "id": 41,
+      "category": "サービス形態",
+      "subcategory": "歯科",
+      "name": "歯科口腔外科（病院内診療科）"
+    },
+    {
+      "id": 42,
+      "category": "サービス形態",
+      "subcategory": "歯科",
+      "name": "大学病院歯科・歯学部附属病院"
+    },
+    {
+      "id": 43,
+      "category": "サービス形態",
+      "subcategory": "歯科",
+      "name": "歯科技工所"
+    },
+    {
+      "id": 44,
+      "category": "サービス形態",
+      "subcategory": "歯科",
+      "name": "院内ラボ"
+    },
+    {
+      "id": 45,
+      "category": "サービス形態",
+      "subcategory": "その他",
+      "name": "保育園"
+    },
+    {
+      "id": 46,
+      "category": "サービス形態",
+      "subcategory": "その他",
+      "name": "幼稚園"
+    },
+    {
+      "id": 47,
+      "category": "サービス形態",
+      "subcategory": "その他",
+      "name": "企業（産業保健・企業内看護など）"
+    },
+    {
+      "id": 48,
+      "category": "診療科・分野",
+      "subcategory": "医療",
+      "name": "一般内科"
+    },
+    {
+      "id": 49,
+      "category": "診療科・分野",
+      "subcategory": "医療",
+      "name": "消化器内科"
+    },
+    {
+      "id": 50,
+      "category": "診療科・分野",
+      "subcategory": "医療",
+      "name": "循環器内科"
+    },
+    {
+      "id": 51,
+      "category": "診療科・分野",
+      "subcategory": "医療",
+      "name": "呼吸器内科"
+    },
+    {
+      "id": 52,
+      "category": "診療科・分野",
+      "subcategory": "医療",
+      "name": "腎臓内科"
+    },
+    {
+      "id": 53,
+      "category": "診療科・分野",
+      "subcategory": "医療",
+      "name": "血液内科"
+    },
+    {
+      "id": 54,
+      "category": "診療科・分野",
+      "subcategory": "医療",
+      "name": "神経内科"
+    },
+    {
+      "id": 55,
+      "category": "診療科・分野",
+      "subcategory": "医療",
+      "name": "感染症内科"
+    },
+    {
+      "id": 56,
+      "category": "診療科・分野",
+      "subcategory": "医療",
+      "name": "代謝・内分泌内科"
+    },
+    {
+      "id": 57,
+      "category": "診療科・分野",
+      "subcategory": "医療",
+      "name": "老年内科"
+    },
+    {
+      "id": 58,
+      "category": "診療科・分野",
+      "subcategory": "医療",
+      "name": "一般外科"
+    },
+    {
+      "id": 59,
+      "category": "診療科・分野",
+      "subcategory": "医療",
+      "name": "消化器外科"
+    },
+    {
+      "id": 60,
+      "category": "診療科・分野",
+      "subcategory": "医療",
+      "name": "心臓血管外科"
+    },
+    {
+      "id": 61,
+      "category": "診療科・分野",
+      "subcategory": "医療",
+      "name": "呼吸器外科"
+    },
+    {
+      "id": 62,
+      "category": "診療科・分野",
+      "subcategory": "医療",
+      "name": "脳神経外科"
+    },
+    {
+      "id": 63,
+      "category": "診療科・分野",
+      "subcategory": "医療",
+      "name": "整形外科"
+    },
+    {
+      "id": 64,
+      "category": "診療科・分野",
+      "subcategory": "医療",
+      "name": "形成外科"
+    },
+    {
+      "id": 65,
+      "category": "診療科・分野",
+      "subcategory": "医療",
+      "name": "頭頸部外科"
+    },
+    {
+      "id": 66,
+      "category": "診療科・分野",
+      "subcategory": "医療",
+      "name": "手外科"
+    },
+    {
+      "id": 67,
+      "category": "診療科・分野",
+      "subcategory": "医療",
+      "name": "精神科・心療内科"
+    },
+    {
+      "id": 68,
+      "category": "診療科・分野",
+      "subcategory": "医療",
+      "name": "眼科"
+    },
+    {
+      "id": 69,
+      "category": "診療科・分野",
+      "subcategory": "医療",
+      "name": "耳鼻咽喉科"
+    },
+    {
+      "id": 70,
+      "category": "診療科・分野",
+      "subcategory": "医療",
+      "name": "皮膚科"
+    },
+    {
+      "id": 71,
+      "category": "診療科・分野",
+      "subcategory": "医療",
+      "name": "泌尿器科"
+    },
+    {
+      "id": 72,
+      "category": "診療科・分野",
+      "subcategory": "医療",
+      "name": "放射線科"
+    },
+    {
+      "id": 73,
+      "category": "診療科・分野",
+      "subcategory": "医療",
+      "name": "美容皮膚科"
+    },
+    {
+      "id": 74,
+      "category": "診療科・分野",
+      "subcategory": "医療",
+      "name": "美容外科"
+    },
+    {
+      "id": 75,
+      "category": "診療科・分野",
+      "subcategory": "医療",
+      "name": "小児科"
+    },
+    {
+      "id": 76,
+      "category": "診療科・分野",
+      "subcategory": "医療",
+      "name": "産婦人科"
+    },
+    {
+      "id": 77,
+      "category": "診療科・分野",
+      "subcategory": "医療",
+      "name": "麻酔科"
+    },
+    {
+      "id": 78,
+      "category": "診療科・分野",
+      "subcategory": "医療",
+      "name": "リウマチ科"
+    },
+    {
+      "id": 79,
+      "category": "診療科・分野",
+      "subcategory": "医療",
+      "name": "緩和ケア科"
+    },
+    {
+      "id": 80,
+      "category": "診療科・分野",
+      "subcategory": "医療",
+      "name": "総合診療科"
+    },
+    {
+      "id": 81,
+      "category": "診療科・分野",
+      "subcategory": "医療",
+      "name": "アレルギー科"
+    },
+    {
+      "id": 82,
+      "category": "診療科・分野",
+      "subcategory": "医療",
+      "name": "救急科（救急医療・ER）"
+    },
+    {
+      "id": 83,
+      "category": "診療科・分野",
+      "subcategory": "医療",
+      "name": "内視鏡科"
+    },
+    {
+      "id": 84,
+      "category": "診療科・分野",
+      "subcategory": "医療",
+      "name": "ペインクリニック科"
+    },
+    {
+      "id": 85,
+      "category": "診療科・分野",
+      "subcategory": "医療",
+      "name": "救急集中治療科（ICU対応）"
+    },
+    {
+      "id": 86,
+      "category": "診療科・分野",
+      "subcategory": "医療",
+      "name": "外来"
+    },
+    {
+      "id": 87,
+      "category": "診療科・分野",
+      "subcategory": "医療",
+      "name": "オペ室"
+    },
+    {
+      "id": 88,
+      "category": "診療科・分野",
+      "subcategory": "リハビリ",
+      "name": "総合リハビリ"
+    },
+    {
+      "id": 89,
+      "category": "診療科・分野",
+      "subcategory": "リハビリ",
+      "name": "脳血管リハビリ"
+    },
+    {
+      "id": 90,
+      "category": "診療科・分野",
+      "subcategory": "リハビリ",
+      "name": "運動器リハビリ"
+    },
+    {
+      "id": 91,
+      "category": "診療科・分野",
+      "subcategory": "リハビリ",
+      "name": "呼吸器リハビリ"
+    },
+    {
+      "id": 92,
+      "category": "診療科・分野",
+      "subcategory": "リハビリ",
+      "name": "心大血管リハビリ"
+    },
+    {
+      "id": 93,
+      "category": "診療科・分野",
+      "subcategory": "リハビリ",
+      "name": "がんリハビリ"
+    },
+    {
+      "id": 94,
+      "category": "診療科・分野",
+      "subcategory": "リハビリ",
+      "name": "廃用症候群リハビリ"
+    },
+    {
+      "id": 95,
+      "category": "診療科・分野",
+      "subcategory": "リハビリ",
+      "name": "周術期リハビリ"
+    },
+    {
+      "id": 96,
+      "category": "診療科・分野",
+      "subcategory": "リハビリ",
+      "name": "小児リハビリ"
+    },
+    {
+      "id": 97,
+      "category": "診療科・分野",
+      "subcategory": "リハビリ",
+      "name": "スポーツリハビリ"
+    },
+    {
+      "id": 98,
+      "category": "診療科・分野",
+      "subcategory": "リハビリ",
+      "name": "嚥下リハビリ"
+    },
+    {
+      "id": 99,
+      "category": "診療科・分野",
+      "subcategory": "リハビリ",
+      "name": "高次脳機能リハビリ"
+    },
+    {
+      "id": 100,
+      "category": "診療科・分野",
+      "subcategory": "リハビリ",
+      "name": "ICUリハビリ"
+    },
+    {
+      "id": 101,
+      "category": "診療科・分野",
+      "subcategory": "リハビリ",
+      "name": "早期離床リハビリ"
+    },
+    {
+      "id": 102,
+      "category": "診療科・分野",
+      "subcategory": "リハビリ",
+      "name": "ハンドリハビリ"
+    },
+    {
+      "id": 103,
+      "category": "診療科・分野",
+      "subcategory": "リハビリ",
+      "name": "義肢装具リハビリ"
+    },
+    {
+      "id": 104,
+      "category": "診療科・分野",
+      "subcategory": "リハビリ",
+      "name": "シーティングリハビリ"
+    },
+    {
+      "id": 105,
+      "category": "診療科・分野",
+      "subcategory": "リハビリ",
+      "name": "神経難病リハビリ"
+    },
+    {
+      "id": 106,
+      "category": "診療科・分野",
+      "subcategory": "リハビリ",
+      "name": "リンパ浮腫リハビリ"
+    },
+    {
+      "id": 107,
+      "category": "診療科・分野",
+      "subcategory": "リハビリ",
+      "name": "骨盤底リハビリ"
+    },
+    {
+      "id": 108,
+      "category": "診療科・分野",
+      "subcategory": "リハビリ",
+      "name": "ウィメンズヘルスリハビリ"
+    },
+    {
+      "id": 109,
+      "category": "診療科・分野",
+      "subcategory": "リハビリ",
+      "name": "口腔機能リハビリ"
+    },
+    {
+      "id": 110,
+      "category": "診療科・分野",
+      "subcategory": "リハビリ",
+      "name": "摂食リハビリ"
+    },
+    {
+      "id": 111,
+      "category": "診療科・分野",
+      "subcategory": "リハビリ",
+      "name": "復職支援リハビリ"
+    },
+    {
+      "id": 112,
+      "category": "診療科・分野",
+      "subcategory": "介護",
+      "name": "居宅ケアマネ"
+    },
+    {
+      "id": 113,
+      "category": "診療科・分野",
+      "subcategory": "介護",
+      "name": "施設ケアマネ"
+    },
+    {
+      "id": 114,
+      "category": "診療科・分野",
+      "subcategory": "介護",
+      "name": "サービス提供責任者"
+    },
+    {
+      "id": 115,
+      "category": "診療科・分野",
+      "subcategory": "介護",
+      "name": "管理者"
+    },
+    {
+      "id": 116,
+      "category": "診療科・分野",
+      "subcategory": "介護",
+      "name": "施設長"
+    },
+    {
+      "id": 117,
+      "category": "診療科・分野",
+      "subcategory": "介護",
+      "name": "身体介護"
+    },
+    {
+      "id": 118,
+      "category": "診療科・分野",
+      "subcategory": "介護",
+      "name": "生活援助"
+    },
+    {
+      "id": 119,
+      "category": "診療科・分野",
+      "subcategory": "歯科",
+      "name": "一般歯科"
+    },
+    {
+      "id": 120,
+      "category": "診療科・分野",
+      "subcategory": "歯科",
+      "name": "予防歯科"
+    },
+    {
+      "id": 121,
+      "category": "診療科・分野",
+      "subcategory": "歯科",
+      "name": "訪問歯科"
+    },
+    {
+      "id": 122,
+      "category": "診療科・分野",
+      "subcategory": "歯科",
+      "name": "小児歯科"
+    },
+    {
+      "id": 123,
+      "category": "診療科・分野",
+      "subcategory": "歯科",
+      "name": "矯正歯科"
+    },
+    {
+      "id": 124,
+      "category": "診療科・分野",
+      "subcategory": "歯科",
+      "name": "小児矯正歯科"
+    },
+    {
+      "id": 125,
+      "category": "診療科・分野",
+      "subcategory": "歯科",
+      "name": "審美歯科"
+    },
+    {
+      "id": 126,
+      "category": "診療科・分野",
+      "subcategory": "歯科",
+      "name": "インプラント"
+    },
+    {
+      "id": 127,
+      "category": "診療科・分野",
+      "subcategory": "歯科",
+      "name": "口腔外科"
+    },
+    {
+      "id": 128,
+      "category": "診療科・分野",
+      "subcategory": "歯科",
+      "name": "歯周病"
+    },
+    {
+      "id": 129,
+      "category": "診療科・分野",
+      "subcategory": "歯科",
+      "name": "補綴"
+    },
+    {
+      "id": 130,
+      "category": "診療科・分野",
+      "subcategory": "歯科",
+      "name": "入れ歯"
+    },
+    {
+      "id": 131,
+      "category": "診療科・分野",
+      "subcategory": "歯科",
+      "name": "嚥下・摂食リハビリ"
+    },
+    {
+      "id": 132,
+      "category": "診療科・分野",
+      "subcategory": "歯科",
+      "name": "口腔機能回復"
+    },
+    {
+      "id": 133,
+      "category": "診療科・分野",
+      "subcategory": "歯科",
+      "name": "顎関節症"
+    },
+    {
+      "id": 134,
+      "category": "診療科・分野",
+      "subcategory": "歯科",
+      "name": "咬合（噛み合わせ）"
+    },
+    {
+      "id": 135,
+      "category": "診療科・分野",
+      "subcategory": "歯科",
+      "name": "セレック"
+    },
+    {
+      "id": 136,
+      "category": "診療科・分野",
+      "subcategory": "歯科",
+      "name": "CT"
+    },
+    {
+      "id": 137,
+      "category": "診療科・分野",
+      "subcategory": "歯科",
+      "name": "マイクロスコープ"
+    },
+    {
+      "id": 138,
+      "category": "診療科・分野",
+      "subcategory": "歯科",
+      "name": "CAD/CAM・口腔内スキャナ"
+    },
+    {
+      "id": 139,
+      "category": "診療科・分野",
+      "subcategory": "歯科",
+      "name": "スポーツ歯科"
+    },
+    {
+      "id": 140,
+      "category": "診療科・分野",
+      "subcategory": "歯科",
+      "name": "再生歯科（骨造成・再生療法）"
+    },
+    {
+      "id": 141,
+      "category": "診療科・分野",
+      "subcategory": "歯科",
+      "name": "睡眠歯科"
+    },
+    {
+      "id": 142,
+      "category": "診療科・分野",
+      "subcategory": "歯科",
+      "name": "歯科検診"
+    },
+    {
+      "id": 143,
+      "category": "診療科・分野",
+      "subcategory": "歯科",
+      "name": "ホワイトニング"
+    },
+    {
+      "id": 144,
+      "category": "診療科・分野",
+      "subcategory": "歯科",
+      "name": "デンタルエステ"
+    },
+    {
+      "id": 145,
+      "category": "専門資格",
+      "subcategory": "医師",
+      "name": "総合内科専門医"
+    },
+    {
+      "id": 146,
+      "category": "専門資格",
+      "subcategory": "医師",
+      "name": "循環器専門医"
+    },
+    {
+      "id": 147,
+      "category": "専門資格",
+      "subcategory": "医師",
+      "name": "消化器病専門医"
+    },
+    {
+      "id": 148,
+      "category": "専門資格",
+      "subcategory": "医師",
+      "name": "呼吸器専門医"
+    },
+    {
+      "id": 149,
+      "category": "専門資格",
+      "subcategory": "医師",
+      "name": "腎臓専門医"
+    },
+    {
+      "id": 150,
+      "category": "専門資格",
+      "subcategory": "医師",
+      "name": "糖尿病専門医"
+    },
+    {
+      "id": 151,
+      "category": "専門資格",
+      "subcategory": "医師",
+      "name": "外科専門医"
+    },
+    {
+      "id": 152,
+      "category": "専門資格",
+      "subcategory": "医師",
+      "name": "消化器外科専門医"
+    },
+    {
+      "id": 153,
+      "category": "専門資格",
+      "subcategory": "医師",
+      "name": "心臓血管外科専門医"
+    },
+    {
+      "id": 154,
+      "category": "専門資格",
+      "subcategory": "医師",
+      "name": "整形外科専門医"
+    },
+    {
+      "id": 155,
+      "category": "専門資格",
+      "subcategory": "医師",
+      "name": "脳神経外科専門医"
+    },
+    {
+      "id": 156,
+      "category": "専門資格",
+      "subcategory": "医師",
+      "name": "小児科専門医"
+    },
+    {
+      "id": 157,
+      "category": "専門資格",
+      "subcategory": "医師",
+      "name": "産婦人科専門医"
+    },
+    {
+      "id": 158,
+      "category": "専門資格",
+      "subcategory": "医師",
+      "name": "新生児専門医"
+    },
+    {
+      "id": 159,
+      "category": "専門資格",
+      "subcategory": "医師",
+      "name": "麻酔科専門医"
+    },
+    {
+      "id": 160,
+      "category": "専門資格",
+      "subcategory": "医師",
+      "name": "救急科専門医"
+    },
+    {
+      "id": 161,
+      "category": "専門資格",
+      "subcategory": "医師",
+      "name": "放射線科専門医"
+    },
+    {
+      "id": 162,
+      "category": "専門資格",
+      "subcategory": "医師",
+      "name": "皮膚科専門医"
+    },
+    {
+      "id": 163,
+      "category": "専門資格",
+      "subcategory": "医師",
+      "name": "精神科専門医"
+    },
+    {
+      "id": 164,
+      "category": "専門資格",
+      "subcategory": "医師",
+      "name": "泌尿器科専門医"
+    },
+    {
+      "id": 165,
+      "category": "専門資格",
+      "subcategory": "医師",
+      "name": "耳鼻咽喉科専門医"
+    },
+    {
+      "id": 166,
+      "category": "専門資格",
+      "subcategory": "医師",
+      "name": "眼科専門医"
+    },
+    {
+      "id": 167,
+      "category": "専門資格",
+      "subcategory": "医師",
+      "name": "形成外科専門医"
+    },
+    {
+      "id": 168,
+      "category": "専門資格",
+      "subcategory": "看護師",
+      "name": "がん看護専門看護師"
+    },
+    {
+      "id": 169,
+      "category": "専門資格",
+      "subcategory": "看護師",
+      "name": "精神看護専門看護師"
+    },
+    {
+      "id": 170,
+      "category": "専門資格",
+      "subcategory": "看護師",
+      "name": "地域看護専門看護師"
+    },
+    {
+      "id": 171,
+      "category": "専門資格",
+      "subcategory": "看護師",
+      "name": "老人看護専門看護師"
+    },
+    {
+      "id": 172,
+      "category": "専門資格",
+      "subcategory": "看護師",
+      "name": "小児看護専門看護師"
+    },
+    {
+      "id": 173,
+      "category": "専門資格",
+      "subcategory": "看護師",
+      "name": "母性看護専門看護師"
+    },
+    {
+      "id": 174,
+      "category": "専門資格",
+      "subcategory": "看護師",
+      "name": "慢性疾患看護専門看護師"
+    },
+    {
+      "id": 175,
+      "category": "専門資格",
+      "subcategory": "看護師",
+      "name": "急性・重症患者看護専門看護師"
+    },
+    {
+      "id": 176,
+      "category": "専門資格",
+      "subcategory": "看護師",
+      "name": "感染症看護専門看護師"
+    },
+    {
+      "id": 177,
+      "category": "専門資格",
+      "subcategory": "看護師",
+      "name": "在宅看護専門看護師"
+    },
+    {
+      "id": 178,
+      "category": "専門資格",
+      "subcategory": "看護師",
+      "name": "家族支援専門看護師"
+    },
+    {
+      "id": 179,
+      "category": "専門資格",
+      "subcategory": "看護師",
+      "name": "災害看護専門看護師"
+    },
+    {
+      "id": 180,
+      "category": "専門資格",
+      "subcategory": "看護師",
+      "name": "感染管理認定看護師"
+    },
+    {
+      "id": 181,
+      "category": "専門資格",
+      "subcategory": "看護師",
+      "name": "救急看護認定看護師"
+    },
+    {
+      "id": 182,
+      "category": "専門資格",
+      "subcategory": "看護師",
+      "name": "皮膚・排泄ケア認定看護師"
+    },
+    {
+      "id": 183,
+      "category": "専門資格",
+      "subcategory": "看護師",
+      "name": "集中ケア認定看護師"
+    },
+    {
+      "id": 184,
+      "category": "専門資格",
+      "subcategory": "看護師",
+      "name": "緩和ケア認定看護師"
+    },
+    {
+      "id": 185,
+      "category": "専門資格",
+      "subcategory": "看護師",
+      "name": "がん化学療法看護認定看護師"
+    },
+    {
+      "id": 186,
+      "category": "専門資格",
+      "subcategory": "看護師",
+      "name": "がん放射線療法看護認定看護師"
+    },
+    {
+      "id": 187,
+      "category": "専門資格",
+      "subcategory": "看護師",
+      "name": "糖尿病看護認定看護師"
+    },
+    {
+      "id": 188,
+      "category": "専門資格",
+      "subcategory": "看護師",
+      "name": "不妊症看護認定看護師"
+    },
+    {
+      "id": 189,
+      "category": "専門資格",
+      "subcategory": "看護師",
+      "name": "新生児集中ケア認定看護師"
+    },
+    {
+      "id": 190,
+      "category": "専門資格",
+      "subcategory": "看護師",
+      "name": "訪問看護認定看護師"
+    },
+    {
+      "id": 191,
+      "category": "専門資格",
+      "subcategory": "看護師",
+      "name": "透析看護認定看護師"
+    },
+    {
+      "id": 192,
+      "category": "専門資格",
+      "subcategory": "看護師",
+      "name": "摂食・嚥下障害看護認定看護師"
+    },
+    {
+      "id": 193,
+      "category": "専門資格",
+      "subcategory": "看護師",
+      "name": "認知症看護認定看護師"
+    },
+    {
+      "id": 194,
+      "category": "専門資格",
+      "subcategory": "看護師",
+      "name": "手術看護認定看護師"
+    },
+    {
+      "id": 195,
+      "category": "専門資格",
+      "subcategory": "看護師",
+      "name": "がん性疼痛看護認定看護師"
+    },
+    {
+      "id": 196,
+      "category": "専門資格",
+      "subcategory": "理学療法士",
+      "name": "認定理学療法士（運動器）"
+    },
+    {
+      "id": 197,
+      "category": "専門資格",
+      "subcategory": "理学療法士",
+      "name": "認定理学療法士（神経）"
+    },
+    {
+      "id": 198,
+      "category": "専門資格",
+      "subcategory": "理学療法士",
+      "name": "認定理学療法士（呼吸）"
+    },
+    {
+      "id": 199,
+      "category": "専門資格",
+      "subcategory": "理学療法士",
+      "name": "認定理学療法士（循環）"
+    },
+    {
+      "id": 200,
+      "category": "専門資格",
+      "subcategory": "理学療法士",
+      "name": "認定理学療法士（代謝）"
+    },
+    {
+      "id": 201,
+      "category": "専門資格",
+      "subcategory": "理学療法士",
+      "name": "認定理学療法士（小児）"
+    },
+    {
+      "id": 202,
+      "category": "専門資格",
+      "subcategory": "理学療法士",
+      "name": "認定理学療法士（がん）"
+    },
+    {
+      "id": 203,
+      "category": "専門資格",
+      "subcategory": "理学療法士",
+      "name": "認定理学療法士（脳卒中）"
+    },
+    {
+      "id": 204,
+      "category": "専門資格",
+      "subcategory": "理学療法士",
+      "name": "認定理学療法士（廃用症候群）"
+    },
+    {
+      "id": 205,
+      "category": "専門資格",
+      "subcategory": "理学療法士",
+      "name": "認定理学療法士（地域理学療法）"
+    },
+    {
+      "id": 206,
+      "category": "専門資格",
+      "subcategory": "理学療法士",
+      "name": "認定理学療法士（訪問）"
+    },
+    {
+      "id": 207,
+      "category": "専門資格",
+      "subcategory": "理学療法士",
+      "name": "認定理学療法士（スポーツ）"
+    },
+    {
+      "id": 208,
+      "category": "専門資格",
+      "subcategory": "理学療法士",
+      "name": "認定理学療法士（管理・運営）"
+    },
+    {
+      "id": 209,
+      "category": "専門資格",
+      "subcategory": "理学療法士",
+      "name": "認定理学療法士（教育）"
+    },
+    {
+      "id": 210,
+      "category": "専門資格",
+      "subcategory": "理学療法士",
+      "name": "専門理学療法士（運動器）"
+    },
+    {
+      "id": 211,
+      "category": "専門資格",
+      "subcategory": "理学療法士",
+      "name": "専門理学療法士（神経）"
+    },
+    {
+      "id": 212,
+      "category": "専門資格",
+      "subcategory": "理学療法士",
+      "name": "専門理学療法士（呼吸）"
+    },
+    {
+      "id": 213,
+      "category": "専門資格",
+      "subcategory": "理学療法士",
+      "name": "専門理学療法士（循環）"
+    },
+    {
+      "id": 214,
+      "category": "専門資格",
+      "subcategory": "理学療法士",
+      "name": "専門理学療法士（代謝）"
+    },
+    {
+      "id": 215,
+      "category": "専門資格",
+      "subcategory": "理学療法士",
+      "name": "専門理学療法士（小児）"
+    },
+    {
+      "id": 216,
+      "category": "専門資格",
+      "subcategory": "理学療法士",
+      "name": "専門理学療法士（がん）"
+    },
+    {
+      "id": 217,
+      "category": "専門資格",
+      "subcategory": "理学療法士",
+      "name": "専門理学療法士（脳卒中）"
+    },
+    {
+      "id": 218,
+      "category": "専門資格",
+      "subcategory": "理学療法士",
+      "name": "専門理学療法士（廃用症候群）"
+    },
+    {
+      "id": 219,
+      "category": "専門資格",
+      "subcategory": "理学療法士",
+      "name": "専門理学療法士（地域理学療法）"
+    },
+    {
+      "id": 220,
+      "category": "専門資格",
+      "subcategory": "理学療法士",
+      "name": "専門理学療法士（訪問）"
+    },
+    {
+      "id": 221,
+      "category": "専門資格",
+      "subcategory": "理学療法士",
+      "name": "専門理学療法士（スポーツ）"
+    },
+    {
+      "id": 222,
+      "category": "専門資格",
+      "subcategory": "理学療法士",
+      "name": "専門理学療法士（管理・運営）"
+    },
+    {
+      "id": 223,
+      "category": "専門資格",
+      "subcategory": "理学療法士",
+      "name": "専門理学療法士（教育）"
+    },
+    {
+      "id": 224,
+      "category": "専門資格",
+      "subcategory": "作業療法士",
+      "name": "認定作業療法士（身体障害）"
+    },
+    {
+      "id": 225,
+      "category": "専門資格",
+      "subcategory": "作業療法士",
+      "name": "認定作業療法士（発達障害）"
+    },
+    {
+      "id": 226,
+      "category": "専門資格",
+      "subcategory": "作業療法士",
+      "name": "認定作業療法士（精神障害）"
+    },
+    {
+      "id": 227,
+      "category": "専門資格",
+      "subcategory": "作業療法士",
+      "name": "認定作業療法士（老年期障害）"
+    },
+    {
+      "id": 228,
+      "category": "専門資格",
+      "subcategory": "作業療法士",
+      "name": "認定作業療法士（地域作業療法）"
+    },
+    {
+      "id": 229,
+      "category": "専門資格",
+      "subcategory": "作業療法士",
+      "name": "認定作業療法士（生活環境）"
+    },
+    {
+      "id": 230,
+      "category": "専門資格",
+      "subcategory": "作業療法士",
+      "name": "認定作業療法士（管理・運営）"
+    },
+    {
+      "id": 231,
+      "category": "専門資格",
+      "subcategory": "作業療法士",
+      "name": "認定作業療法士（教育）"
+    },
+    {
+      "id": 232,
+      "category": "専門資格",
+      "subcategory": "作業療法士",
+      "name": "専門作業療法士（身体障害）"
+    },
+    {
+      "id": 233,
+      "category": "専門資格",
+      "subcategory": "作業療法士",
+      "name": "専門作業療法士（発達障害）"
+    },
+    {
+      "id": 234,
+      "category": "専門資格",
+      "subcategory": "作業療法士",
+      "name": "専門作業療法士（精神障害）"
+    },
+    {
+      "id": 235,
+      "category": "専門資格",
+      "subcategory": "作業療法士",
+      "name": "専門作業療法士（老年期障害）"
+    },
+    {
+      "id": 236,
+      "category": "専門資格",
+      "subcategory": "作業療法士",
+      "name": "専門作業療法士（地域作業療法）"
+    },
+    {
+      "id": 237,
+      "category": "専門資格",
+      "subcategory": "作業療法士",
+      "name": "専門作業療法士（生活環境）"
+    },
+    {
+      "id": 238,
+      "category": "専門資格",
+      "subcategory": "作業療法士",
+      "name": "専門作業療法士（管理・運営）"
+    },
+    {
+      "id": 239,
+      "category": "専門資格",
+      "subcategory": "作業療法士",
+      "name": "専門作業療法士（教育）"
+    },
+    {
+      "id": 240,
+      "category": "専門資格",
+      "subcategory": "言語聴覚士",
+      "name": "認定言語聴覚士（摂食・嚥下障害）"
+    },
+    {
+      "id": 241,
+      "category": "専門資格",
+      "subcategory": "言語聴覚士",
+      "name": "認定言語聴覚士（言語発達障害）"
+    },
+    {
+      "id": 242,
+      "category": "専門資格",
+      "subcategory": "言語聴覚士",
+      "name": "認定言語聴覚士（高次脳機能障害）"
+    },
+    {
+      "id": 243,
+      "category": "専門資格",
+      "subcategory": "言語聴覚士",
+      "name": "認定言語聴覚士（聴覚障害）"
+    },
+    {
+      "id": 244,
+      "category": "専門資格",
+      "subcategory": "言語聴覚士",
+      "name": "認定言語聴覚士（音声障害）"
+    },
+    {
+      "id": 245,
+      "category": "専門資格",
+      "subcategory": "言語聴覚士",
+      "name": "認定言語聴覚士（発声発語障害）"
+    },
+    {
+      "id": 246,
+      "category": "専門資格",
+      "subcategory": "言語聴覚士",
+      "name": "認定言語聴覚士（失語症）"
+    },
+    {
+      "id": 247,
+      "category": "専門資格",
+      "subcategory": "言語聴覚士",
+      "name": "認定言語聴覚士（構音障害）"
+    },
+    {
+      "id": 248,
+      "category": "専門資格",
+      "subcategory": "言語聴覚士",
+      "name": "認定言語聴覚士（吃音）"
+    },
+    {
+      "id": 249,
+      "category": "専門資格",
+      "subcategory": "言語聴覚士",
+      "name": "専門言語聴覚士（摂食・嚥下障害）"
+    },
+    {
+      "id": 250,
+      "category": "専門資格",
+      "subcategory": "言語聴覚士",
+      "name": "専門言語聴覚士（言語発達障害）"
+    },
+    {
+      "id": 251,
+      "category": "専門資格",
+      "subcategory": "言語聴覚士",
+      "name": "専門言語聴覚士（高次脳機能障害）"
+    },
+    {
+      "id": 252,
+      "category": "専門資格",
+      "subcategory": "言語聴覚士",
+      "name": "専門言語聴覚士（聴覚障害）"
+    },
+    {
+      "id": 253,
+      "category": "専門資格",
+      "subcategory": "言語聴覚士",
+      "name": "専門言語聴覚士（音声障害）"
+    },
+    {
+      "id": 254,
+      "category": "専門資格",
+      "subcategory": "言語聴覚士",
+      "name": "専門言語聴覚士（発声発語障害）"
+    },
+    {
+      "id": 255,
+      "category": "専門資格",
+      "subcategory": "言語聴覚士",
+      "name": "専門言語聴覚士（失語症）"
+    },
+    {
+      "id": 256,
+      "category": "専門資格",
+      "subcategory": "言語聴覚士",
+      "name": "専門言語聴覚士（構音障害）"
+    },
+    {
+      "id": 257,
+      "category": "専門資格",
+      "subcategory": "言語聴覚士",
+      "name": "専門言語聴覚士（吃音）"
+    },
+    {
+      "id": 258,
+      "category": "専門資格",
+      "subcategory": "介護",
+      "name": "認定介護福祉士（認知症ケア）"
+    },
+    {
+      "id": 259,
+      "category": "専門資格",
+      "subcategory": "介護",
+      "name": "認定介護福祉士（リハビリテーション）"
+    },
+    {
+      "id": 260,
+      "category": "専門資格",
+      "subcategory": "介護",
+      "name": "認定介護福祉士（終末期ケア）"
+    },
+    {
+      "id": 261,
+      "category": "専門資格",
+      "subcategory": "介護",
+      "name": "認定介護福祉士（障害者支援）"
+    },
+    {
+      "id": 262,
+      "category": "専門資格",
+      "subcategory": "介護",
+      "name": "認定認知症ケア専門士（日本認知症ケア学会）"
+    },
+    {
+      "id": 263,
+      "category": "専門資格",
+      "subcategory": "介護",
+      "name": "認定在宅ケアマネジメント指導者"
+    },
+    {
+      "id": 264,
+      "category": "専門資格",
+      "subcategory": "介護",
+      "name": "認定福祉住環境コーディネーター（2級・1級）"
+    },
+    {
+      "id": 265,
+      "category": "専門資格",
+      "subcategory": "介護",
+      "name": "認知症実践者研修修了者"
+    },
+    {
+      "id": 266,
+      "category": "専門資格",
+      "subcategory": "介護",
+      "name": "認知症管理者研修修了者"
+    },
+    {
+      "id": 267,
+      "category": "専門資格",
+      "subcategory": "介護",
+      "name": "小規模多機能型サービス等計画作成担当者研修修了者"
+    },
+    {
+      "id": 268,
+      "category": "専門資格",
+      "subcategory": "介護",
+      "name": "看護小規模多機能型サービス等計画作成担当者研修修了者"
+    },
+    {
+      "id": 269,
+      "category": "専門資格",
+      "subcategory": "介護",
+      "name": "サービス提供責任者研修修了者"
+    },
+    {
+      "id": 270,
+      "category": "専門資格",
+      "subcategory": "介護",
+      "name": "福祉用具プランナー"
+    },
+    {
+      "id": 271,
+      "category": "専門資格",
+      "subcategory": "介護",
+      "name": "喀痰吸引等研修修了者（1号・2号）"
+    },
+    {
+      "id": 272,
+      "category": "専門資格",
+      "subcategory": "障害福祉",
+      "name": "サービス管理責任者"
+    },
+    {
+      "id": 273,
+      "category": "専門資格",
+      "subcategory": "障害福祉",
+      "name": "児童発達支援管理責任者"
+    },
+    {
+      "id": 274,
+      "category": "専門資格",
+      "subcategory": "障害福祉",
+      "name": "相談支援専門員"
+    },
+    {
+      "id": 275,
+      "category": "専門資格",
+      "subcategory": "障害福祉",
+      "name": "主任相談支援専門員"
+    },
+    {
+      "id": 276,
+      "category": "専門資格",
+      "subcategory": "障害福祉",
+      "name": "強度行動障害支援者養成研修（基礎／実践）"
+    },
+    {
+      "id": 277,
+      "category": "専門資格",
+      "subcategory": "障害福祉",
+      "name": "医療的ケア児等コーディネーター研修"
+    },
+    {
+      "id": 278,
+      "category": "専門資格",
+      "subcategory": "障害福祉",
+      "name": "行動援護従業者養成研修"
+    },
+    {
+      "id": 279,
+      "category": "専門資格",
+      "subcategory": "障害福祉",
+      "name": "同行援護従業者養成研修"
+    },
+    {
+      "id": 280,
+      "category": "専門資格",
+      "subcategory": "障害福祉",
+      "name": "精神障害者支援のための研修（ピアサポーター含む）"
+    },
+    {
+      "id": 281,
+      "category": "専門資格",
+      "subcategory": "障害福祉",
+      "name": "発達障害支援専門員"
+    },
+    {
+      "id": 282,
+      "category": "専門資格",
+      "subcategory": "障害福祉",
+      "name": "手話通訳士"
+    },
+    {
+      "id": 283,
+      "category": "専門資格",
+      "subcategory": "障害福祉",
+      "name": "要約筆記者"
+    },
+    {
+      "id": 284,
+      "category": "専門資格",
+      "subcategory": "障害福祉",
+      "name": "点字指導員"
+    },
+    {
+      "id": 285,
+      "category": "専門資格",
+      "subcategory": "歯科医師",
+      "name": "口腔外科専門医"
+    },
+    {
+      "id": 286,
+      "category": "専門資格",
+      "subcategory": "歯科医師",
+      "name": "歯科麻酔専門医"
+    },
+    {
+      "id": 287,
+      "category": "専門資格",
+      "subcategory": "歯科医師",
+      "name": "矯正歯科専門医"
+    },
+    {
+      "id": 288,
+      "category": "専門資格",
+      "subcategory": "歯科医師",
+      "name": "歯周病専門医"
+    },
+    {
+      "id": 289,
+      "category": "専門資格",
+      "subcategory": "歯科医師",
+      "name": "小児歯科専門医"
+    },
+    {
+      "id": 290,
+      "category": "専門資格",
+      "subcategory": "歯科医師",
+      "name": "老年歯科医学会認定専門医"
+    },
+    {
+      "id": 291,
+      "category": "専門資格",
+      "subcategory": "歯科医師",
+      "name": "有病者歯科医療専門医"
+    },
+    {
+      "id": 292,
+      "category": "専門資格",
+      "subcategory": "歯科医師",
+      "name": "口腔インプラント専門医"
+    },
+    {
+      "id": 293,
+      "category": "専門資格",
+      "subcategory": "歯科衛生士",
+      "name": "認定歯科衛生士（歯周病予防管理）"
+    },
+    {
+      "id": 294,
+      "category": "専門資格",
+      "subcategory": "歯科衛生士",
+      "name": "認定歯科衛生士（口腔保健管理）"
+    },
+    {
+      "id": 295,
+      "category": "専門資格",
+      "subcategory": "歯科衛生士",
+      "name": "認定歯科衛生士（在宅・施設口腔ケア）"
+    },
+    {
+      "id": 296,
+      "category": "専門資格",
+      "subcategory": "歯科衛生士",
+      "name": "認定歯科衛生士（高齢者歯科）"
+    },
+    {
+      "id": 297,
+      "category": "専門資格",
+      "subcategory": "歯科衛生士",
+      "name": "認定歯科衛生士（摂食・嚥下リハビリテーション）"
+    },
+    {
+      "id": 298,
+      "category": "専門資格",
+      "subcategory": "歯科衛生士",
+      "name": "認定歯科衛生士（障害者歯科）"
+    },
+    {
+      "id": 299,
+      "category": "専門資格",
+      "subcategory": "歯科衛生士",
+      "name": "認定歯科衛生士（小児歯科）"
+    },
+    {
+      "id": 300,
+      "category": "専門資格",
+      "subcategory": "歯科衛生士",
+      "name": "認定歯科衛生士（感染予防管理）"
+    },
+    {
+      "id": 301,
+      "category": "専門資格",
+      "subcategory": "歯科衛生士",
+      "name": "認定歯科衛生士（口腔インプラント）"
+    },
+    {
+      "id": 302,
+      "category": "専門資格",
+      "subcategory": "歯科衛生士",
+      "name": "認定歯科衛生士（口腔機能向上）"
+    },
+    {
+      "id": 303,
+      "category": "専門資格",
+      "subcategory": "歯科技工士",
+      "name": "認定歯科技工士（日本歯科技工士会）"
+    },
+    {
+      "id": 304,
+      "category": "専門資格",
+      "subcategory": "歯科技工士",
+      "name": "認定歯科技工士（インプラント）"
+    },
+    {
+      "id": 305,
+      "category": "専門資格",
+      "subcategory": "歯科技工士",
+      "name": "認定歯科技工士（顎義歯）"
+    },
+    {
+      "id": 306,
+      "category": "専門資格",
+      "subcategory": "歯科技工士",
+      "name": "認定歯科技工士（CAD/CAM）"
+    },
+    {
+      "id": 307,
+      "category": "専門資格",
+      "subcategory": "歯科技工士",
+      "name": "認定歯科技工士（スポーツマウスガード）"
+    },
+    {
+      "id": 308,
+      "category": "専門資格",
+      "subcategory": "その他",
+      "name": "在宅訪問管理栄養士"
+    },
+    {
+      "id": 309,
+      "category": "専門資格",
+      "subcategory": "その他",
+      "name": "病態栄養認定管理栄養士"
+    },
+    {
+      "id": 310,
+      "category": "専門資格",
+      "subcategory": "その他",
+      "name": "糖尿病療養指導士"
+    },
+    {
+      "id": 311,
+      "category": "専門資格",
+      "subcategory": "その他",
+      "name": "小児アレルギーエデュケーター"
+    },
+    {
+      "id": 312,
+      "category": "専門資格",
+      "subcategory": "その他",
+      "name": "摂食嚥下リハビリテーション認定士"
+    },
+    {
+      "id": 313,
+      "category": "専門資格",
+      "subcategory": "その他",
+      "name": "口腔機能管理士"
+    },
+    {
+      "id": 314,
+      "category": "専門資格",
+      "subcategory": "その他",
+      "name": "日本口腔ケア学会認定口腔ケア専門士"
+    },
+    {
+      "id": 315,
+      "category": "休日",
+      "subcategory": "分類なし",
+      "name": "4週8休"
+    },
+    {
+      "id": 316,
+      "category": "休日",
+      "subcategory": "分類なし",
+      "name": "育児支援"
+    },
+    {
+      "id": 317,
+      "category": "休日",
+      "subcategory": "分類なし",
+      "name": "年間休日120日以上"
+    },
+    {
+      "id": 318,
+      "category": "休日",
+      "subcategory": "分類なし",
+      "name": "週1日からOK"
+    },
+    {
+      "id": 319,
+      "category": "休日",
+      "subcategory": "分類なし",
+      "name": "週2日からOK"
+    },
+    {
+      "id": 320,
+      "category": "休日",
+      "subcategory": "分類なし",
+      "name": "土日祝休み"
+    },
+    {
+      "id": 321,
+      "category": "休日",
+      "subcategory": "分類なし",
+      "name": "家庭都合休"
+    },
+    {
+      "id": 322,
+      "category": "休日",
+      "subcategory": "分類なし",
+      "name": "月1シフト提出"
+    },
+    {
+      "id": 323,
+      "category": "休日",
+      "subcategory": "分類なし",
+      "name": "毎週～隔週シフト提出"
+    },
+    {
+      "id": 324,
+      "category": "休日",
+      "subcategory": "分類なし",
+      "name": "有給消化率ほぼ100%"
+    },
+    {
+      "id": 325,
+      "category": "休日",
+      "subcategory": "分類なし",
+      "name": "長期休暇"
+    },
+    {
+      "id": 326,
+      "category": "休日",
+      "subcategory": "分類なし",
+      "name": "週休2日"
+    },
+    {
+      "id": 327,
+      "category": "休日",
+      "subcategory": "分類なし",
+      "name": "週休3日"
+    },
+    {
+      "id": 328,
+      "category": "勤務時間",
+      "subcategory": "分類なし",
+      "name": "日勤のみ"
+    },
+    {
+      "id": 329,
+      "category": "勤務時間",
+      "subcategory": "分類なし",
+      "name": "夜勤"
+    },
+    {
+      "id": 330,
+      "category": "勤務時間",
+      "subcategory": "分類なし",
+      "name": "2交替制"
+    },
+    {
+      "id": 331,
+      "category": "勤務時間",
+      "subcategory": "分類なし",
+      "name": "3交替制"
+    },
+    {
+      "id": 332,
+      "category": "勤務時間",
+      "subcategory": "分類なし",
+      "name": "午前のみ"
+    },
+    {
+      "id": 333,
+      "category": "勤務時間",
+      "subcategory": "分類なし",
+      "name": "午後のみ"
+    },
+    {
+      "id": 334,
+      "category": "勤務時間",
+      "subcategory": "分類なし",
+      "name": "残業0"
+    },
+    {
+      "id": 335,
+      "category": "勤務時間",
+      "subcategory": "分類なし",
+      "name": "オンコール"
+    },
+    {
+      "id": 336,
+      "category": "勤務時間",
+      "subcategory": "分類なし",
+      "name": "緊急訪問"
+    },
+    {
+      "id": 337,
+      "category": "勤務時間",
+      "subcategory": "分類なし",
+      "name": "時差出勤"
+    },
+    {
+      "id": 338,
+      "category": "勤務時間",
+      "subcategory": "分類なし",
+      "name": "フレックスタイム制度"
+    },
+    {
+      "id": 339,
+      "category": "勤務時間",
+      "subcategory": "分類なし",
+      "name": "残業月20時間以内"
+    },
+    {
+      "id": 340,
+      "category": "勤務時間",
+      "subcategory": "分類なし",
+      "name": "スキマ時間勤務"
+    },
+    {
+      "id": 341,
+      "category": "勤務時間",
+      "subcategory": "分類なし",
+      "name": "時短勤務"
+    },
+    {
+      "id": 342,
+      "category": "アクセス",
+      "subcategory": "分類なし",
+      "name": "駅近（5分以内）"
+    },
+    {
+      "id": 343,
+      "category": "アクセス",
+      "subcategory": "分類なし",
+      "name": "車通勤"
+    },
+    {
+      "id": 344,
+      "category": "アクセス",
+      "subcategory": "分類なし",
+      "name": "バイク通勤"
+    },
+    {
+      "id": 345,
+      "category": "アクセス",
+      "subcategory": "分類なし",
+      "name": "自転車通勤"
+    },
+    {
+      "id": 346,
+      "category": "アクセス",
+      "subcategory": "分類なし",
+      "name": "駐車場"
+    },
+    {
+      "id": 347,
+      "category": "アクセス",
+      "subcategory": "分類なし",
+      "name": "直行直帰"
+    },
+    {
+      "id": 348,
+      "category": "給与・賞与",
+      "subcategory": "分類なし",
+      "name": "年収300万以上"
+    },
+    {
+      "id": 349,
+      "category": "給与・賞与",
+      "subcategory": "分類なし",
+      "name": "年収350万以上"
+    },
+    {
+      "id": 350,
+      "category": "給与・賞与",
+      "subcategory": "分類なし",
+      "name": "年収400万以上"
+    },
+    {
+      "id": 351,
+      "category": "給与・賞与",
+      "subcategory": "分類なし",
+      "name": "年収450万以上"
+    },
+    {
+      "id": 352,
+      "category": "給与・賞与",
+      "subcategory": "分類なし",
+      "name": "年収500万以上"
+    },
+    {
+      "id": 353,
+      "category": "給与・賞与",
+      "subcategory": "分類なし",
+      "name": "年収550万以上"
+    },
+    {
+      "id": 354,
+      "category": "給与・賞与",
+      "subcategory": "分類なし",
+      "name": "年収600万以上"
+    },
+    {
+      "id": 355,
+      "category": "給与・賞与",
+      "subcategory": "分類なし",
+      "name": "年収650万以上"
+    },
+    {
+      "id": 356,
+      "category": "給与・賞与",
+      "subcategory": "分類なし",
+      "name": "年収700万以上"
+    },
+    {
+      "id": 357,
+      "category": "給与・賞与",
+      "subcategory": "分類なし",
+      "name": "賞与"
+    },
+    {
+      "id": 358,
+      "category": "給与・賞与",
+      "subcategory": "分類なし",
+      "name": "退職金"
+    },
+    {
+      "id": 359,
+      "category": "福利厚生",
+      "subcategory": "分類なし",
+      "name": "寮・社宅"
+    },
+    {
+      "id": 360,
+      "category": "福利厚生",
+      "subcategory": "分類なし",
+      "name": "託児所・保育支援"
+    },
+    {
+      "id": 361,
+      "category": "福利厚生",
+      "subcategory": "分類なし",
+      "name": "社会保険完備"
+    },
+    {
+      "id": 362,
+      "category": "福利厚生",
+      "subcategory": "分類なし",
+      "name": "交通費支給"
+    },
+    {
+      "id": 363,
+      "category": "福利厚生",
+      "subcategory": "分類なし",
+      "name": "扶養控除内考慮"
+    },
+    {
+      "id": 364,
+      "category": "福利厚生",
+      "subcategory": "分類なし",
+      "name": "復職支援"
+    },
+    {
+      "id": 365,
+      "category": "福利厚生",
+      "subcategory": "分類なし",
+      "name": "住宅手当"
+    },
+    {
+      "id": 366,
+      "category": "福利厚生",
+      "subcategory": "分類なし",
+      "name": "副業"
+    },
+    {
+      "id": 367,
+      "category": "福利厚生",
+      "subcategory": "分類なし",
+      "name": "日・祝日給与UP"
+    },
+    {
+      "id": 368,
+      "category": "福利厚生",
+      "subcategory": "分類なし",
+      "name": "引越し手当"
+    },
+    {
+      "id": 369,
+      "category": "福利厚生",
+      "subcategory": "分類なし",
+      "name": "緊急訪問時の手当・代休"
+    },
+    {
+      "id": 370,
+      "category": "福利厚生",
+      "subcategory": "分類なし",
+      "name": "スマホ・タブレット貸与"
+    },
+    {
+      "id": 371,
+      "category": "福利厚生",
+      "subcategory": "分類なし",
+      "name": "電動アシスト自転車・バイク・車貸与"
+    },
+    {
+      "id": 372,
+      "category": "福利厚生",
+      "subcategory": "分類なし",
+      "name": "社割"
+    },
+    {
+      "id": 373,
+      "category": "福利厚生",
+      "subcategory": "分類なし",
+      "name": "ハラスメント相談窓口"
+    },
+    {
+      "id": 374,
+      "category": "教育体制・研修制度",
+      "subcategory": "分類なし",
+      "name": "研修制度"
+    },
+    {
+      "id": 375,
+      "category": "教育体制・研修制度",
+      "subcategory": "分類なし",
+      "name": "資格取得支援"
+    },
+    {
+      "id": 376,
+      "category": "教育体制・研修制度",
+      "subcategory": "分類なし",
+      "name": "セミナー参加費補助"
+    },
+    {
+      "id": 377,
+      "category": "教育体制・研修制度",
+      "subcategory": "分類なし",
+      "name": "マニュアル"
+    },
+    {
+      "id": 378,
+      "category": "教育体制・研修制度",
+      "subcategory": "分類なし",
+      "name": "動画マニュアル"
+    },
+    {
+      "id": 379,
+      "category": "教育体制・研修制度",
+      "subcategory": "分類なし",
+      "name": "評価制度"
+    },
+    {
+      "id": 380,
+      "category": "教育体制・研修制度",
+      "subcategory": "分類なし",
+      "name": "メンター制度"
+    },
+    {
+      "id": 381,
+      "category": "教育体制・研修制度",
+      "subcategory": "分類なし",
+      "name": "独立・開業支援"
+    },
+    {
+      "id": 382,
+      "category": "教育体制・研修制度",
+      "subcategory": "分類なし",
+      "name": "院長・分院長候補"
+    },
+    {
+      "id": 383,
+      "category": "教育体制・研修制度",
+      "subcategory": "分類なし",
+      "name": "担当制"
+    }
+  ]
+}
