@@ -972,6 +972,37 @@ async function handleStep4(session, userText) {
   if (parsed?.status && typeof parsed.status === "object") {
     // LLM から帰ってきた譲れない条件をセッションへ適用
     applyMustStatus(session, parsed.status, parsed.meta || {});
+    
+    // ID化が行われていない場合、強制的にID化を試みる
+    const hasMustIds = Array.isArray(session.status.must_have_ids) && session.status.must_have_ids.length > 0;
+    const hasNgIds = Array.isArray(session.status.ng_ids) && session.status.ng_ids.length > 0;
+    const hasPendingIds = Array.isArray(session.status.pending_ids) && session.status.pending_ids.length > 0;
+    
+    if (!hasMustIds && !hasNgIds && !hasPendingIds) {
+      // ID化が行われていない場合、LLMにgenerationを依頼
+      console.log("[STEP4] No IDs found in status. Forcing ID generation.");
+      const step4Texts = session.history
+        .filter(h => h.step === 4 && h.role === "user")
+        .map(h => h.text)
+        .filter(Boolean);
+      
+      const genPayload = {
+        locale: "ja",
+        stage: { turn_index: 999 },
+        user_text: step4Texts.join("。"),
+        recent_texts: step4Texts,
+        status: session.status,
+        force_generation: true,
+      };
+      
+      const genLLM = await callLLM(4, genPayload, session, { model: "gpt-4o" });
+      
+      if (genLLM.ok && genLLM.parsed?.status) {
+        // LLM生成成功：statusを適用
+        applyMustStatus(session, genLLM.parsed.status, genLLM.parsed.meta || {});
+      }
+    }
+    
     // 次のステップは LLM の meta から決定（デフォルトは 5）
     // STEP4では meta.step は 5 または 6 のみが有効
     let nextStep = Number(parsed?.meta?.step) || 5;
@@ -1043,13 +1074,33 @@ async function handleStep4(session, userText) {
           question = "それって『絶対あってほしい』こと？それとも『絶対なしにしてほしい』こと？";
         }
       } else {
-        // 2回目以降：重要度や具体的な場面を確認
-        const questions = [
-          "それってどのくらい重要？『絶対譲れない』レベル？それとも『できればあると嬉しい』くらい？",
-          "その条件、具体的にどんな場面で必要だと感じる？",
-          "それが叶わないと、どんなことが困る？"
-        ];
-        question = questions[Math.min(serverCount, questions.length - 1)];
+        // 2回目以降：方向性（have/ng）を確認する質問を優先
+        // まず方向性を確認してから、重要度や具体的な場面を確認
+        const userInput = userText || "";
+        const recentTexts = session.history.slice(-3).map(item => item.text).join(" ");
+        const combinedText = `${userInput} ${recentTexts}`;
+        
+        // 方向性がまだ確定していない場合、方向性を確認する質問を優先
+        if (serverCount === 1) {
+          // 残業の場合
+          if (combinedText.includes("残業")) {
+            question = "それって『残業なし』がいい？それとも『多少の残業はOK』くらい？";
+          } else if (combinedText.includes("リモート") || combinedText.includes("在宅")) {
+            question = "それって『フルリモート』がいい？それとも『週に何回かリモート』くらい？";
+          } else if (combinedText.includes("休み") || combinedText.includes("休日")) {
+            question = "それって『完全週休2日』がいい？それとも『月6日以上あればOK』くらい？";
+          } else {
+            // デフォルト：方向性を確認
+            question = "それって『絶対あってほしい』こと？それとも『絶対なしにしてほしい』こと？";
+          }
+        } else {
+          // 3回目以降：重要度や具体的な場面を確認
+          const questions = [
+            "その条件、具体的にどんな場面で必要だと感じる？",
+            "それが叶わないと、どんなことが困る？"
+          ];
+          question = questions[Math.min(serverCount - 2, questions.length - 1)] || "その条件について、もう少し詳しく教えてくれる？";
+        }
       }
 
       responseText = responseText ? `${responseText}\n\n${question}` : question;
@@ -1076,20 +1127,39 @@ async function handleStep4(session, userText) {
       if (serverCount === 0) {
         responseText = "例えば働き方で言うと、『リモートワークができる』『フレックスタイム』『残業なし』とか、どれが一番大事？";
       } else if (serverCount === 1) {
-        responseText = "それってどのくらい重要？『絶対必須』『あれば嬉しい』ならどっち？";
-      } else {
-        // 3回目以降：ユーザーの発話内容に基づいて適切な比較質問を生成
-        let comparisonQuestion;
-        if (combinedText.includes("残業") || combinedText.includes("働き方") || combinedText.includes("時間")) {
-          comparisonQuestion = "今の話と『職場の雰囲気』を比べたら、どっちの方が譲れない？";
-        } else if (combinedText.includes("雰囲気") || combinedText.includes("人間関係") || combinedText.includes("コミュニケーション")) {
-          comparisonQuestion = "今の話と『働き方（リモートワークや残業など）』を比べたら、どっちの方が譲れない？";
-        } else if (combinedText.includes("給与") || combinedText.includes("給料") || combinedText.includes("待遇")) {
-          comparisonQuestion = "今の話と『働き方』を比べたら、どっちの方が譲れない？";
-        } else if (combinedText.includes("休日") || combinedText.includes("休み") || combinedText.includes("休暇")) {
-          comparisonQuestion = "今の話と『職場の雰囲気』を比べたら、どっちの方が譲れない？";
+        // 方向性を確認する質問
+        if (combinedText.includes("残業")) {
+          responseText = "それって『残業なし』がいい？それとも『多少の残業はOK』くらい？";
+        } else if (combinedText.includes("リモート") || combinedText.includes("在宅")) {
+          responseText = "それって『フルリモート』がいい？それとも『週に何回かリモート』くらい？";
+        } else if (combinedText.includes("休み") || combinedText.includes("休日")) {
+          responseText = "それって『完全週休2日』がいい？それとも『月6日以上あればOK』くらい？";
         } else {
-          // デフォルト：ユーザーが話している内容を確認する質問
+          responseText = "それって『絶対あってほしい』こと？それとも『絶対なしにしてほしい』こと？";
+        }
+      } else {
+        // 3回目以降：方向性が確定していない場合は方向性を確認、確定している場合は重要度を確認
+        // 方向性が確定していない場合は比較質問は出さない
+        let comparisonQuestion;
+        
+        // 方向性を示すキーワードをチェック
+        const hasPositiveKeywords = combinedText.includes("欲しい") || combinedText.includes("いい") || combinedText.includes("希望") || combinedText.includes("理想");
+        const hasNegativeKeywords = combinedText.includes("避けたい") || combinedText.includes("嫌") || combinedText.includes("なし") || combinedText.includes("したくない");
+        
+        // 方向性が確定していない場合
+        if (!hasPositiveKeywords && !hasNegativeKeywords) {
+          // 方向性を確認する質問
+          if (combinedText.includes("残業")) {
+            comparisonQuestion = "それって『残業なし』がいい？それとも『多少の残業はOK』くらい？";
+          } else if (combinedText.includes("リモート") || combinedText.includes("在宅")) {
+            comparisonQuestion = "それって『フルリモート』がいい？それとも『週に何回かリモート』くらい？";
+          } else if (combinedText.includes("休み") || combinedText.includes("休日")) {
+            comparisonQuestion = "それって『完全週休2日』がいい？それとも『月6日以上あればOK』くらい？";
+          } else {
+            comparisonQuestion = "それって『絶対あってほしい』こと？それとも『絶対なしにしてほしい』こと？";
+          }
+        } else {
+          // 方向性が確定している場合は重要度を確認
           comparisonQuestion = "それって、どのくらい譲れない条件？『絶対必須』レベル？";
         }
         responseText = comparisonQuestion;
