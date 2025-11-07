@@ -807,10 +807,18 @@ async function handleStep4(session, userText) {
     session.meta.step4_deepening_count = 0;
   }
 
-  // userTextがある場合のみturnIndexをインクリメント（STEP遷移時はインクリメントしない）
-  if (userText && userText.trim()) {
-    session.stage.turnIndex += 1;
+  // 【重要】STEP遷移時（userTextが空）は、LLMを呼ばずにintro質問を返す
+  if (!userText || !userText.trim()) {
+    return {
+      response: "働く上で『ここだけは譲れないな』って思うこと、ある？職場の雰囲気でも働き方でもOKだよ✨",
+      status: session.status,
+      meta: { step: 4, phase: "intro", deepening_count: 0 },
+      drill: session.drill,
+    };
   }
+
+  // userTextがある場合のみturnIndexをインクリメント
+  session.stage.turnIndex += 1;
 
   // LLMにはサーバー側カウンターを送る（step4_deepening_countをdeepeningCountとして送信）
   const payload = {
@@ -828,7 +836,7 @@ async function handleStep4(session, userText) {
   }
   const parsed = llm.parsed || {};
 
-  // intro フェーズ（初回質問）
+  // intro フェーズ（安全装置：LLMが予期せずintroを返した場合）
   if (parsed?.control?.phase === "intro") {
     // deepening_countをリセット
     session.meta.step4_deepening_count = 0;
@@ -840,11 +848,10 @@ async function handleStep4(session, userText) {
     };
   }
 
-  // ユーザーが応答した場合（intro以外）、カウンターを増やす
-  if (userText && userText.trim()) {
-    session.meta.step4_deepening_count += 1;
-    console.log(`[STEP4] User responded. Counter: ${session.meta.step4_deepening_count}`);
-  }
+  // ユーザーが応答した場合、カウンターを増やす
+  session.meta.step4_deepening_count += 1;
+  console.log(`[STEP4] User responded. Counter: ${session.meta.step4_deepening_count}`);
+
 
   // サーバー側の暴走停止装置（フェイルセーフ） - generationより前にチェック
   const serverCount = session.meta.step4_deepening_count || 0;
@@ -928,17 +935,7 @@ async function handleStep4(session, userText) {
     };
   }
 
-  // フォールバック
-  // userTextが空（STEP遷移時）の場合は、intro質問を返す
-  if (!userText || !userText.trim()) {
-    return {
-      response: "働く上で『ここだけは譲れないな』って思うこと、ある？職場の雰囲気でも働き方でもOKだよ✨",
-      status: session.status,
-      meta: { step: 4, phase: "intro", deepening_count: 0 },
-      drill: session.drill,
-    };
-  }
-
+  // 最終フォールバック（通常はここに到達しない）
   return {
     response: "あなたの譲れない条件の整理を続けているよ。気になる条件を教えてね。",
     status: session.status,
