@@ -126,7 +126,7 @@ function toBadges(resp, _currStep) {
   const revertTimerRef = useRef(null);
 
   // 進捗バー
-  const MAX_STEP = 6;
+  const MAX_STEP = 7;
   const progress = Math.min(100, Math.max(0, Math.round((step / MAX_STEP) * 100)));
 
   // ★最初の挨拶をサーバーから1回だけ取得

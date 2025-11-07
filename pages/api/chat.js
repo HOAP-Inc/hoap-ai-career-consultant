@@ -986,7 +986,7 @@ async function handleStep5(session, userText) {
     if (!session.meta) session.meta = {};
     session.meta.step5_deepening_count = 0;
     return {
-      response: parsed.response || "あなた自身を一言で言うと、どんな人ですか？周りからよく言われる「あなたらしさ」があれば教えてください😊",
+      response: parsed.response || "あなた自身を一言で言うと、どんな人？周りからよく言われる「あなたらしさ」もあれば教えて😊",
       status: session.status,
       meta: { step: 5 },
       drill: session.drill,
@@ -1057,7 +1057,7 @@ async function handleStep5(session, userText) {
     }
 
     // 通常の会話フェーズ（empathy と ask_next を \n\n で結合）
-    const message = [empathy, ask_next].filter(Boolean).join("\n\n") || empathy || "ありがとうございます。もう少し教えてください。";
+    const message = [empathy, ask_next].filter(Boolean).join("\n\n") || empathy || "ありがとう。もう少し教えて。";
     return {
       response: message,
       status: session.status,
@@ -1067,7 +1067,7 @@ async function handleStep5(session, userText) {
   }
 
   return {
-    response: "あなた自身について、もう少し聞かせてもらえますか？",
+    response: "あなた自身について、もう少し聞かせてもらえる？",
     status: session.status,
     meta: { step: 5 },
     drill: session.drill,
