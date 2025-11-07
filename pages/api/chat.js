@@ -599,7 +599,13 @@ async function handleStep2(session, userText) {
   }
   session.meta.step2_deepening_count += 1;
 
-  const llmNextStep = Number(meta?.step) || session.step;
+  // STEP2では meta.step は 3 のみが有効（STEP3への遷移）
+  // 1 や 2 などの不正な値が返ってきた場合は無視する
+  let llmNextStep = Number(meta?.step) || session.step;
+  if (llmNextStep !== session.step && llmNextStep !== 3) {
+    console.warn(`[STEP2 WARNING] Invalid meta.step=${llmNextStep} from LLM. Ignoring.`);
+    llmNextStep = session.step;  // 不正な値は無視して現在のステップを維持
+  }
 
   let nextStep = llmNextStep;
   if (llmNextStep === session.step) {
@@ -728,7 +734,14 @@ async function handleStep3(session, userText) {
     }
     session.meta.step3_deepening_count += 1;
 
-    const llmNextStep = Number(meta?.step) || session.step;
+    // STEP3では meta.step は 4 のみが有効（STEP4への遷移）
+    // 1, 2, 3 などの不正な値が返ってきた場合は無視する
+    let llmNextStep = Number(meta?.step) || session.step;
+    if (llmNextStep !== session.step && llmNextStep !== 4) {
+      console.warn(`[STEP3 WARNING] Invalid meta.step=${llmNextStep} from LLM. Ignoring.`);
+      llmNextStep = session.step;  // 不正な値は無視して現在のステップを維持
+    }
+
     let nextStep = llmNextStep;
 
     // サーバー側の暴走停止装置（フェイルセーフ）
@@ -917,7 +930,12 @@ async function handleStep4(session, userText) {
     // LLM から帰ってきた譲れない条件をセッションへ適用
     applyMustStatus(session, parsed.status, parsed.meta || {});
     // 次のステップは LLM の meta から決定（デフォルトは 5）
-    const nextStep = Number(parsed?.meta?.step) || 5;
+    // STEP4では meta.step は 5 または 6 のみが有効
+    let nextStep = Number(parsed?.meta?.step) || 5;
+    if (nextStep !== 5 && nextStep !== 6) {
+      console.warn(`[STEP4 WARNING] Invalid meta.step=${nextStep} from LLM. Defaulting to 5.`);
+      nextStep = 5;  // 不正な値の場合はデフォルトの5にする
+    }
 
     // セッションを次STEPにセットして、次STEPの初回質問を取得
     session.step = nextStep;
@@ -1046,7 +1064,12 @@ async function handleStep5(session, userText) {
   // generation フェーズ（Self確定、STEP6へ移行）
   if (parsed?.status?.self_text && typeof parsed.status.self_text === "string") {
     session.status.self_text = parsed.status.self_text;
-    const nextStep = Number(parsed?.meta?.step) || 6;
+    // STEP5では meta.step は 6 のみが有効
+    let nextStep = Number(parsed?.meta?.step) || 6;
+    if (nextStep !== 6) {
+      console.warn(`[STEP5 WARNING] Invalid meta.step=${nextStep} from LLM. Defaulting to 6.`);
+      nextStep = 6;  // 不正な値の場合はデフォルトの6にする
+    }
     session.step = nextStep;
     session.stage.turnIndex = 0;
     // deepening_countをリセット
@@ -1074,7 +1097,14 @@ async function handleStep5(session, userText) {
     }
     session.meta.step5_deepening_count += 1;
 
-    const llmNextStep = Number(meta?.step) || session.step;
+    // STEP5では meta.step は 6 のみが有効（STEP6への遷移）
+    // 1, 2, 3, 4, 5 などの不正な値が返ってきた場合は無視する
+    let llmNextStep = Number(meta?.step) || session.step;
+    if (llmNextStep !== session.step && llmNextStep !== 6) {
+      console.warn(`[STEP5 WARNING] Invalid meta.step=${llmNextStep} from LLM. Ignoring.`);
+      llmNextStep = session.step;  // 不正な値は無視して現在のステップを維持
+    }
+
     let nextStep = llmNextStep;
 
     // サーバー側の暴走停止装置（フェイルセーフ）
