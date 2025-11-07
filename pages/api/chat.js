@@ -872,11 +872,13 @@ async function handleStep4(session, userText) {
   session.stage.turnIndex += 1;
 
   // LLMにはサーバー側カウンターを送る（step4_deepening_countをdeepeningCountとして送信）
+  // STEP4ではSTEP4の履歴のみを送る（STEP3の内容を参照しない）
+  const step4History = session.history.filter(h => h.step === 4);
   const payload = {
     locale: "ja",
     stage: { turn_index: session.stage.turnIndex },
     user_text: userText,
-    recent_texts: session.history.slice(-6).map(item => item.text),
+    recent_texts: step4History.slice(-6).map(item => item.text),
     status: session.status,
     deepening_attempt_total: session.meta.step4_deepening_count,  // サーバー側カウンターを送る
   };
@@ -1000,6 +1002,40 @@ async function handleStep4(session, userText) {
       if (genLLM.ok && genLLM.parsed?.status) {
         // LLM生成成功：statusを適用
         applyMustStatus(session, genLLM.parsed.status, genLLM.parsed.meta || {});
+      } else if (step4Texts.length > 0) {
+        // LLM失敗時でも最低限のmust_textを設定
+        const lastText = step4Texts[step4Texts.length - 1];
+        session.status.must_text = lastText.length > 50 ? lastText : `${lastText}について伺いました。`;
+        if (!session.status.status_bar) {
+          session.status.status_bar = "";
+        }
+      }
+    }
+    
+    // status_barが空の場合、must_have_idsまたはng_idsから生成
+    if (!session.status.status_bar || session.status.status_bar.trim() === "") {
+      const statusBarParts = [];
+      if (Array.isArray(session.status.must_have_ids) && session.status.must_have_ids.length > 0) {
+        const directionMap = session.status.direction_map || {};
+        session.status.must_have_ids.forEach(id => {
+          const direction = directionMap[String(id)] || "have";
+          statusBarParts.push(`ID:${id}/${direction}`);
+        });
+      }
+      if (Array.isArray(session.status.ng_ids) && session.status.ng_ids.length > 0) {
+        const directionMap = session.status.direction_map || {};
+        session.status.ng_ids.forEach(id => {
+          const direction = directionMap[String(id)] || "ng";
+          statusBarParts.push(`ID:${id}/${direction}`);
+        });
+      }
+      if (Array.isArray(session.status.pending_ids) && session.status.pending_ids.length > 0) {
+        session.status.pending_ids.forEach(id => {
+          statusBarParts.push(`ID:${id}/pending`);
+        });
+      }
+      if (statusBarParts.length > 0) {
+        session.status.status_bar = statusBarParts.join(",");
       }
     }
     
@@ -1239,8 +1275,8 @@ async function handleStep5(session, userText) {
     return {
       response: combinedResponse || step6Response.response,
       status: session.status,
-      meta: { step: session.step },
-      drill: session.drill,
+      meta: step6Response.meta || { step: session.step },
+      drill: step6Response.drill,
     };
   }
 
@@ -1319,8 +1355,8 @@ async function handleStep5(session, userText) {
       return {
         response: combinedResponse || step6Response.response,
         status: session.status,
-        meta: { step: session.step },
-        drill: session.drill,
+        meta: step6Response.meta || { step: session.step },
+        drill: step6Response.drill,
       };
     }
 
