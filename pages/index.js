@@ -302,7 +302,17 @@ setChoices(isChoiceStep(next) ? uniqueByNormalized(inline) : []);
       // 本文反映（\n\n で分割して別々の吹き出しとして順次表示）
       const responseParts = (data.response || "").split("\n\n").filter(Boolean);
 
-      if (responseParts.length === 0) {
+      // 【特殊処理】STEP6完了時：最終メッセージ → 1.5秒後 → 一覧表示
+      if (data.meta?.show_summary_after_delay && data.meta?.summary_data) {
+        // 最初に最終メッセージを表示
+        setAiTexts([data.response]);
+        setIsTyping(false);
+
+        // 指定時間後に一覧データを表示
+        setTimeout(() => {
+          setAiTexts([data.meta.summary_data]);
+        }, data.meta.show_summary_after_delay);
+      } else if (responseParts.length === 0) {
         setAiTexts([]);
         setIsTyping(false);
       } else if (responseParts.length === 1) {
