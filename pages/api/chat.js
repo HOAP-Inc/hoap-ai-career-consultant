@@ -836,9 +836,22 @@ async function handleStep4(session, userText) {
   }
   const parsed = llm.parsed || {};
 
+  // intro フェーズ（安全装置：LLMが予期せずintroを返した場合）
+  if (parsed?.control?.phase === "intro") {
+    // deepening_countをリセット
+    session.meta.step4_deepening_count = 0;
+    return {
+      response: parsed.response || "働く上で『ここだけは譲れないな』って思うこと、ある？職場の雰囲気でも働き方でもOKだよ✨",
+      status: session.status,
+      meta: { step: 4, phase: "intro", deepening_count: 0 },
+      drill: session.drill,
+    };
+  }
+
   // ユーザーが応答した場合、カウンターを増やす
   session.meta.step4_deepening_count += 1;
   console.log(`[STEP4] User responded. Counter: ${session.meta.step4_deepening_count}`);
+
 
   // サーバー側の暴走停止装置（フェイルセーフ） - generationより前にチェック
   const serverCount = session.meta.step4_deepening_count || 0;
