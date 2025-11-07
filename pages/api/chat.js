@@ -909,18 +909,52 @@ async function handleStep4(session, userText) {
   if (serverCount >= 3) {
     console.log(`[STEP4 FAILSAFE] Forcing transition to STEP5. Server count: ${serverCount}`);
 
-    // 簡単なmust_textを生成してSTEP5に遷移
-    session.status.must_text = userText || "譲れない条件について伺いました。";
+    // フェイルセーフで遷移する場合でも、LLMにmust_ids/must_textを生成させる
+    // session.historyからSTEP4のユーザー発話を取得
+    const step4Texts = session.history
+      .filter(h => h.step === 4 && h.role === "user")
+      .map(h => h.text)
+      .filter(Boolean);
+
+    // LLMにgenerationを依頼（強制的にmust_ids生成）
+    const genPayload = {
+      locale: "ja",
+      stage: { turn_index: 999 }, // 終了フラグ
+      user_text: step4Texts.join("。"), // 全ての発話を結合
+      recent_texts: step4Texts,
+      status: session.status,
+      force_generation: true, // generationフェーズを強制
+    };
+
+    const genLLM = await callLLM(4, genPayload, session, { model: "gpt-4o" });
+
+    if (genLLM.ok && genLLM.parsed?.status) {
+      // LLM生成成功：statusを適用
+      applyMustStatus(session, genLLM.parsed.status, genLLM.parsed.meta || {});
+    } else if (step4Texts.length > 0) {
+      // LLM失敗時：最後の発話を整形してmust_textに設定
+      const lastText = step4Texts[step4Texts.length - 1];
+      session.status.must_text = lastText.length > 50 ? lastText : `${lastText}について伺いました。`;
+      // must_have_idsは空配列のまま（ID化できなかった）
+      if (!Array.isArray(session.status.must_have_ids)) {
+        session.status.must_have_ids = [];
+      }
+    } else {
+      // 発話がない場合のフォールバック
+      session.status.must_text = "譲れない条件について伺いました。";
+      session.status.must_have_ids = [];
+    }
+
     session.step = 5;
     session.stage.turnIndex = 0;
     session.meta.step4_deepening_count = 0;
 
     const step5Response = await handleStep5(session, "");
-    const combinedResponse = [session.status.must_text, "ありがとう！次の質問に移るね", step5Response.response].filter(Boolean).join("\n\n");
+    const combinedResponse = [session.status.must_text, "ありがとう！", step5Response.response].filter(Boolean).join("\n\n");
     return {
       response: combinedResponse || step5Response.response,
       status: session.status,
-      meta: { step: session.step, deepening_count: serverCount },
+      meta: { step: session.step },
       drill: step5Response.drill,
     };
   }
@@ -1005,13 +1039,32 @@ async function handleStep4(session, userText) {
     const isVague = vaguePatterns.some(pattern => pattern.test(responseText));
 
     if (isVague || (!responseText && parsed.control.phase !== "empathy")) {
-      // カウンターに応じて具体的な質問を生成
+      // ユーザーの発話内容を取得
+      const recentTexts = session.history.slice(-3).map(item => item.text).join(" ");
+      const currentText = userText || "";
+      const combinedText = `${currentText} ${recentTexts}`;
+
+      // カウンターに応じて具体的な質問を生成（ユーザーの発話内容に基づく）
       if (serverCount === 0) {
         responseText = "例えば働き方で言うと、『リモートワークができる』『フレックスタイム』『残業なし』とか、どれが一番大事？";
       } else if (serverCount === 1) {
         responseText = "それってどのくらい重要？『絶対必須』『あれば嬉しい』ならどっち？";
       } else {
-        responseText = "最後に確認！今の話と『職場の雰囲気』を比べたら、どっちの方が譲れない？";
+        // 3回目以降：ユーザーの発話内容に基づいて適切な比較質問を生成
+        let comparisonQuestion;
+        if (combinedText.includes("残業") || combinedText.includes("働き方") || combinedText.includes("時間")) {
+          comparisonQuestion = "今の話と『職場の雰囲気』を比べたら、どっちの方が譲れない？";
+        } else if (combinedText.includes("雰囲気") || combinedText.includes("人間関係") || combinedText.includes("コミュニケーション")) {
+          comparisonQuestion = "今の話と『働き方（リモートワークや残業など）』を比べたら、どっちの方が譲れない？";
+        } else if (combinedText.includes("給与") || combinedText.includes("給料") || combinedText.includes("待遇")) {
+          comparisonQuestion = "今の話と『働き方』を比べたら、どっちの方が譲れない？";
+        } else if (combinedText.includes("休日") || combinedText.includes("休み") || combinedText.includes("休暇")) {
+          comparisonQuestion = "今の話と『職場の雰囲気』を比べたら、どっちの方が譲れない？";
+        } else {
+          // デフォルト：ユーザーが話している内容を確認する質問
+          comparisonQuestion = "それって、どのくらい譲れない条件？『絶対必須』レベル？";
+        }
+        responseText = comparisonQuestion;
       }
     }
 
@@ -1336,8 +1389,39 @@ async function handler(req, res) {
       return;
     }
 
-    if (result.status) session.status = result.status;
-    if (result.meta?.step != null) session.step = result.meta.step;
+    if (result.status) {
+      // 【安全装置】session.statusを上書きする前に、qual_idsを保護
+      // STEP1で登録したqual_idsが後続のSTEPで消えないようにする
+      const existingQualIds = session.status?.qual_ids;
+      const existingLicenses = session.status?.licenses;
+      session.status = result.status;
+
+      // result.statusにqual_idsが含まれていない場合、既存の値を復元
+      if (existingQualIds && existingQualIds.length > 0 && !session.status.qual_ids) {
+        session.status.qual_ids = existingQualIds;
+        console.log(`[HANDLER] Restored qual_ids: ${existingQualIds}`);
+      }
+      if (existingLicenses && existingLicenses.length > 0 && !session.status.licenses) {
+        session.status.licenses = existingLicenses;
+        console.log(`[HANDLER] Restored licenses: ${existingLicenses}`);
+      }
+    }
+    if (result.meta?.step != null) {
+      const beforeStep = session.step;
+      const proposedStep = result.meta.step;
+
+      // 【安全装置】result.meta.step が現在のステップより小さい値の場合は拒否
+      // ステップは必ず前進するか維持されるべきで、後退してはならない
+      if (proposedStep < beforeStep) {
+        console.error(`[HANDLER ERROR] Attempted to go backwards: ${beforeStep} -> ${proposedStep}. REJECTING step change.`);
+        // ステップ変更を拒否して現在のステップを維持
+      } else {
+        session.step = proposedStep;
+        if (beforeStep !== session.step) {
+          console.log(`[HANDLER] Step changed: ${beforeStep} -> ${session.step}`);
+        }
+      }
+    }
     if (result.drill) session.drill = result.drill;
     saveSession(session);
 
