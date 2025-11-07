@@ -744,13 +744,39 @@ async function handleStep3(session, userText) {
 
     if (nextStep !== session.step) {
       // STEP4へ移行
-      // フェイルセーフで遷移する場合、簡易的にwill_textを生成
-      const fallbackWill = userText || "これから挑戦したいことについて伺いました。";
-      session.status.will_text = fallbackWill;
+      // フェイルセーフで遷移する場合でも、LLMにwill_textを生成させる
+      // session.historyからSTEP3のユーザー発話を取得
+      const step3Texts = session.history
+        .filter(h => h.step === 3 && h.role === "user")
+        .map(h => h.text)
+        .filter(Boolean);
+
+      // LLMにgenerationを依頼（強制的にwill_text生成）
+      const genPayload = {
+        locale: "ja",
+        stage: { turn_index: 999 }, // 終了フラグ
+        user_text: step3Texts.join("。"), // 全ての発話を結合
+        recent_texts: step3Texts,
+        status: session.status,
+        force_generation: true, // generationフェーズを強制
+      };
+
+      const genLLM = await callLLM(3, genPayload, session, { model: "gpt-4o" });
+      let generatedWill = "これから挑戦したいことについて伺いました。";
+
+      if (genLLM.ok && genLLM.parsed?.status?.will_text) {
+        generatedWill = genLLM.parsed.status.will_text;
+      } else if (step3Texts.length > 0) {
+        // LLM失敗時は最後の発話を整形
+        const lastText = step3Texts[step3Texts.length - 1];
+        generatedWill = lastText.length > 50 ? lastText : `${lastText}に挑戦したい`;
+      }
+
+      session.status.will_text = generatedWill;
       if (!Array.isArray(session.status.will_texts)) {
         session.status.will_texts = [];
       }
-      session.status.will_texts.push(fallbackWill);
+      session.status.will_texts.push(generatedWill);
 
       session.step = nextStep;
       session.stage.turnIndex = 0;
@@ -809,6 +835,18 @@ async function handleStep4(session, userText) {
 
   // 【重要】STEP遷移時（userTextが空）は、LLMを呼ばずにintro質問を返す
   if (!userText || !userText.trim()) {
+    // intro質問を既に表示済みの場合は空応答を返す（重複防止）
+    if (session.meta.step4_intro_shown) {
+      return {
+        response: "",
+        status: session.status,
+        meta: { step: 4, phase: "waiting" },
+        drill: session.drill,
+      };
+    }
+
+    // intro質問を表示してフラグを立てる
+    session.meta.step4_intro_shown = true;
     return {
       response: "働く上で『ここだけは譲れないな』って思うこと、ある？職場の雰囲気でも働き方でもOKだよ✨",
       status: session.status,
@@ -925,7 +963,19 @@ async function handleStep4(session, userText) {
   if (parsed?.control?.phase) {
     let responseText = parsed.response || "";
 
-    // 【安全装置】曖昧な質問を検出して具体的な質問に置き換える
+    // 【安全装置1】empathyフェーズの場合、共感だけでなく質問も追加
+    if (parsed.control.phase === "empathy") {
+      // empathyの後に具体的な質問を追加
+      const questions = [
+        "それってどのくらい重要？『絶対譲れない』レベル？それとも『できればあると嬉しい』くらい？",
+        "その条件、具体的にどんな場面で必要だと感じる？",
+        "それが叶わないと、どんなことが困る？"
+      ];
+      const question = questions[Math.min(serverCount, questions.length - 1)];
+      responseText = responseText ? `${responseText}\n\n${question}` : question;
+    }
+
+    // 【安全装置2】曖昧な質問を検出して具体的な質問に置き換える
     const vaguePatterns = [
       /もう少し詳しく/,
       /もっと具体的に/,
@@ -936,7 +986,7 @@ async function handleStep4(session, userText) {
 
     const isVague = vaguePatterns.some(pattern => pattern.test(responseText));
 
-    if (isVague || !responseText) {
+    if (isVague || (!responseText && parsed.control.phase !== "empathy")) {
       // カウンターに応じて具体的な質問を生成
       if (serverCount === 0) {
         responseText = "例えば働き方で言うと、『リモートワークができる』『フレックスタイム』『残業なし』とか、どれが一番大事？";
