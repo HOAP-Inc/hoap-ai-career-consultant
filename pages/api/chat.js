@@ -889,14 +889,23 @@ async function handleStep4(session, userText) {
 
   // intro フェーズ（安全装置：LLMが予期せずintroを返した場合）
   if (parsed?.control?.phase === "intro") {
-    // deepening_countをリセット
-    session.meta.step4_deepening_count = 0;
-    return {
-      response: parsed.response || "働く上で『ここだけは譲れないな』って思うこと、ある？職場の雰囲気でも働き方でもOKだよ✨",
-      status: session.status,
-      meta: { step: 4, phase: "intro", deepening_count: 0 },
-      drill: session.drill,
-    };
+    // 既にintro質問を表示済みの場合はスキップ（重複防止）
+    if (session.meta.step4_intro_shown) {
+      console.warn("[STEP4 WARNING] LLM returned intro phase but intro was already shown. Skipping.");
+      // 初回の実質的な応答として扱う：empathyフェーズに進める
+      parsed.control.phase = "empathy";
+      // 以下の処理を続行させる（return しない）
+    } else {
+      // intro質問を初めて表示する
+      session.meta.step4_intro_shown = true;
+      session.meta.step4_deepening_count = 0;
+      return {
+        response: parsed.response || "働く上で『ここだけは譲れないな』って思うこと、ある？職場の雰囲気でも働き方でもOKだよ✨",
+        status: session.status,
+        meta: { step: 4, phase: "intro", deepening_count: 0 },
+        drill: session.drill,
+      };
+    }
   }
 
   // ユーザーが応答した場合、カウンターを増やす
@@ -983,13 +992,32 @@ async function handleStep4(session, userText) {
 
     // 【安全装置1】empathyフェーズの場合、共感だけでなく質問も追加
     if (parsed.control.phase === "empathy") {
-      // empathyの後に具体的な質問を追加
-      const questions = [
-        "それってどのくらい重要？『絶対譲れない』レベル？それとも『できればあると嬉しい』くらい？",
-        "その条件、具体的にどんな場面で必要だと感じる？",
-        "それが叶わないと、どんなことが困る？"
-      ];
-      const question = questions[Math.min(serverCount, questions.length - 1)];
+      // ユーザー発話が短い単語の場合（10文字以下）、方向性を確認する質問を追加
+      const userInput = userText || "";
+      const isShortWord = userInput.length <= 10;
+
+      let question;
+      if (isShortWord && serverCount === 0) {
+        // 初回：方向性を確認（あってほしいのか、なしにしてほしいのか）
+        if (userInput.includes("残業")) {
+          question = "『残業なし』がいい？それとも『多少の残業はOK』くらい？";
+        } else if (userInput.includes("リモート") || userInput.includes("在宅")) {
+          question = "『フルリモート』がいい？それとも『週に何回かリモート』くらい？";
+        } else if (userInput.includes("休み") || userInput.includes("休日")) {
+          question = "休日はどのくらい欲しい？『完全週休2日』？それとも『月6日以上あればOK』？";
+        } else {
+          question = "それって『絶対あってほしい』こと？それとも『絶対なしにしてほしい』こと？";
+        }
+      } else {
+        // 2回目以降：重要度や具体的な場面を確認
+        const questions = [
+          "それってどのくらい重要？『絶対譲れない』レベル？それとも『できればあると嬉しい』くらい？",
+          "その条件、具体的にどんな場面で必要だと感じる？",
+          "それが叶わないと、どんなことが困る？"
+        ];
+        question = questions[Math.min(serverCount, questions.length - 1)];
+      }
+
       responseText = responseText ? `${responseText}\n\n${question}` : question;
     }
 
