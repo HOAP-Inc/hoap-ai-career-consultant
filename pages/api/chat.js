@@ -850,6 +850,7 @@ async function handleStep4(session, userText) {
   if (!userText || !userText.trim()) {
     // intro質問を既に表示済みの場合は空応答を返す（重複防止）
     if (session.meta.step4_intro_shown) {
+      console.log("[STEP4] Intro already shown. Returning empty response.");
       return {
         response: "",
         status: session.status,
@@ -858,8 +859,9 @@ async function handleStep4(session, userText) {
       };
     }
 
-    // intro質問を表示してフラグを立てる
+    // intro質問を表示してフラグを立てる（deepening_countは0のまま）
     session.meta.step4_intro_shown = true;
+    console.log("[STEP4] Showing intro question for the first time.");
     return {
       response: "働く上で『ここだけは譲れないな』って思うこと、ある？職場の雰囲気でも働き方でもOKだよ✨",
       status: session.status,
@@ -893,12 +895,14 @@ async function handleStep4(session, userText) {
   if (parsed?.control?.phase === "intro") {
     // 既にintro質問を表示済みの場合はスキップ（重複防止）
     if (session.meta.step4_intro_shown) {
-      console.warn("[STEP4 WARNING] LLM returned intro phase but intro was already shown. Skipping.");
-      // 初回の実質的な応答として扱う：empathyフェーズに進める
+      console.warn("[STEP4 WARNING] LLM returned intro phase but intro was already shown. Treating as empathy phase.");
+      // カウンターは既にインクリメント済みなので、そのまま継続
+      // empathyフェーズとして処理を続行
       parsed.control.phase = "empathy";
       // 以下の処理を続行させる（return しない）
     } else {
-      // intro質問を初めて表示する
+      // intro質問を初めて表示する（通常はここには来ないはず）
+      console.log("[STEP4] LLM returned intro. Showing intro question.");
       session.meta.step4_intro_shown = true;
       session.meta.step4_deepening_count = 0;
       return {
@@ -917,7 +921,8 @@ async function handleStep4(session, userText) {
 
   // サーバー側の暴走停止装置（フェイルセーフ） - generationより前にチェック
   const serverCount = session.meta.step4_deepening_count || 0;
-  if (serverCount >= 3) {
+  // 2回のやり取りで強制的にgenerationフェーズへ（しつこすぎるのを防止）
+  if (serverCount >= 2) {
     console.log(`[STEP4 FAILSAFE] Forcing transition to STEP5. Server count: ${serverCount}`);
 
     // フェイルセーフで遷移する場合でも、LLMにmust_ids/must_textを生成させる
@@ -1415,22 +1420,40 @@ async function handleStep6(session, userText) {
       }
     }
 
-    // STEP2（Can）: LLM生成文言
-    if (Array.isArray(session.status.can_texts) && session.status.can_texts.length > 0) {
+    // STEP2（Can）: ユーザーの発話を優先
+    const step2UserTexts = session.history
+      .filter(h => h.step === 2 && h.role === "user" && h.text)
+      .map(h => h.text.trim())
+      .filter(Boolean);
+    if (step2UserTexts.length > 0) {
+      parts.push("【Can（活かせる強み）】\n" + step2UserTexts.join("\n"));
+    } else if (Array.isArray(session.status.can_texts) && session.status.can_texts.length > 0) {
       parts.push("【Can（活かせる強み）】\n" + session.status.can_texts.join("\n"));
     } else if (session.status.can_text) {
       parts.push("【Can（活かせる強み）】\n" + session.status.can_text);
     }
 
-    // STEP3（Will）: LLM生成文言
-    if (Array.isArray(session.status.will_texts) && session.status.will_texts.length > 0) {
+    // STEP3（Will）: ユーザーの発話を優先
+    const step3UserTexts = session.history
+      .filter(h => h.step === 3 && h.role === "user" && h.text)
+      .map(h => h.text.trim())
+      .filter(Boolean);
+    if (step3UserTexts.length > 0) {
+      parts.push("【Will（やりたいこと）】\n" + step3UserTexts.join("\n"));
+    } else if (Array.isArray(session.status.will_texts) && session.status.will_texts.length > 0) {
       parts.push("【Will（やりたいこと）】\n" + session.status.will_texts.join("\n"));
     } else if (session.status.will_text) {
       parts.push("【Will（やりたいこと）】\n" + session.status.will_text);
     }
 
-    // STEP4（Must）: IDをタグ名に変換
-    if (Array.isArray(session.status.must_have_ids) && session.status.must_have_ids.length > 0) {
+    // STEP4（Must）: ユーザーの発話を優先
+    const step4UserTexts = session.history
+      .filter(h => h.step === 4 && h.role === "user" && h.text)
+      .map(h => h.text.trim())
+      .filter(Boolean);
+    if (step4UserTexts.length > 0) {
+      parts.push("【Must（譲れない条件）】\n" + step4UserTexts.join("\n"));
+    } else if (Array.isArray(session.status.must_have_ids) && session.status.must_have_ids.length > 0) {
       const mustNames = session.status.must_have_ids
         .map(id => QUAL_NAME_BY_ID.get(Number(id)))
         .filter(Boolean)
@@ -1442,17 +1465,31 @@ async function handleStep6(session, userText) {
       parts.push("【Must（譲れない条件）】\n" + session.status.must_text);
     }
 
-    // STEP5（Self）: LLM生成文言
-    if (session.status.self_text) {
+    // STEP5（Self）: ユーザーの発話を優先
+    const step5UserTexts = session.history
+      .filter(h => h.step === 5 && h.role === "user" && h.text)
+      .map(h => h.text.trim())
+      .filter(Boolean);
+    if (step5UserTexts.length > 0) {
+      parts.push("【私はこんな人】\n" + step5UserTexts.join("\n"));
+    } else if (session.status.self_text) {
       parts.push("【私はこんな人】\n" + session.status.self_text);
     }
 
-    // STEP6（Doing/Being）
-    if (session.status.doing_text) {
-      parts.push("【Doing（あなたの行動・実践）】\n" + session.status.doing_text);
-    }
-    if (session.status.being_text) {
-      parts.push("【Being（あなたの価値観・関わり方）】\n" + session.status.being_text);
+    // STEP6（Doing/Being）: ユーザーの発話を優先
+    const step6UserTexts = session.history
+      .filter(h => h.step === 6 && h.role === "user" && h.text)
+      .map(h => h.text.trim())
+      .filter(Boolean);
+    if (step6UserTexts.length > 0) {
+      parts.push("【Doing / Being（あなたの行動・価値観）】\n" + step6UserTexts.join("\n"));
+    } else {
+      if (session.status.doing_text) {
+        parts.push("【Doing（あなたの行動・実践）】\n" + session.status.doing_text);
+      }
+      if (session.status.being_text) {
+        parts.push("【Being（あなたの価値観・関わり方）】\n" + session.status.being_text);
+      }
     }
 
     const summaryData = parts.join("\n\n");

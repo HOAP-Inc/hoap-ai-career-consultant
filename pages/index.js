@@ -177,8 +177,12 @@ function toBadges(resp, _currStep) {
     }
     const map = isQualification ? qualificationsMap : tagsMap;
     const ids = idString.replace('ID:', '').split(',').map(id => parseInt(id.trim())).filter(id => !isNaN(id));
-    const labels = ids.map(id => map.get(id)).filter(Boolean);
-    return labels.length > 0 ? labels.join('、') : idString;
+    // ID: ラベル名 の形式で表示
+    const labelsWithIds = ids.map(id => {
+      const label = map.get(id);
+      return label ? `${id}: ${label}` : `${id}`;
+    }).filter(Boolean);
+    return labelsWithIds.length > 0 ? labelsWithIds.join('、') : idString;
   }
 
   // ★最初の挨拶をサーバーから1回だけ取得
@@ -354,17 +358,38 @@ setChoices(isChoiceStep(next) ? uniqueByNormalized(inline) : []);
       // 本文反映（\n\n で分割して別々の吹き出しとして順次表示）
       const responseParts = (data.response || "").split("\n\n").filter(Boolean);
 
-      // 【特殊処理】STEP6完了時：最終メッセージ → 1.5秒後 → 仮シートをタブで表示
+      // 【特殊処理】STEP6完了時：最終メッセージ → 3秒後 → 仮シートをタブで表示
       if (data.meta?.show_summary_after_delay && data.meta?.summary_data) {
-        // 最初に最終メッセージを表示
-        setAiTexts([data.response]);
-        setIsTyping(false);
-
-        // 指定時間後に仮シートをタブで表示
-        setTimeout(() => {
-          setSummaryData(data.meta.summary_data);
-          setShowSummary(true);
-        }, data.meta.show_summary_after_delay);
+        // 最終メッセージを\n\nで分割して表示
+        const finalParts = (data.response || "").split("\n\n").filter(Boolean);
+        
+        if (finalParts.length > 0) {
+          // 最初の部分を即座に表示
+          setAiTexts([finalParts[0]]);
+          setIsTyping(false);
+          
+          // 2つ目以降があれば3秒後に表示
+          if (finalParts.length > 1) {
+            setTimeout(() => {
+              setAiTexts(finalParts);
+            }, 3000);
+          }
+          
+          // さらに3秒後に仮シートを表示（最後のメッセージが表示されてから）
+          const sheetDelay = finalParts.length > 1 ? 6000 : 3000;
+          setTimeout(() => {
+            setSummaryData(data.meta.summary_data);
+            setShowSummary(true);
+          }, sheetDelay);
+        } else {
+          // メッセージがない場合は即座に表示
+          setAiTexts([data.response]);
+          setIsTyping(false);
+          setTimeout(() => {
+            setSummaryData(data.meta.summary_data);
+            setShowSummary(true);
+          }, data.meta.show_summary_after_delay);
+        }
       } else if (responseParts.length === 0) {
         setAiTexts([]);
         setIsTyping(false);
@@ -550,7 +575,7 @@ setChoices(isChoiceStep(next) ? uniqueByNormalized(inline) : []);
         </>
       )}
 
-      {/* 仮シート（タブで表示） */}
+      {/* キャリアの説明書（モーダル表示） */}
       {showSummary && summaryData && (
         <div style={{
           position: "fixed",
@@ -558,21 +583,24 @@ setChoices(isChoiceStep(next) ? uniqueByNormalized(inline) : []);
           left: 0,
           right: 0,
           bottom: 0,
-          backgroundColor: "rgba(0, 0, 0, 0.5)",
+          backgroundColor: "rgba(0, 0, 0, 0.6)",
           zIndex: 1000,
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
-          padding: "20px"
+          padding: "16px",
+          overflow: "auto"
         }}>
           <div style={{
-            backgroundColor: "white",
-            borderRadius: "8px",
-            padding: "20px",
-            maxWidth: "90vw",
+            background: "linear-gradient(180deg, #fdf2f8 0%, #f5f3ff 45%, #eff6ff 100%)",
+            borderRadius: "16px",
+            padding: "24px",
+            maxWidth: "1200px",
+            width: "100%",
             maxHeight: "90vh",
             overflow: "auto",
-            position: "relative"
+            position: "relative",
+            boxShadow: "0 20px 60px rgba(0, 0, 0, 0.3)"
           }}>
             <button
               onClick={() => {
@@ -581,73 +609,87 @@ setChoices(isChoiceStep(next) ? uniqueByNormalized(inline) : []);
               }}
               style={{
                 position: "absolute",
-                top: "10px",
-                right: "10px",
-                background: "none",
+                top: "16px",
+                right: "16px",
+                background: "white",
                 border: "none",
-                fontSize: "24px",
-                cursor: "pointer"
+                borderRadius: "50%",
+                width: "36px",
+                height: "36px",
+                fontSize: "20px",
+                cursor: "pointer",
+                boxShadow: "0 2px 8px rgba(0, 0, 0, 0.1)",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                color: "#6b7280"
               }}
             >
               ×
             </button>
-            <h2 style={{ marginTop: 0, marginBottom: "20px" }}>キャリアの説明書</h2>
-            <div style={{
-              display: "grid",
-              gridTemplateColumns: "repeat(4, 1fr)",
-              gap: "16px",
-              marginBottom: "16px"
+            <h2 style={{
+              marginTop: 0,
+              marginBottom: "24px",
+              fontSize: "clamp(20px, 4vw, 28px)",
+              fontWeight: 800,
+              background: "linear-gradient(90deg, #ec4899, #3b82f6)",
+              WebkitBackgroundClip: "text",
+              backgroundClip: "text",
+              color: "transparent",
+              textAlign: "center"
             }}>
-              {/* 1段目：4列 */}
-              <div>
-                <h3 style={{ marginTop: 0, fontSize: "14px", fontWeight: 700 }}>資格</h3>
-                <div style={{ fontSize: "12px", whiteSpace: "pre-wrap" }}>
-                  {convertIdsToLabels(displayBadgeValue("資格", status["資格"]), true) || "未入力"}
-                </div>
-              </div>
-              <div>
-                <h3 style={{ marginTop: 0, fontSize: "14px", fontWeight: 700 }}>Can（今後も活かしたい強み）</h3>
-                <div style={{ fontSize: "12px", whiteSpace: "pre-wrap" }}>
-                  {displayBadgeValue("Can", status["Can"]) || "未入力"}
-                </div>
-              </div>
-              <div>
-                <h3 style={{ marginTop: 0, fontSize: "14px", fontWeight: 700 }}>Will（これから挑戦したいこと）</h3>
-                <div style={{ fontSize: "12px", whiteSpace: "pre-wrap" }}>
-                  {displayBadgeValue("Will", status["Will"]) || "未入力"}
-                </div>
-              </div>
-              <div>
-                <h3 style={{ marginTop: 0, fontSize: "14px", fontWeight: 700 }}>Must（譲れない条件）</h3>
-                <div style={{ fontSize: "12px", whiteSpace: "pre-wrap" }}>
-                  {convertIdsToLabels(displayBadgeValue("Must", status["Must"]), false) || "未入力"}
-                </div>
-              </div>
-            </div>
+              キャリアの説明書
+            </h2>
+            
             <div style={{
               display: "grid",
-              gridTemplateColumns: "repeat(3, 1fr)",
+              gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))",
               gap: "16px"
             }}>
-              {/* 2段目：3列 */}
-              <div>
-                <h3 style={{ marginTop: 0, fontSize: "14px", fontWeight: 700 }}>私はこんな人</h3>
-                <div style={{ fontSize: "12px", whiteSpace: "pre-wrap" }}>
-                  {displayBadgeValue("私はこんな人", status["私はこんな人"]) || "未入力"}
+              {/* カード形式で各項目を表示 */}
+              {[
+                { key: "資格", value: convertIdsToLabels(displayBadgeValue("資格", status["資格"]), true) },
+                { key: "Can", subtitle: "活かせる強み", value: displayBadgeValue("Can", status["Can"]) },
+                { key: "Will", subtitle: "やりたいこと", value: displayBadgeValue("Will", status["Will"]) },
+                { key: "Must", subtitle: "譲れない条件", value: convertIdsToLabels(displayBadgeValue("Must", status["Must"]), false) },
+                { key: "私はこんな人", value: displayBadgeValue("私はこんな人", status["私はこんな人"]) },
+                { key: "Doing", subtitle: "行動・実践", value: displayBadgeValue("Doing", status["Doing"]) },
+                { key: "Being", subtitle: "価値観・関わり方", value: displayBadgeValue("Being", status["Being"]) }
+              ].map((item) => (
+                <div key={item.key} style={{
+                  backgroundColor: "white",
+                  borderRadius: "12px",
+                  padding: "20px",
+                  boxShadow: "0 4px 12px rgba(0, 0, 0, 0.08)",
+                  border: "1px solid #e9d5ff"
+                }}>
+                  <h3 style={{
+                    marginTop: 0,
+                    marginBottom: "12px",
+                    fontSize: "16px",
+                    fontWeight: 700,
+                    color: "#f97316",
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: "4px"
+                  }}>
+                    <span>{item.key}</span>
+                    {item.subtitle && (
+                      <span style={{ fontSize: "12px", color: "#6b7280", fontWeight: 400 }}>
+                        {item.subtitle}
+                      </span>
+                    )}
+                  </h3>
+                  <div style={{
+                    fontSize: "14px",
+                    lineHeight: "1.7",
+                    whiteSpace: "pre-wrap",
+                    color: "#1f2937"
+                  }}>
+                    {item.value || "未入力"}
+                  </div>
                 </div>
-              </div>
-              <div>
-                <h3 style={{ marginTop: 0, fontSize: "14px", fontWeight: 700 }}>Doing（行動・実践）</h3>
-                <div style={{ fontSize: "12px", whiteSpace: "pre-wrap" }}>
-                  {displayBadgeValue("Doing", status["Doing"]) || "未入力"}
-                </div>
-              </div>
-              <div>
-                <h3 style={{ marginTop: 0, fontSize: "14px", fontWeight: 700 }}>Being（価値観・関わり方）</h3>
-                <div style={{ fontSize: "12px", whiteSpace: "pre-wrap" }}>
-                  {displayBadgeValue("Being", status["Being"]) || "未入力"}
-                </div>
-              </div>
+              ))}
             </div>
           </div>
         </div>
