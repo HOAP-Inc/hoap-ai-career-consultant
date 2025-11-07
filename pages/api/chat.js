@@ -889,14 +889,23 @@ async function handleStep4(session, userText) {
 
   // intro フェーズ（安全装置：LLMが予期せずintroを返した場合）
   if (parsed?.control?.phase === "intro") {
-    // deepening_countをリセット
-    session.meta.step4_deepening_count = 0;
-    return {
-      response: parsed.response || "働く上で『ここだけは譲れないな』って思うこと、ある？職場の雰囲気でも働き方でもOKだよ✨",
-      status: session.status,
-      meta: { step: 4, phase: "intro", deepening_count: 0 },
-      drill: session.drill,
-    };
+    // 既にintro質問を表示済みの場合はスキップ（重複防止）
+    if (session.meta.step4_intro_shown) {
+      console.warn("[STEP4 WARNING] LLM returned intro phase but intro was already shown. Skipping.");
+      // 初回の実質的な応答として扱う：empathyフェーズに進める
+      parsed.control.phase = "empathy";
+      // 以下の処理を続行させる（return しない）
+    } else {
+      // intro質問を初めて表示する
+      session.meta.step4_intro_shown = true;
+      session.meta.step4_deepening_count = 0;
+      return {
+        response: parsed.response || "働く上で『ここだけは譲れないな』って思うこと、ある？職場の雰囲気でも働き方でもOKだよ✨",
+        status: session.status,
+        meta: { step: 4, phase: "intro", deepening_count: 0 },
+        drill: session.drill,
+      };
+    }
   }
 
   // ユーザーが応答した場合、カウンターを増やす
@@ -909,18 +918,52 @@ async function handleStep4(session, userText) {
   if (serverCount >= 3) {
     console.log(`[STEP4 FAILSAFE] Forcing transition to STEP5. Server count: ${serverCount}`);
 
-    // 簡単なmust_textを生成してSTEP5に遷移
-    session.status.must_text = userText || "譲れない条件について伺いました。";
+    // フェイルセーフで遷移する場合でも、LLMにmust_ids/must_textを生成させる
+    // session.historyからSTEP4のユーザー発話を取得
+    const step4Texts = session.history
+      .filter(h => h.step === 4 && h.role === "user")
+      .map(h => h.text)
+      .filter(Boolean);
+
+    // LLMにgenerationを依頼（強制的にmust_ids生成）
+    const genPayload = {
+      locale: "ja",
+      stage: { turn_index: 999 }, // 終了フラグ
+      user_text: step4Texts.join("。"), // 全ての発話を結合
+      recent_texts: step4Texts,
+      status: session.status,
+      force_generation: true, // generationフェーズを強制
+    };
+
+    const genLLM = await callLLM(4, genPayload, session, { model: "gpt-4o" });
+
+    if (genLLM.ok && genLLM.parsed?.status) {
+      // LLM生成成功：statusを適用
+      applyMustStatus(session, genLLM.parsed.status, genLLM.parsed.meta || {});
+    } else if (step4Texts.length > 0) {
+      // LLM失敗時：最後の発話を整形してmust_textに設定
+      const lastText = step4Texts[step4Texts.length - 1];
+      session.status.must_text = lastText.length > 50 ? lastText : `${lastText}について伺いました。`;
+      // must_have_idsは空配列のまま（ID化できなかった）
+      if (!Array.isArray(session.status.must_have_ids)) {
+        session.status.must_have_ids = [];
+      }
+    } else {
+      // 発話がない場合のフォールバック
+      session.status.must_text = "譲れない条件について伺いました。";
+      session.status.must_have_ids = [];
+    }
+
     session.step = 5;
     session.stage.turnIndex = 0;
     session.meta.step4_deepening_count = 0;
 
     const step5Response = await handleStep5(session, "");
-    const combinedResponse = [session.status.must_text, "ありがとう！次の質問に移るね", step5Response.response].filter(Boolean).join("\n\n");
+    const combinedResponse = [session.status.must_text, "ありがとう！", step5Response.response].filter(Boolean).join("\n\n");
     return {
       response: combinedResponse || step5Response.response,
       status: session.status,
-      meta: { step: session.step, deepening_count: serverCount },
+      meta: { step: session.step },
       drill: step5Response.drill,
     };
   }
@@ -983,13 +1026,32 @@ async function handleStep4(session, userText) {
 
     // 【安全装置1】empathyフェーズの場合、共感だけでなく質問も追加
     if (parsed.control.phase === "empathy") {
-      // empathyの後に具体的な質問を追加
-      const questions = [
-        "それってどのくらい重要？『絶対譲れない』レベル？それとも『できればあると嬉しい』くらい？",
-        "その条件、具体的にどんな場面で必要だと感じる？",
-        "それが叶わないと、どんなことが困る？"
-      ];
-      const question = questions[Math.min(serverCount, questions.length - 1)];
+      // ユーザー発話が短い単語の場合（10文字以下）、方向性を確認する質問を追加
+      const userInput = userText || "";
+      const isShortWord = userInput.length <= 10;
+
+      let question;
+      if (isShortWord && serverCount === 0) {
+        // 初回：方向性を確認（あってほしいのか、なしにしてほしいのか）
+        if (userInput.includes("残業")) {
+          question = "『残業なし』がいい？それとも『多少の残業はOK』くらい？";
+        } else if (userInput.includes("リモート") || userInput.includes("在宅")) {
+          question = "『フルリモート』がいい？それとも『週に何回かリモート』くらい？";
+        } else if (userInput.includes("休み") || userInput.includes("休日")) {
+          question = "休日はどのくらい欲しい？『完全週休2日』？それとも『月6日以上あればOK』？";
+        } else {
+          question = "それって『絶対あってほしい』こと？それとも『絶対なしにしてほしい』こと？";
+        }
+      } else {
+        // 2回目以降：重要度や具体的な場面を確認
+        const questions = [
+          "それってどのくらい重要？『絶対譲れない』レベル？それとも『できればあると嬉しい』くらい？",
+          "その条件、具体的にどんな場面で必要だと感じる？",
+          "それが叶わないと、どんなことが困る？"
+        ];
+        question = questions[Math.min(serverCount, questions.length - 1)];
+      }
+
       responseText = responseText ? `${responseText}\n\n${question}` : question;
     }
 
@@ -1231,12 +1293,20 @@ async function handleStep6(session, userText) {
       parts.push("【Being（あなたの価値観・関わり方）】\n" + session.status.being_text);
     }
 
-    const message = parts.join("\n\n");
+    const summaryData = parts.join("\n\n");
+
+    // 最終メッセージと一覧データを分離
+    // フロントエンド側で1.5秒後に一覧を表示する
+    const finalMessage = "ここまでたくさんの話を聞かせてくれて、ありがとう！あなただけのオリジナルの「あなたらしさ」を表現してみたよ！\n\nこのあと出力するから中身を確認してね。";
 
     return {
-      response: message || "キャリアの説明書を更新しました。",
+      response: finalMessage,
       status: session.status,
-      meta: { step: session.step },
+      meta: {
+        step: session.step,
+        show_summary_after_delay: 1500, // 1.5秒後に表示
+        summary_data: summaryData || "キャリアの説明書を作成しました。",
+      },
       drill: session.drill,
     };
   }
@@ -1336,8 +1406,39 @@ async function handler(req, res) {
       return;
     }
 
-    if (result.status) session.status = result.status;
-    if (result.meta?.step != null) session.step = result.meta.step;
+    if (result.status) {
+      // 【安全装置】session.statusを上書きする前に、qual_idsを保護
+      // STEP1で登録したqual_idsが後続のSTEPで消えないようにする
+      const existingQualIds = session.status?.qual_ids;
+      const existingLicenses = session.status?.licenses;
+      session.status = result.status;
+
+      // result.statusにqual_idsが含まれていない場合、既存の値を復元
+      if (existingQualIds && existingQualIds.length > 0 && !session.status.qual_ids) {
+        session.status.qual_ids = existingQualIds;
+        console.log(`[HANDLER] Restored qual_ids: ${existingQualIds}`);
+      }
+      if (existingLicenses && existingLicenses.length > 0 && !session.status.licenses) {
+        session.status.licenses = existingLicenses;
+        console.log(`[HANDLER] Restored licenses: ${existingLicenses}`);
+      }
+    }
+    if (result.meta?.step != null) {
+      const beforeStep = session.step;
+      const proposedStep = result.meta.step;
+
+      // 【安全装置】result.meta.step が現在のステップより小さい値の場合は拒否
+      // ステップは必ず前進するか維持されるべきで、後退してはならない
+      if (proposedStep < beforeStep) {
+        console.error(`[HANDLER ERROR] Attempted to go backwards: ${beforeStep} -> ${proposedStep}. REJECTING step change.`);
+        // ステップ変更を拒否して現在のステップを維持
+      } else {
+        session.step = proposedStep;
+        if (beforeStep !== session.step) {
+          console.log(`[HANDLER] Step changed: ${beforeStep} -> ${session.step}`);
+        }
+      }
+    }
     if (result.drill) session.drill = result.drill;
     saveSession(session);
 
