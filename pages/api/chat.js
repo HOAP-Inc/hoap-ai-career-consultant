@@ -1386,7 +1386,7 @@ async function handleStep5(session, userText) {
 async function handleStep6(session, userText) {
   session.stage.turnIndex += 1;
   const payload = buildStepPayload(session, userText, 8);
-  const llm = await callLLM(6, payload, session, { model: "gpt-4o" });
+  const llm = await callLLM(6, payload, session, { model: "gpt-5" });
   if (!llm.ok) {
     return buildSchemaError(6, session, "作成に失敗しちゃった。少し待って再送してみてね。", llm.error);
   }
