@@ -43,7 +43,7 @@ function toBadges(resp, _currStep) {
     Will: Array.isArray(st?.will_texts) ? st.will_texts.join("／")
         : (st?.will_text ? String(st.will_text) : "未入力"),
     Must: (joinIds(st?.must_have_ids) || joinTxt(st?.memo?.must_have_raw) || "未入力"),
-    私はこんな人: st?.self_intro || st?.self_text || "未入力",
+    // 私はこんな人欄は削除（STEP5はステータスバーに表示しない）
     Doing: st?.doing_text ? String(st.doing_text) : "未入力",
     Being: st?.being_text ? String(st.being_text) : "未入力",
   };
