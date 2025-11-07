@@ -1055,28 +1055,7 @@ async function handleStep4(session, userText) {
       responseText = responseText ? `${responseText}\n\n${question}` : question;
     }
 
-    // 【安全装置2】曖昧な質問を検出して具体的な質問に置き換える
-    const vaguePatterns = [
-      /もう少し詳しく/,
-      /もっと具体的に/,
-      /詳しく教えて/,
-      /もう少し話して/,
-      /具体的に聞かせて/
-    ];
-
-    const isVague = vaguePatterns.some(pattern => pattern.test(responseText));
-
-    if (isVague || (!responseText && parsed.control.phase !== "empathy")) {
-      // カウンターに応じて具体的な質問を生成
-      if (serverCount === 0) {
-        responseText = "例えば働き方で言うと、『リモートワークができる』『フレックスタイム』『残業なし』とか、どれが一番大事？";
-      } else if (serverCount === 1) {
-        responseText = "それってどのくらい重要？『絶対必須』『あれば嬉しい』ならどっち？";
-      } else {
-        responseText = "最後に確認！今の話と『職場の雰囲気』を比べたら、どっちの方が譲れない？";
-      }
-    }
-
+    // LLMの応答をそのまま返す（ID化/方向確定の質問はLLMに任せる）
     return {
       response: responseText,
       status: session.status,
