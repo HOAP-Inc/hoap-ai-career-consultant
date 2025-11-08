@@ -1794,25 +1794,6 @@ async function handleStep6(session, _userText) {
   session.step = nextStep;
   session.stage.turnIndex = 0;
 
-  const sanitizeForQuote = (text) => (text || "").replace(/\s+/g, " ").trim();
-  const collectFromString = (value) => {
-    if (typeof value !== "string") return [];
-    return value
-      .split(/\n+/)
-      .map((line) => sanitizeForQuote(line))
-      .filter(Boolean);
-  };
-  const gatherSources = (primary = [], secondary = [], fallback = "") => {
-    if (primary.length > 0) return primary;
-    if (secondary.length > 0) return secondary;
-    if (fallback) return [fallback];
-    return [];
-  };
-  const toQuoteStr = (texts = []) => {
-    const quotes = texts.map((t) => `「${sanitizeForQuote(t)}」`).filter(Boolean);
-    return quotes.join("／");
-  };
-
   const analysisParts = [];
 
   // STEP1（資格）: IDをタグ名に変換
@@ -1826,94 +1807,69 @@ async function handleStep6(session, _userText) {
     }
   }
 
-  // STEP2（Can）: 行動の傾向を分析
+  // STEP2（Can）: Doing（行動・実践）
   const step2UserTexts = session.history
     .filter((h) => h.step === 2 && h.role === "user" && h.text)
-    .map((h) => sanitizeForQuote(h.text))
+    .map((h) => h.text.trim())
     .filter(Boolean);
-  const canFallbackArray = Array.isArray(session.status.can_texts)
-    ? session.status.can_texts.map(sanitizeForQuote).filter(Boolean)
-    : [];
-  const canSources = gatherSources(
-    step2UserTexts,
-    canFallbackArray,
-    session.status.can_text ? sanitizeForQuote(session.status.can_text) : ""
-  );
-  if (canSources.length > 0) {
-    const quotes = toQuoteStr(canSources);
-    analysisParts.push(
-      "【行動の傾向】\n" +
-        `${quotes}と語っており、日常の現場で何を大切にしているかが素直に伝わる。`
-    );
+  if (step2UserTexts.length > 0) {
+    analysisParts.push("【Doing（あなたの行動・実践）】\n" + step2UserTexts.join("\n"));
+  } else if (Array.isArray(session.status.can_texts) && session.status.can_texts.length > 0) {
+    analysisParts.push("【Doing（あなたの行動・実践）】\n" + session.status.can_texts.join("\n"));
+  } else if (session.status.can_text) {
+    analysisParts.push("【Doing（あなたの行動・実践）】\n" + session.status.can_text);
   }
 
-  // STEP3（Will）: 目指す方向を分析
+  // STEP3（Will）: Will（やりたいこと）
   const step3UserTexts = session.history
     .filter((h) => h.step === 3 && h.role === "user" && h.text)
-    .map((h) => sanitizeForQuote(h.text))
+    .map((h) => h.text.trim())
     .filter(Boolean);
-  const willFallbackArray = Array.isArray(session.status.will_texts)
-    ? session.status.will_texts.map(sanitizeForQuote).filter(Boolean)
-    : [];
-  const willSources = gatherSources(
-    step3UserTexts,
-    willFallbackArray,
-    session.status.will_text ? sanitizeForQuote(session.status.will_text) : ""
-  );
-  if (willSources.length > 0) {
-    const quotes = toQuoteStr(willSources);
-    analysisParts.push(
-      "【これから挑戦したいこと】\n" +
-        `${quotes}という言葉が積み重なっていて、描いている未来像が明瞭。`
-    );
+  if (step3UserTexts.length > 0) {
+    analysisParts.push("【Will（やりたいこと）】\n" + step3UserTexts.join("\n"));
+  } else if (Array.isArray(session.status.will_texts) && session.status.will_texts.length > 0) {
+    analysisParts.push("【Will（やりたいこと）】\n" + session.status.will_texts.join("\n"));
+  } else if (session.status.will_text) {
+    analysisParts.push("【Will（やりたいこと）】\n" + session.status.will_text);
   }
 
-  // STEP4（Must）: 譲れない条件を分析
+  // STEP4（Must）: Must（譲れない条件）
   const step4UserTexts = session.history
     .filter((h) => h.step === 4 && h.role === "user" && h.text)
-    .map((h) => sanitizeForQuote(h.text))
+    .map((h) => h.text.trim())
     .filter(Boolean);
   if (step4UserTexts.length > 0) {
-    const quotes = toQuoteStr(step4UserTexts);
-    analysisParts.push(
-      "【譲れない条件】\n" +
-        `${quotes}と明言していて、働き方の境界線を自分の言葉で引いている。`
-    );
+    analysisParts.push("【Must（譲れない条件）】\n" + step4UserTexts.join("\n"));
   } else {
-    const mustSummaryRaw = formatMustSummary(session);
-    const mustSummary = typeof mustSummaryRaw === "string" ? mustSummaryRaw.trim() : "";
+    const mustSummary = formatMustSummary(session);
     if (mustSummary) {
-      analysisParts.push("【譲れない条件】\n" + mustSummary);
+      analysisParts.push("【Must（譲れない条件）】\n" + mustSummary);
     }
   }
 
-  // STEP5（Self）: 価値観・関わり方を分析
+  // STEP5（Self）: Being（あなたの価値観・関わり方）
   const step5UserTexts = session.history
     .filter((h) => h.step === 5 && h.role === "user" && h.text)
-    .map((h) => sanitizeForQuote(h.text))
+    .map((h) => h.text.trim())
     .filter(Boolean);
-  const selfFallback = collectFromString(session.status.self_text);
-  const selfSources = gatherSources(step5UserTexts, selfFallback);
-  if (selfSources.length > 0) {
-    const quotes = toQuoteStr(selfSources);
-    analysisParts.push(
-      "【あなたらしさ】\n" +
-        `${quotes}と表現しており、人との向き合い方に一貫したスタンスが見えている。`
-    );
+  if (step5UserTexts.length > 0) {
+    analysisParts.push("【Being（あなたの価値観・関わり方）】\n" + step5UserTexts.join("\n"));
+  } else if (session.status.self_text) {
+    analysisParts.push("【Being（あなたの価値観・関わり方）】\n" + session.status.self_text);
   }
 
   const summaryData = analysisParts.filter(Boolean).join("\n\n");
 
   // 最終メッセージと一覧データを分離
-  // フロントエンド側で1.5秒後に一覧を表示する
-  const finalMessage = "ここまでたくさんの話を聞かせてくれて、ありがとう！あなただけのオリジナルの「あなたらしさ」を表現してみたよ！\n\nこのあと出力するから中身を確認してね。";
+  // フロントエンド側で5秒後に一覧を表示する（吹き出しを読む時間を確保）
+  const finalMessage = "ここまでたくさんの話を聞かせてくれて、ありがとう！あなただけのオリジナルの「あなたらしさ」を表現してみたよ！このあと出力するから中身を確認してね。";
 
   return {
     response: finalMessage,
     status: session.status,
     meta: {
       step: session.step,
-      show_summary_after_delay: 1500, // 1.5秒後に表示
+      show_summary_after_delay: 5000, // 5秒後に表示（吹き出しを読む時間を確保）
       summary_data: summaryData || "キャリアの説明書を作成しました。",
     },
     drill: session.drill,
