@@ -66,6 +66,7 @@ function ensureArray(value) {
 
 let QUALIFICATIONS = ensureArray(loadJson("qualifications.json"));
 let LICENSE_SOURCES = loadJson("licenses.json") || {};
+let TAGS_DATA = loadJson("tags.json") || {};
 
 try {
   // eslint-disable-next-line global-require
@@ -77,6 +78,13 @@ try {
 try {
   // eslint-disable-next-line global-require
   LICENSE_SOURCES = require("../../licenses.json") || {};
+} catch (e) {
+  // フォールバックに任せる
+}
+
+try {
+  // eslint-disable-next-line global-require
+  TAGS_DATA = require("../../tags.json") || {};
 } catch (e) {
   // フォールバックに任せる
 }
@@ -883,6 +891,7 @@ async function handleStep4(session, userText) {
     recent_texts: step4History.slice(-6).map(item => item.text),
     status: session.status,
     deepening_attempt_total: session.meta.step4_deepening_count,  // サーバー側カウンターを送る
+    tags: TAGS_DATA,
   };
 
   const llm = await callLLM(4, payload, session, { model: "gpt-4o" });
@@ -940,6 +949,7 @@ async function handleStep4(session, userText) {
       recent_texts: step4Texts,
       status: session.status,
       force_generation: true, // generationフェーズを強制
+      tags: TAGS_DATA,
     };
 
     const genLLM = await callLLM(4, genPayload, session, { model: "gpt-4o" });
@@ -1240,7 +1250,8 @@ async function handleStep5(session, userText) {
     session.stage.turnIndex += 1;
   }
   const payload = buildStepPayload(session, userText, 6);
-  const llm = await callLLM(5, payload, session, { model: "gpt-4o" });
+  // STEP5はGPT-5を使用（自己分析深掘り）
+  const llm = await callLLM(5, payload, session, { model: "gpt-5" });
   if (!llm.ok) {
     return buildSchemaError(5, session, "Selfの生成で少しつまずいたよ。もう一度話してみてね。", llm.error);
   }
@@ -1331,7 +1342,7 @@ async function handleStep5(session, userText) {
           force_generation: true,
         };
 
-        const genLLM = await callLLM(5, genPayload, session, { model: "gpt-4o" });
+        const genLLM = await callLLM(5, genPayload, session, { model: "gpt-5" });
 
         if (genLLM.ok && genLLM.parsed?.status?.self_text) {
           session.status.self_text = genLLM.parsed.status.self_text;
@@ -1471,9 +1482,9 @@ async function handleStep6(session, userText) {
       .map(h => h.text.trim())
       .filter(Boolean);
     if (step5UserTexts.length > 0) {
-      parts.push("【私はこんな人】\n" + step5UserTexts.join("\n"));
+      parts.push("【私はこんな人（自己分析）】\n" + step5UserTexts.join("\n"));
     } else if (session.status.self_text) {
-      parts.push("【私はこんな人】\n" + session.status.self_text);
+      parts.push("【私はこんな人（自己分析）】\n" + session.status.self_text);
     }
 
     // STEP6（Doing/Being）: ユーザーの発話を優先
