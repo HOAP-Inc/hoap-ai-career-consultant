@@ -621,14 +621,50 @@ async function handleStep2(session, userText) {
     const deepeningCount = Number(meta?.deepening_count) || 0;
     const serverCount = session.meta.step2_deepening_count || 0;
 
-    // 【修正】can_repeat_countによる早期終了を廃止
-    // 理由：目的は「Doing/Beingの素材を集めること」であり、「同じ言語化が出たら終了」は手段の目的化
-    // LLMの判断（meta.step=3）とフェイルセーフ（3回）に任せる
-    
-    if (deepeningCount >= 3 || serverCount >= 3) {
-      // LLMのdeepening_countまたはサーバー側カウントが3回に達したら強制終了
+    // ユーザー素材の把握
+    const userStep2Texts = session.history
+      .filter(h => h.step === 2 && h.role === "user" && typeof h.text === "string")
+      .map(h => h.text.trim())
+      .filter(Boolean);
+    const distinctStrengths = new Set(
+      (session.status.can_texts || []).map(ct => normKey(String(ct || "")))
+    );
+
+    const hasEnoughStrengths = distinctStrengths.size >= 2;
+    const hasEnoughEpisodes = userStep2Texts.length >= 2;
+    const hasEnoughMaterial = hasEnoughStrengths && hasEnoughEpisodes;
+
+    if (nextStep === 3) {
+      if (hasEnoughMaterial) {
+        console.log(
+          `[STEP2 INFO] Adequate material confirmed. Proceeding to STEP3. ` +
+            `DistinctStrengths=${distinctStrengths.size}, UserTexts=${userStep2Texts.length}`
+        );
+      } else {
+        console.log(
+          `[STEP2 INFO] Holding transition to enrich material. ` +
+            `DistinctStrengths=${distinctStrengths.size}, UserTexts=${userStep2Texts.length}, ` +
+            `LLM count=${deepeningCount}, Server count=${serverCount}`
+        );
+        nextStep = session.step;
+      }
+    }
+
+    const MAX_DEEPENING = 3;
+
+    if (!hasEnoughMaterial && Math.max(deepeningCount, serverCount) >= MAX_DEEPENING) {
+      console.warn(
+        `[STEP2 WARN] Max deepening reached without sufficient material. Proceeding to STEP3 forcibly. ` +
+          `DistinctStrengths=${distinctStrengths.size}, UserTexts=${userStep2Texts.length}, ` +
+          `LLM count=${deepeningCount}, Server count=${serverCount}`
+      );
       nextStep = 3;
-      console.log(`[STEP2 FAILSAFE] Forcing transition to STEP3. LLM count: ${deepeningCount}, Server count: ${serverCount}`);
+    } else if (hasEnoughMaterial && Math.max(deepeningCount, serverCount) >= MAX_DEEPENING) {
+      console.log(
+        `[STEP2 INFO] Max deepening reached with sufficient material. Proceeding to STEP3. ` +
+          `DistinctStrengths=${distinctStrengths.size}, UserTexts=${userStep2Texts.length}`
+      );
+      nextStep = 3;
     }
   }
 
@@ -1430,8 +1466,17 @@ async function handleStep5(session, userText) {
   }
   const payload = buildStepPayload(session, userText, 6);
   // STEP5はGPT-5を使用（自己分析深掘り）
-  const llm = await callLLM(5, payload, session, { model: "gpt-5" });
+  let llm = await callLLM(5, payload, session, { model: "gpt-5" });
   if (!llm.ok) {
+    console.warn(
+      `[STEP5 WARNING] GPT-5 call failed (${llm.error || "unknown error"}). Retrying with GPT-4o.`
+    );
+    llm = await callLLM(5, payload, session, { model: "gpt-4o" });
+  }
+  if (!llm.ok) {
+    console.error(
+      `[STEP5 ERROR] GPT-5/GPT-4o both failed. Returning fallback message. Error: ${llm.error || "unknown"}`
+    );
     return buildSchemaError(5, session, "ちょっと処理に時間がかかってるみたい。もう一度話してみてね。", llm.error);
   }
   const parsed = llm.parsed || {};
