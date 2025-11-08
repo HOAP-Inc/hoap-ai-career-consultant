@@ -577,38 +577,38 @@ async function handleStep2(session, userText) {
     };
   }
 
-  const { empathy, paraphrase, ask_next, meta } = parsed;
+  const { empathy, ask_next, meta } = parsed;
 
-  // 基本検査
-  if (typeof empathy !== "string" || typeof paraphrase !== "string" || (ask_next != null && typeof ask_next !== "string")) {
+  // 基本検査（paraphraseは使わない）
+  if (typeof empathy !== "string" || (ask_next != null && typeof ask_next !== "string")) {
     return buildSchemaError(2, session, "あなたの「やってきたこと、これからも活かしていきたいこと」の処理でエラーが起きたみたい。もう一度話してみて！");
   }
 
-  // 表示用と正規化（同一判定には normKey を使う）
-  const paraphraseDisplay = String(paraphrase || "").trim();
-  const paraphraseNorm = normKey(paraphraseDisplay);
+  // ユーザー発話をそのまま保存（LLM生成のparaphraseは使わない）
+  const userTextDisplay = String(userText || "").trim();
+  const userTextNorm = normKey(userTextDisplay);
 
   // session.meta 初期化（安全）
   if (!session.meta) session.meta = {};
-  if (typeof session.meta.last_can_paraphrase_norm !== "string") session.meta.last_can_paraphrase_norm = "";
+  if (typeof session.meta.last_can_text_norm !== "string") session.meta.last_can_text_norm = "";
   if (typeof session.meta.can_repeat_count !== "number") session.meta.can_repeat_count = 0;
   if (typeof session.meta.deepening_attempt_total !== "number") session.meta.deepening_attempt_total = Number(session.meta.deepening_attempt_total || 0);
 
   // can_texts 履歴初期化
   if (!Array.isArray(session.status.can_texts)) session.status.can_texts = [];
 
-  // 履歴に追加（表示文を保存するが、同一判定は正規化キーで行う）
-  const alreadyInHistory = session.status.can_texts.some(ct => normKey(String(ct || "")) === paraphraseNorm);
-  if (paraphraseDisplay && !alreadyInHistory) {
-    session.status.can_texts.push(paraphraseDisplay);
+  // 履歴に追加（ユーザー発話をそのまま保存、同一判定は正規化キーで行う）
+  const alreadyInHistory = session.status.can_texts.some(ct => normKey(String(ct || "")) === userTextNorm);
+  if (userTextDisplay && !alreadyInHistory) {
+    session.status.can_texts.push(userTextDisplay);
   }
 
-  // paraphrase の安定判定（正規化キーで比較）
-  if (paraphraseNorm && session.meta.last_can_paraphrase_norm === paraphraseNorm) {
+  // ユーザー発話の安定判定（正規化キーで比較）
+  if (userTextNorm && session.meta.last_can_text_norm === userTextNorm) {
     session.meta.can_repeat_count = (Number(session.meta.can_repeat_count) || 0) + 1;
   } else {
     session.meta.can_repeat_count = 1;
-    session.meta.last_can_paraphrase_norm = paraphraseNorm;
+    session.meta.last_can_text_norm = userTextNorm;
   }
 
   // サーバー側でdeepening_countを管理（フェイルセーフ）
@@ -687,7 +687,10 @@ async function handleStep2(session, userText) {
   }
 
   if (nextStep !== session.step) {
-    session.status.can_text = paraphraseDisplay;
+    // can_textは最新のユーザー発話を使用（paraphraseは使わない）
+    if (userTextDisplay) {
+      session.status.can_text = userTextDisplay;
+    }
     session.step = nextStep;
     session.stage.turnIndex = 0;
     // deepening_countをリセット
@@ -719,7 +722,7 @@ async function handleStep2(session, userText) {
       }
       default:
         return {
-          response: [empathy, ask_next].filter(Boolean).join("\n\n") || paraphraseDisplay || "受け取ったよ。",
+          response: [empathy, ask_next].filter(Boolean).join("\n\n") || "受け取ったよ。",
           status: session.status,
           meta: { step: session.step },
           drill: session.drill,
@@ -728,7 +731,7 @@ async function handleStep2(session, userText) {
   }
 
   // 通常の会話フェーズ（empathy と ask_next を \n\n で結合）
-  const message = [empathy, ask_next].filter(Boolean).join("\n\n") || paraphraseDisplay || "ありがとう。もう少し教えて。";
+  const message = [empathy, ask_next].filter(Boolean).join("\n\n") || empathy || "ありがとう。もう少し教えて。";
   return {
     response: message,
     status: session.status,
@@ -1539,6 +1542,8 @@ async function handleStep4(session, userText) {
         // 方向性を確認する質問
         if (combinedText.includes("残業")) {
           responseText = "それって『残業なし』がいい？それとも『多少の残業はOK』くらい？";
+        } else if (combinedText.includes("給料") || combinedText.includes("給与") || combinedText.includes("年収") || combinedText.includes("収入") || combinedText.includes("昇給")) {
+          responseText = "それって『高めの給与』がいい？それとも『平均的でも安定』がいい？";
         } else if (combinedText.includes("リモート") || combinedText.includes("在宅")) {
           responseText = "それって『フルリモート』がいい？それとも『週に何回かリモート』くらい？";
         } else if (combinedText.includes("休み") || combinedText.includes("休日")) {
@@ -1792,25 +1797,6 @@ async function handleStep6(session, _userText) {
   session.step = nextStep;
   session.stage.turnIndex = 0;
 
-  const sanitizeForQuote = (text) => (text || "").replace(/\s+/g, " ").trim();
-  const collectFromString = (value) => {
-    if (typeof value !== "string") return [];
-    return value
-      .split(/\n+/)
-      .map((line) => sanitizeForQuote(line))
-      .filter(Boolean);
-  };
-  const gatherSources = (primary = [], secondary = [], fallback = "") => {
-    if (primary.length > 0) return primary;
-    if (secondary.length > 0) return secondary;
-    if (fallback) return [fallback];
-    return [];
-  };
-  const toQuoteStr = (texts = []) => {
-    const quotes = texts.map((t) => `「${sanitizeForQuote(t)}」`).filter(Boolean);
-    return quotes.join("／");
-  };
-
   const analysisParts = [];
 
   // STEP1（資格）: IDをタグ名に変換
@@ -1824,94 +1810,69 @@ async function handleStep6(session, _userText) {
     }
   }
 
-  // STEP2（Can）: 行動の傾向を分析
+  // STEP2（Can）: Doing（行動・実践）
   const step2UserTexts = session.history
     .filter((h) => h.step === 2 && h.role === "user" && h.text)
-    .map((h) => sanitizeForQuote(h.text))
+    .map((h) => h.text.trim())
     .filter(Boolean);
-  const canFallbackArray = Array.isArray(session.status.can_texts)
-    ? session.status.can_texts.map(sanitizeForQuote).filter(Boolean)
-    : [];
-  const canSources = gatherSources(
-    step2UserTexts,
-    canFallbackArray,
-    session.status.can_text ? sanitizeForQuote(session.status.can_text) : ""
-  );
-  if (canSources.length > 0) {
-    const quotes = toQuoteStr(canSources);
-    analysisParts.push(
-      "【行動の傾向】\n" +
-        `${quotes}と語っており、日常の現場で何を大切にしているかが素直に伝わる。`
-    );
+  if (step2UserTexts.length > 0) {
+    analysisParts.push("【Doing（あなたの行動・実践）】\n" + step2UserTexts.join("\n"));
+  } else if (Array.isArray(session.status.can_texts) && session.status.can_texts.length > 0) {
+    analysisParts.push("【Doing（あなたの行動・実践）】\n" + session.status.can_texts.join("\n"));
+  } else if (session.status.can_text) {
+    analysisParts.push("【Doing（あなたの行動・実践）】\n" + session.status.can_text);
   }
 
-  // STEP3（Will）: 目指す方向を分析
+  // STEP3（Will）: Will（やりたいこと）
   const step3UserTexts = session.history
     .filter((h) => h.step === 3 && h.role === "user" && h.text)
-    .map((h) => sanitizeForQuote(h.text))
+    .map((h) => h.text.trim())
     .filter(Boolean);
-  const willFallbackArray = Array.isArray(session.status.will_texts)
-    ? session.status.will_texts.map(sanitizeForQuote).filter(Boolean)
-    : [];
-  const willSources = gatherSources(
-    step3UserTexts,
-    willFallbackArray,
-    session.status.will_text ? sanitizeForQuote(session.status.will_text) : ""
-  );
-  if (willSources.length > 0) {
-    const quotes = toQuoteStr(willSources);
-    analysisParts.push(
-      "【これから挑戦したいこと】\n" +
-        `${quotes}という言葉が積み重なっていて、描いている未来像が明瞭。`
-    );
+  if (step3UserTexts.length > 0) {
+    analysisParts.push("【Will（やりたいこと）】\n" + step3UserTexts.join("\n"));
+  } else if (Array.isArray(session.status.will_texts) && session.status.will_texts.length > 0) {
+    analysisParts.push("【Will（やりたいこと）】\n" + session.status.will_texts.join("\n"));
+  } else if (session.status.will_text) {
+    analysisParts.push("【Will（やりたいこと）】\n" + session.status.will_text);
   }
 
-  // STEP4（Must）: 譲れない条件を分析
+  // STEP4（Must）: Must（譲れない条件）
   const step4UserTexts = session.history
     .filter((h) => h.step === 4 && h.role === "user" && h.text)
-    .map((h) => sanitizeForQuote(h.text))
+    .map((h) => h.text.trim())
     .filter(Boolean);
   if (step4UserTexts.length > 0) {
-    const quotes = toQuoteStr(step4UserTexts);
-    analysisParts.push(
-      "【譲れない条件】\n" +
-        `${quotes}と明言していて、働き方の境界線を自分の言葉で引いている。`
-    );
+    analysisParts.push("【Must（譲れない条件）】\n" + step4UserTexts.join("\n"));
   } else {
-    const mustSummaryRaw = formatMustSummary(session);
-    const mustSummary = typeof mustSummaryRaw === "string" ? mustSummaryRaw.trim() : "";
+    const mustSummary = formatMustSummary(session);
     if (mustSummary) {
-      analysisParts.push("【譲れない条件】\n" + mustSummary);
+      analysisParts.push("【Must（譲れない条件）】\n" + mustSummary);
     }
   }
 
-  // STEP5（Self）: 価値観・関わり方を分析
+  // STEP5（Self）: Being（あなたの価値観・関わり方）
   const step5UserTexts = session.history
     .filter((h) => h.step === 5 && h.role === "user" && h.text)
-    .map((h) => sanitizeForQuote(h.text))
+    .map((h) => h.text.trim())
     .filter(Boolean);
-  const selfFallback = collectFromString(session.status.self_text);
-  const selfSources = gatherSources(step5UserTexts, selfFallback);
-  if (selfSources.length > 0) {
-    const quotes = toQuoteStr(selfSources);
-    analysisParts.push(
-      "【あなたらしさ】\n" +
-        `${quotes}と表現しており、人との向き合い方に一貫したスタンスが見えている。`
-    );
+  if (step5UserTexts.length > 0) {
+    analysisParts.push("【Being（あなたの価値観・関わり方）】\n" + step5UserTexts.join("\n"));
+  } else if (session.status.self_text) {
+    analysisParts.push("【Being（あなたの価値観・関わり方）】\n" + session.status.self_text);
   }
 
   const summaryData = analysisParts.filter(Boolean).join("\n\n");
 
   // 最終メッセージと一覧データを分離
-  // フロントエンド側で1.5秒後に一覧を表示する
-  const finalMessage = "ここまでたくさんの話を聞かせてくれて、ありがとう！あなただけのオリジナルの「あなたらしさ」を表現してみたよ！\n\nこのあと出力するから中身を確認してね。";
+  // フロントエンド側で5秒後に一覧を表示する（吹き出しを読む時間を確保）
+  const finalMessage = "ここまでたくさんの話を聞かせてくれて、ありがとう！あなただけのオリジナルの「あなたらしさ」を表現してみたよ！このあと出力するから中身を確認してね。";
 
   return {
     response: finalMessage,
     status: session.status,
     meta: {
       step: session.step,
-      show_summary_after_delay: 1500, // 1.5秒後に表示
+      show_summary_after_delay: 5000, // 5秒後に表示（吹き出しを読む時間を確保）
       summary_data: summaryData || "キャリアの説明書を作成しました。",
     },
     drill: session.drill,
