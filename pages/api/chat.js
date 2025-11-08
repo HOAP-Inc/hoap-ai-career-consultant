@@ -1779,7 +1779,7 @@ async function handleStep5(session, userText) {
   };
 }
 
-async function handleStep6(session, userText) {
+async function handleStep6(session, _userText) {
   // STEP6ではLLM生成を使わず、ユーザー発話のみを使用してキャリアシートを生成
   console.log("[STEP6] Skipping LLM generation. Using user texts only.");
   
