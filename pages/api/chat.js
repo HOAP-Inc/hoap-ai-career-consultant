@@ -577,16 +577,16 @@ async function handleStep2(session, userText) {
     };
   }
 
-  const { empathy, ask_next, meta } = parsed;
+  const { empathy, paraphrase, ask_next, meta } = parsed;
 
-  // 基本検査（paraphraseは使わない）
+  // 基本検査
   if (typeof empathy !== "string" || (ask_next != null && typeof ask_next !== "string")) {
     return buildSchemaError(2, session, "あなたの「やってきたこと、これからも活かしていきたいこと」の処理でエラーが起きたみたい。もう一度話してみて！");
   }
 
-  // ユーザー発話をそのまま保存（LLM生成のparaphraseは使わない）
-  const userTextDisplay = String(userText || "").trim();
-  const userTextNorm = normKey(userTextDisplay);
+  // LLM生成のparaphraseを優先、なければユーザー発話をそのまま使用
+  const paraphraseDisplay = (typeof paraphrase === "string" && paraphrase.trim()) ? paraphrase.trim() : String(userText || "").trim();
+  const userTextNorm = normKey(paraphraseDisplay);
 
   // session.meta 初期化（安全）
   if (!session.meta) session.meta = {};
@@ -597,10 +597,10 @@ async function handleStep2(session, userText) {
   // can_texts 履歴初期化
   if (!Array.isArray(session.status.can_texts)) session.status.can_texts = [];
 
-  // 履歴に追加（ユーザー発話をそのまま保存、同一判定は正規化キーで行う）
+  // 履歴に追加（LLM生成のparaphraseを保存、同一判定は正規化キーで行う）
   const alreadyInHistory = session.status.can_texts.some(ct => normKey(String(ct || "")) === userTextNorm);
-  if (userTextDisplay && !alreadyInHistory) {
-    session.status.can_texts.push(userTextDisplay);
+  if (paraphraseDisplay && !alreadyInHistory) {
+    session.status.can_texts.push(paraphraseDisplay);
   }
 
   // ユーザー発話の安定判定（正規化キーで比較）
@@ -687,9 +687,9 @@ async function handleStep2(session, userText) {
   }
 
   if (nextStep !== session.step) {
-    // can_textは最新のユーザー発話を使用（paraphraseは使わない）
-    if (userTextDisplay) {
-      session.status.can_text = userTextDisplay;
+    // can_textはLLM生成のparaphraseを使用
+    if (paraphraseDisplay) {
+      session.status.can_text = paraphraseDisplay;
     }
     session.step = nextStep;
     session.stage.turnIndex = 0;
@@ -1469,49 +1469,66 @@ async function handleStep4(session, userText) {
 
     // 【安全装置1】empathyフェーズの場合、共感だけでなく質問も追加
     if (parsed.control.phase === "empathy") {
-      // ユーザー発話が短い単語の場合（10文字以下）、方向性を確認する質問を追加
+      // 自動ID確定後は必ず「have/ng」を聞く質問を追加
       const userInput = userText || "";
-      const isShortWord = userInput.length <= 10;
+      const recentTexts = session.history.slice(-3).map(item => item.text).join(" ");
+      const combinedText = `${userInput} ${recentTexts}`;
 
       let question;
-      if (isShortWord && serverCount === 0) {
-        // 初回：方向性を確認（あってほしいのか、なしにしてほしいのか）
-        if (userInput.includes("残業")) {
-          question = "『残業なし』がいい？それとも『多少の残業はOK』くらい？";
-        } else if (userInput.includes("リモート") || userInput.includes("在宅")) {
-          question = "『フルリモート』がいい？それとも『週に何回かリモート』くらい？";
-        } else if (userInput.includes("休み") || userInput.includes("休日")) {
+      
+      // 自動ID確定済みの場合、have/ngを聞く質問を優先
+      if (autoConfirmedIds.length > 0) {
+        // 自動ID確定後は必ず「have/ng」を聞く
+        if (combinedText.includes("残業")) {
+          question = "それって『残業なし』がいい？それとも『多少の残業はOK』くらい？";
+        } else if (combinedText.includes("給料") || combinedText.includes("給与") || combinedText.includes("年収") || combinedText.includes("収入") || combinedText.includes("昇給")) {
+          question = "それって『高めの給与』がいい？それとも『平均的でも安定』がいい？";
+        } else if (combinedText.includes("リモート") || combinedText.includes("在宅")) {
+          question = "それって『フルリモート』がいい？それとも『週に何回かリモート』くらい？";
+        } else if (combinedText.includes("休み") || combinedText.includes("休日")) {
           question = "休日はどのくらい欲しい？『完全週休2日』？それとも『月6日以上あればOK』？";
+        } else if (combinedText.includes("オンコール") || combinedText.includes("呼び出し")) {
+          question = "それって『絶対なし』がいい？それとも『たまにならOK』くらい？";
         } else {
           question = "それって『絶対あってほしい』こと？それとも『絶対なしにしてほしい』こと？";
         }
       } else {
-        // 2回目以降：方向性（have/ng）を確認する質問を優先
-        // まず方向性を確認してから、重要度や具体的な場面を確認
-        const userInput = userText || "";
-        const recentTexts = session.history.slice(-3).map(item => item.text).join(" ");
-        const combinedText = `${userInput} ${recentTexts}`;
-        
-        // 方向性がまだ確定していない場合、方向性を確認する質問を優先
-        if (serverCount === 1) {
-          // 残業の場合
-          if (combinedText.includes("残業")) {
-            question = "それって『残業なし』がいい？それとも『多少の残業はOK』くらい？";
-          } else if (combinedText.includes("リモート") || combinedText.includes("在宅")) {
-            question = "それって『フルリモート』がいい？それとも『週に何回かリモート』くらい？";
-          } else if (combinedText.includes("休み") || combinedText.includes("休日")) {
-            question = "それって『完全週休2日』がいい？それとも『月6日以上あればOK』くらい？";
+        // 通常の質問生成ロジック
+        const isShortWord = userInput.length <= 10;
+
+        if (isShortWord && serverCount === 0) {
+          // 初回：方向性を確認（あってほしいのか、なしにしてほしいのか）
+          if (userInput.includes("残業")) {
+            question = "『残業なし』がいい？それとも『多少の残業はOK』くらい？";
+          } else if (userInput.includes("リモート") || userInput.includes("在宅")) {
+            question = "『フルリモート』がいい？それとも『週に何回かリモート』くらい？";
+          } else if (userInput.includes("休み") || userInput.includes("休日")) {
+            question = "休日はどのくらい欲しい？『完全週休2日』？それとも『月6日以上あればOK』？";
           } else {
-            // デフォルト：方向性を確認
             question = "それって『絶対あってほしい』こと？それとも『絶対なしにしてほしい』こと？";
           }
         } else {
-          // 3回目以降：重要度や具体的な場面を確認
-          const questions = [
-            "その条件、具体的にどんな場面で必要だと感じる？",
-            "それが叶わないと、どんなことが困る？"
-          ];
-          question = questions[Math.min(serverCount - 2, questions.length - 1)] || "その条件について、もう少し詳しく教えてくれる？";
+          // 2回目以降：方向性（have/ng）を確認する質問を優先
+          if (serverCount === 1) {
+            // 残業の場合
+            if (combinedText.includes("残業")) {
+              question = "それって『残業なし』がいい？それとも『多少の残業はOK』くらい？";
+            } else if (combinedText.includes("リモート") || combinedText.includes("在宅")) {
+              question = "それって『フルリモート』がいい？それとも『週に何回かリモート』くらい？";
+            } else if (combinedText.includes("休み") || combinedText.includes("休日")) {
+              question = "それって『完全週休2日』がいい？それとも『月6日以上あればOK』くらい？";
+            } else {
+              // デフォルト：方向性を確認
+              question = "それって『絶対あってほしい』こと？それとも『絶対なしにしてほしい』こと？";
+            }
+          } else {
+            // 3回目以降：重要度や具体的な場面を確認
+            const questions = [
+              "その条件、具体的にどんな場面で必要だと感じる？",
+              "それが叶わないと、どんなことが困る？"
+            ];
+            question = questions[Math.min(serverCount - 2, questions.length - 1)] || "その条件について、もう少し詳しく教えてくれる？";
+          }
         }
       }
 
@@ -1811,53 +1828,33 @@ async function handleStep6(session, _userText) {
   }
 
   // STEP2（Can）: Doing（行動・実践）
-  const step2UserTexts = session.history
-    .filter((h) => h.step === 2 && h.role === "user" && h.text)
-    .map((h) => h.text.trim())
-    .filter(Boolean);
-  if (step2UserTexts.length > 0) {
-    analysisParts.push("【Doing（あなたの行動・実践）】\n" + step2UserTexts.join("\n"));
-  } else if (Array.isArray(session.status.can_texts) && session.status.can_texts.length > 0) {
+  // LLM生成のparaphraseを優先的に使用（can_textsに保存されている）
+  if (Array.isArray(session.status.can_texts) && session.status.can_texts.length > 0) {
     analysisParts.push("【Doing（あなたの行動・実践）】\n" + session.status.can_texts.join("\n"));
   } else if (session.status.can_text) {
     analysisParts.push("【Doing（あなたの行動・実践）】\n" + session.status.can_text);
   }
 
   // STEP3（Will）: Will（やりたいこと）
-  const step3UserTexts = session.history
-    .filter((h) => h.step === 3 && h.role === "user" && h.text)
-    .map((h) => h.text.trim())
-    .filter(Boolean);
-  if (step3UserTexts.length > 0) {
-    analysisParts.push("【Will（やりたいこと）】\n" + step3UserTexts.join("\n"));
-  } else if (Array.isArray(session.status.will_texts) && session.status.will_texts.length > 0) {
+  // LLM生成のwill_textを優先的に使用
+  if (Array.isArray(session.status.will_texts) && session.status.will_texts.length > 0) {
     analysisParts.push("【Will（やりたいこと）】\n" + session.status.will_texts.join("\n"));
   } else if (session.status.will_text) {
     analysisParts.push("【Will（やりたいこと）】\n" + session.status.will_text);
   }
 
   // STEP4（Must）: Must（譲れない条件）
-  const step4UserTexts = session.history
-    .filter((h) => h.step === 4 && h.role === "user" && h.text)
-    .map((h) => h.text.trim())
-    .filter(Boolean);
-  if (step4UserTexts.length > 0) {
-    analysisParts.push("【Must（譲れない条件）】\n" + step4UserTexts.join("\n"));
-  } else {
-    const mustSummary = formatMustSummary(session);
-    if (mustSummary) {
-      analysisParts.push("【Must（譲れない条件）】\n" + mustSummary);
-    }
+  // ID化された条件を優先的に使用
+  const mustSummary = formatMustSummary(session);
+  if (mustSummary) {
+    analysisParts.push("【Must（譲れない条件）】\n" + mustSummary);
+  } else if (session.status.must_text) {
+    analysisParts.push("【Must（譲れない条件）】\n" + session.status.must_text);
   }
 
   // STEP5（Self）: Being（あなたの価値観・関わり方）
-  const step5UserTexts = session.history
-    .filter((h) => h.step === 5 && h.role === "user" && h.text)
-    .map((h) => h.text.trim())
-    .filter(Boolean);
-  if (step5UserTexts.length > 0) {
-    analysisParts.push("【Being（あなたの価値観・関わり方）】\n" + step5UserTexts.join("\n"));
-  } else if (session.status.self_text) {
+  // LLM生成のself_textを優先的に使用
+  if (session.status.self_text) {
     analysisParts.push("【Being（あなたの価値観・関わり方）】\n" + session.status.self_text);
   }
 
