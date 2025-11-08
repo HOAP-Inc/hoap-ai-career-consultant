@@ -900,6 +900,22 @@ function findDirectIdMatches(userText, tagsData) {
   const text = userText.toLowerCase().trim();
   const matches = [];
   
+  // 「給料アップ」「年収アップ」等の特殊パターンを優先処理
+  const salaryUpPattern = /(給料|給与|年収|収入).*?(アップ|上げ|増やし|増額)/;
+  if (salaryUpPattern.test(text)) {
+    // 「昇給」タグを最優先で返す
+    const salaryUpTag = tagsData.tags.find(t => t.name === "昇給");
+    if (salaryUpTag) {
+      matches.push(salaryUpTag);
+    }
+    // 給与関連タグも追加
+    const salaryTags = tagsData.tags.filter(t => 
+      t.category === "給与・賞与" && t.name !== "昇給"
+    );
+    matches.push(...salaryTags);
+    return matches;
+  }
+  
   for (const tag of tagsData.tags) {
     const name = tag.name.toLowerCase();
     
@@ -968,6 +984,8 @@ function filterTagsByUserText(userText, tagsData) {
     "賞与": ["給与・賞与"],
     "ボーナス": ["給与・賞与"],
     "昇給": ["給与・賞与"],
+    "アップ": ["給与・賞与"],
+    "収入": ["給与・賞与"],
     
     // 福利厚生関連
     "リモート": ["福利厚生"],
@@ -1267,11 +1285,15 @@ async function handleStep4(session, userText) {
     if (genLLM.ok && genLLM.parsed?.status) {
       // LLM生成成功：statusを適用
       applyMustStatus(session, genLLM.parsed.status, genLLM.parsed.meta || {});
-    } else if (step4Texts.length > 0) {
-      // LLM失敗時：最後の発話を整形してmust_textに設定
-      const lastText = step4Texts[step4Texts.length - 1];
-      session.status.must_text = lastText.length > 50 ? lastText : `${lastText}について伺いました。`;
-      // must_have_idsは空配列のまま（ID化できなかった）
+    }
+    
+    // ID化できなかった場合でも、ユーザー発話をそのまま保存（内部用語は使わない）
+    if (step4Texts.length > 0) {
+      // must_textが空の場合のみ、ユーザー発話をそのまま保存
+      if (!session.status.must_text || session.status.must_text.trim() === "") {
+        session.status.must_text = step4Texts.join("、");
+      }
+      // must_have_idsが空でもOK（ID化できなかった場合）
       if (!Array.isArray(session.status.must_have_ids)) {
         session.status.must_have_ids = [];
       }
@@ -1309,39 +1331,20 @@ async function handleStep4(session, userText) {
     const hasPendingIds = Array.isArray(session.status.pending_ids) && session.status.pending_ids.length > 0;
     
     if (!hasMustIds && !hasNgIds && !hasPendingIds) {
-      // ID化が行われていない場合、LLMにgenerationを依頼
-      console.log("[STEP4] No IDs found in status. Forcing ID generation.");
+      // ID化が行われていない場合、ユーザー発話をそのまま保存（内部用語は使わない）
+      console.log("[STEP4] No IDs found in status. Saving user text as-is.");
       const step4Texts = session.history
         .filter(h => h.step === 4 && h.role === "user")
         .map(h => h.text)
         .filter(Boolean);
       
-      // 全発話を結合してタグを絞り込む
-      const combinedText = step4Texts.join("。");
-      const filteredTagsForGen = filterTagsByUserText(combinedText, TAGS_DATA);
-      
-      const genPayload = {
-        locale: "ja",
-        stage: { turn_index: 999 },
-        user_text: combinedText,
-        recent_texts: step4Texts,
-        status: session.status,
-        force_generation: true,
-        tags: filteredTagsForGen,  // 絞り込んだタグのみを送る
-      };
-      
-      const genLLM = await callLLM(4, genPayload, session, { model: "gpt-4o" });
-      
-      if (genLLM.ok && genLLM.parsed?.status) {
-        // LLM生成成功：statusを適用
-        applyMustStatus(session, genLLM.parsed.status, genLLM.parsed.meta || {});
-      } else if (step4Texts.length > 0) {
-        // LLM失敗時でも最低限のmust_textを設定
-        const lastText = step4Texts[step4Texts.length - 1];
-        session.status.must_text = lastText.length > 50 ? lastText : `${lastText}について伺いました。`;
-        if (!session.status.status_bar) {
-          session.status.status_bar = "";
-        }
+      if (step4Texts.length > 0) {
+        // ユーザー発話をそのまま保存
+        session.status.must_text = step4Texts.join("、");
+        session.status.must_have_ids = [];
+        session.status.ng_ids = [];
+        session.status.pending_ids = [];
+        session.status.status_bar = "";
       }
     }
     
@@ -1580,18 +1583,34 @@ async function handleStep5(session, userText) {
   if (userText && userText.trim()) {
     session.stage.turnIndex += 1;
   }
-  const payload = buildStepPayload(session, userText, 6);
-  // STEP5はGPT-5を使用（自己分析深掘り）
-  let llm = await callLLM(5, payload, session, { model: "gpt-5" });
+  
+  // ペイロード最適化：発話履歴ではなく生成済みテキストを送る
+  const payload = {
+    locale: "ja",
+    stage: { turn_index: session.stage.turnIndex },
+    user_text: userText,
+    // 生成済みの整形テキストのみ送る（発話履歴は送らない）
+    context: {
+      can_text: session.status.can_text || "",
+      will_text: session.status.will_text || "",
+      must_summary: formatMustSummary(session),
+    },
+    status: {
+      self_text: session.status.self_text || "",
+    },
+  };
+  
+  // STEP5はまずGPT-4oで試す（タイムアウト回避）
+  let llm = await callLLM(5, payload, session, { model: "gpt-4o" });
   if (!llm.ok) {
     console.warn(
-      `[STEP5 WARNING] GPT-5 call failed (${llm.error || "unknown error"}). Retrying with GPT-4o.`
+      `[STEP5 WARNING] GPT-4o call failed (${llm.error || "unknown error"}). Retrying with GPT-4o-mini.`
     );
-    llm = await callLLM(5, payload, session, { model: "gpt-4o" });
+    llm = await callLLM(5, payload, session, { model: "gpt-4o-mini" });
   }
   if (!llm.ok) {
     console.error(
-      `[STEP5 ERROR] GPT-5/GPT-4o both failed. Returning fallback message. Error: ${llm.error || "unknown"}`
+      `[STEP5 ERROR] GPT-4o/GPT-4o-mini both failed. Returning fallback message. Error: ${llm.error || "unknown"}`
     );
     return buildSchemaError(5, session, "ちょっと処理に時間がかかってるみたい。もう一度話してみてね。", llm.error);
   }
