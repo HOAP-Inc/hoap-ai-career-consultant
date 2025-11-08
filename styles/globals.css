@@ -392,7 +392,7 @@ html, body, #__next { height: 100%; }
     top: 64px;
     z-index: 18;
     height: 4px;
-    margin: 4px 0 8px;
+    margin: 4px 0 16px;
   }
 
   .duo-stage{
