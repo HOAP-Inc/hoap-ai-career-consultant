@@ -577,38 +577,38 @@ async function handleStep2(session, userText) {
     };
   }
 
-  const { empathy, paraphrase, ask_next, meta } = parsed;
+  const { empathy, ask_next, meta } = parsed;
 
-  // 基本検査
-  if (typeof empathy !== "string" || typeof paraphrase !== "string" || (ask_next != null && typeof ask_next !== "string")) {
+  // 基本検査（paraphraseは使わない）
+  if (typeof empathy !== "string" || (ask_next != null && typeof ask_next !== "string")) {
     return buildSchemaError(2, session, "あなたの「やってきたこと、これからも活かしていきたいこと」の処理でエラーが起きたみたい。もう一度話してみて！");
   }
 
-  // 表示用と正規化（同一判定には normKey を使う）
-  const paraphraseDisplay = String(paraphrase || "").trim();
-  const paraphraseNorm = normKey(paraphraseDisplay);
+  // ユーザー発話をそのまま保存（LLM生成のparaphraseは使わない）
+  const userTextDisplay = String(userText || "").trim();
+  const userTextNorm = normKey(userTextDisplay);
 
   // session.meta 初期化（安全）
   if (!session.meta) session.meta = {};
-  if (typeof session.meta.last_can_paraphrase_norm !== "string") session.meta.last_can_paraphrase_norm = "";
+  if (typeof session.meta.last_can_text_norm !== "string") session.meta.last_can_text_norm = "";
   if (typeof session.meta.can_repeat_count !== "number") session.meta.can_repeat_count = 0;
   if (typeof session.meta.deepening_attempt_total !== "number") session.meta.deepening_attempt_total = Number(session.meta.deepening_attempt_total || 0);
 
   // can_texts 履歴初期化
   if (!Array.isArray(session.status.can_texts)) session.status.can_texts = [];
 
-  // 履歴に追加（表示文を保存するが、同一判定は正規化キーで行う）
-  const alreadyInHistory = session.status.can_texts.some(ct => normKey(String(ct || "")) === paraphraseNorm);
-  if (paraphraseDisplay && !alreadyInHistory) {
-    session.status.can_texts.push(paraphraseDisplay);
+  // 履歴に追加（ユーザー発話をそのまま保存、同一判定は正規化キーで行う）
+  const alreadyInHistory = session.status.can_texts.some(ct => normKey(String(ct || "")) === userTextNorm);
+  if (userTextDisplay && !alreadyInHistory) {
+    session.status.can_texts.push(userTextDisplay);
   }
 
-  // paraphrase の安定判定（正規化キーで比較）
-  if (paraphraseNorm && session.meta.last_can_paraphrase_norm === paraphraseNorm) {
+  // ユーザー発話の安定判定（正規化キーで比較）
+  if (userTextNorm && session.meta.last_can_text_norm === userTextNorm) {
     session.meta.can_repeat_count = (Number(session.meta.can_repeat_count) || 0) + 1;
   } else {
     session.meta.can_repeat_count = 1;
-    session.meta.last_can_paraphrase_norm = paraphraseNorm;
+    session.meta.last_can_text_norm = userTextNorm;
   }
 
   // サーバー側でdeepening_countを管理（フェイルセーフ）
@@ -1539,6 +1539,8 @@ async function handleStep4(session, userText) {
         // 方向性を確認する質問
         if (combinedText.includes("残業")) {
           responseText = "それって『残業なし』がいい？それとも『多少の残業はOK』くらい？";
+        } else if (combinedText.includes("給料") || combinedText.includes("給与") || combinedText.includes("年収") || combinedText.includes("収入") || combinedText.includes("昇給")) {
+          responseText = "それって『高めの給与』がいい？それとも『平均的でも安定』がいい？";
         } else if (combinedText.includes("リモート") || combinedText.includes("在宅")) {
           responseText = "それって『フルリモート』がいい？それとも『週に何回かリモート』くらい？";
         } else if (combinedText.includes("休み") || combinedText.includes("休日")) {
