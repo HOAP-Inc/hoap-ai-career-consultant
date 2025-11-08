@@ -1979,14 +1979,18 @@ async function handler(req, res) {
   saveSession(session);
 
   try {
-    if (!message || message.trim() === "") {
+    // STEP6では空メッセージでも処理を続行（自動開始のため）
+    if ((!message || message.trim() === "") && session.step !== 6) {
       const greeting = initialGreeting(session);
       // ここでも CORS ヘッダは既にセット済み
       res.status(200).json(greeting);
       return;
     }
 
-    session.history.push({ role: "user", text: message, step: session.step });
+    // 空メッセージでない場合のみhistoryに追加
+    if (message && message.trim() !== "") {
+      session.history.push({ role: "user", text: message, step: session.step });
+    }
 
     let result;
     switch (session.step) {
@@ -2005,8 +2009,18 @@ async function handler(req, res) {
       case 5:
         result = await handleStep5(session, message);
         break;
-      default:
+      case 6:
         result = await handleStep6(session, message);
+        break;
+      default:
+        // 想定外のステップの場合はエラー
+        console.error(`[HANDLER ERROR] Invalid step: ${session.step}`);
+        result = {
+          response: "エラーが発生しました。最初からやり直してください。",
+          status: session.status,
+          meta: { step: 1 },
+          drill: session.drill,
+        };
         break;
     }
 
