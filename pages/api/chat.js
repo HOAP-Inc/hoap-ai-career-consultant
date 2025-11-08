@@ -621,9 +621,11 @@ async function handleStep2(session, userText) {
     const deepeningCount = Number(meta?.deepening_count) || 0;
     const serverCount = session.meta.step2_deepening_count || 0;
 
-    if (session.meta.can_repeat_count >= 2) {
-      nextStep = 3;
-    } else if (deepeningCount >= 3 || serverCount >= 3) {
+    // 【修正】can_repeat_countによる早期終了を廃止
+    // 理由：目的は「Doing/Beingの素材を集めること」であり、「同じ言語化が出たら終了」は手段の目的化
+    // LLMの判断（meta.step=3）とフェイルセーフ（3回）に任せる
+    
+    if (deepeningCount >= 3 || serverCount >= 3) {
       // LLMのdeepening_countまたはサーバー側カウントが3回に達したら強制終了
       nextStep = 3;
       console.log(`[STEP2 FAILSAFE] Forcing transition to STEP3. LLM count: ${deepeningCount}, Server count: ${serverCount}`);
@@ -833,8 +835,39 @@ async function handleStep3(session, userText) {
 }
 
 /**
+ * ユーザー発話から直接ID候補を検索（最優先・最速）
+ * 完全一致・部分一致で即座にタグを絞り込む
+ */
+function findDirectIdMatches(userText, tagsData) {
+  if (!userText || !tagsData?.tags || !Array.isArray(tagsData.tags)) {
+    return [];
+  }
+
+  const text = userText.toLowerCase().trim();
+  const matches = [];
+  
+  for (const tag of tagsData.tags) {
+    const name = tag.name.toLowerCase();
+    
+    // 完全一致（最優先）
+    if (text === name) {
+      matches.unshift(tag); // 先頭に追加
+      continue;
+    }
+    
+    // 部分一致（ユーザー発話にタグ名が含まれる、またはその逆）
+    if (text.includes(name) || name.includes(text)) {
+      matches.push(tag);
+    }
+  }
+  
+  return matches;
+}
+
+/**
  * ユーザー発話からタグを絞り込む（高速化）
  * 戦略：
+ * 0. 直接マッチング：完全一致・部分一致で即座に絞り込み（NEW）
  * 1. キーワードマッチング：頻出ワード（残業、夜勤等）で即座に絞り込み
  * 2. カテゴリー推定：発話内容からカテゴリーを推定し、該当カテゴリーのタグのみを返す
  * 3. 全タグ：該当なしの場合のみ全タグを返す（フォールバック）
@@ -846,6 +879,14 @@ function filterTagsByUserText(userText, tagsData) {
 
   const text = userText.toLowerCase();
   const allTags = tagsData.tags;
+
+  // 【ステップ0】直接マッチング（最優先）
+  const directMatches = findDirectIdMatches(userText, tagsData);
+  if (directMatches.length > 0 && directMatches.length <= 10) {
+    // 候補が10件以下なら即座に返す（LLMの負荷を最小化）
+    console.log(`[STEP4 Filter] Direct match: ${directMatches.length} tags (${directMatches.map(t => t.name).join(", ")})`);
+    return { tags: directMatches };
+  }
 
   // 【ステップ1】キーワードマッチング（最優先）
   // 頻出ワードで即座にID候補を絞り込む
