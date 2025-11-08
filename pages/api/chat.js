@@ -616,7 +616,7 @@ async function handleStep2(session, userText) {
   }
 
   let nextStep = llmNextStep;
-  if (llmNextStep === session.step) {
+  if (llmNextStep === session.step || llmNextStep === 3) {
     // サーバー側の暴走停止装置（フェイルセーフ）
     const deepeningCount = Number(meta?.deepening_count) || 0;
     const serverCount = session.meta.step2_deepening_count || 0;
