@@ -1294,9 +1294,10 @@ async function handleStep4(session, userText) {
       case 5: {
         // STEP5（Self）の初回質問を取得
         const step5Response = await handleStep5(session, "");
-        // must_textは表示せず、STEP5の質問のみを返す（LLMの不要な発話を防ぐ）
+        // 共感メッセージ → STEP5の質問を結合
+        const combinedResponse = ["ありがとう！", step5Response.response].filter(Boolean).join("\n\n");
         return {
-          response: step5Response.response,
+          response: combinedResponse || step5Response.response,
           status: session.status,
           meta: { step: session.step, deepening_count: 0 },
           drill: step5Response.drill,
@@ -1472,17 +1473,11 @@ async function handleStep5(session, userText) {
     session.stage.turnIndex += 1;
   }
   const payload = buildStepPayload(session, userText, 6);
-  // STEP5はGPT-5を使用（自己分析深掘り）
-  let llm = await callLLM(5, payload, session, { model: "gpt-5" });
-  if (!llm.ok) {
-    console.warn(
-      `[STEP5 WARNING] GPT-5 call failed (${llm.error || "unknown error"}). Retrying with GPT-4o.`
-    );
-    llm = await callLLM(5, payload, session, { model: "gpt-4o" });
-  }
+  // STEP5はGPT-4oを使用（速度重視）
+  const llm = await callLLM(5, payload, session, { model: "gpt-4o" });
   if (!llm.ok) {
     console.error(
-      `[STEP5 ERROR] GPT-5/GPT-4o both failed. Returning fallback message. Error: ${llm.error || "unknown"}`
+      `[STEP5 ERROR] GPT-4o call failed. Returning fallback message. Error: ${llm.error || "unknown"}`
     );
     return buildSchemaError(5, session, "ちょっと処理に時間がかかってるみたい。もう一度話してみてね。", llm.error);
   }
@@ -1573,7 +1568,7 @@ async function handleStep5(session, userText) {
           force_generation: true,
         };
 
-        const genLLM = await callLLM(5, genPayload, session, { model: "gpt-5" });
+        const genLLM = await callLLM(5, genPayload, session, { model: "gpt-4o" });
 
         if (genLLM.ok && genLLM.parsed?.status?.self_text) {
           session.status.self_text = genLLM.parsed.status.self_text;
@@ -1628,8 +1623,18 @@ async function handleStep5(session, userText) {
 async function handleStep6(session, userText) {
   session.stage.turnIndex += 1;
   const payload = buildStepPayload(session, userText, 8);
-  const llm = await callLLM(6, payload, session, { model: "gpt-5" });
+  // STEP6はGPT-5を試し、失敗時はGPT-4oにフォールバック
+  let llm = await callLLM(6, payload, session, { model: "gpt-5" });
   if (!llm.ok) {
+    console.warn(
+      `[STEP6 WARNING] GPT-5 call failed (${llm.error || "unknown error"}). Retrying with GPT-4o.`
+    );
+    llm = await callLLM(6, payload, session, { model: "gpt-4o" });
+  }
+  if (!llm.ok) {
+    console.error(
+      `[STEP6 ERROR] GPT-5/GPT-4o both failed. Returning fallback message. Error: ${llm.error || "unknown"}`
+    );
     return buildSchemaError(6, session, "作成に失敗しちゃった。少し待って再送してみてね。", llm.error);
   }
   const parsed = llm.parsed || {};
