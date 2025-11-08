@@ -687,7 +687,10 @@ async function handleStep2(session, userText) {
   }
 
   if (nextStep !== session.step) {
-    session.status.can_text = paraphraseDisplay;
+    // can_textは最新のユーザー発話を使用（paraphraseは使わない）
+    if (userTextDisplay) {
+      session.status.can_text = userTextDisplay;
+    }
     session.step = nextStep;
     session.stage.turnIndex = 0;
     // deepening_countをリセット
@@ -719,7 +722,7 @@ async function handleStep2(session, userText) {
       }
       default:
         return {
-          response: [empathy, ask_next].filter(Boolean).join("\n\n") || paraphraseDisplay || "受け取ったよ。",
+          response: [empathy, ask_next].filter(Boolean).join("\n\n") || "受け取ったよ。",
           status: session.status,
           meta: { step: session.step },
           drill: session.drill,
@@ -728,7 +731,7 @@ async function handleStep2(session, userText) {
   }
 
   // 通常の会話フェーズ（empathy と ask_next を \n\n で結合）
-  const message = [empathy, ask_next].filter(Boolean).join("\n\n") || paraphraseDisplay || "ありがとう。もう少し教えて。";
+  const message = [empathy, ask_next].filter(Boolean).join("\n\n") || empathy || "ありがとう。もう少し教えて。";
   return {
     response: message,
     status: session.status,
