@@ -19,7 +19,7 @@ export default function Home() {
   const [sessionId] = useState(() => Math.random().toString(36).slice(2));
   const [step, setStep] = useState(0);
   const [isComposing, setIsComposing] = useState(false);
-  const [aiTexts, setAiTexts] = useState([]); // 複数の吹き出しを格納
+  const [aiText, setAiText] = useState(""); // 現在表示中の吹き出し
   const [isTyping, setIsTyping] = useState(false);
   const [userEcho, setUserEcho] = useState("");
   const [choices, setChoices] = useState([]);
@@ -138,6 +138,7 @@ function toBadges(resp, _currStep) {
   const listRef = useRef(null);
   const taRef = useRef(null);
   const bottomRef = useRef(null);
+  const messageTimersRef = useRef([]);
 
   // ほーぷちゃん画像の切替用（初期は基本）
   const [hoapSrc, setHoapSrc] = useState("/hoap-basic.png");
@@ -224,6 +225,33 @@ function toBadges(resp, _currStep) {
     return labelsWithIds.length > 0 ? labelsWithIds.join("、") : idString;
   }
 
+  function clearMessageTimers() {
+    if (Array.isArray(messageTimersRef.current)) {
+      messageTimersRef.current.forEach((timerId) => clearTimeout(timerId));
+    }
+    messageTimersRef.current = [];
+  }
+
+  function showAiSequence(parts) {
+    clearMessageTimers();
+    if (!Array.isArray(parts) || parts.length === 0) {
+      setAiText("");
+      setIsTyping(false);
+      return;
+    }
+
+    // 最初の吹き出しを即座に表示
+    setAiText(parts[0]);
+    setIsTyping(false);
+
+    for (let i = 1; i < parts.length; i++) {
+      const timerId = setTimeout(() => {
+        setAiText(parts[i]);
+      }, 3000 * i);
+      messageTimersRef.current.push(timerId);
+    }
+  }
+
   // ★最初の挨拶をサーバーから1回だけ取得
   useEffect(() => {
     let aborted = false;
@@ -241,19 +269,9 @@ const data = raw ? JSON.parse(raw) : null;
         // 初回メッセージも \n\n で分割して順次表示（差し替え形式）
         const responseParts = (data.response || "").split("\n\n").filter(Boolean);
         if (responseParts.length === 0) {
-          setAiTexts([]);
-        } else if (responseParts.length === 1) {
-          setAiTexts([responseParts[0]]);
+          setAiText("");
         } else {
-          // 最初の吹き出しを即座に表示
-          setAiTexts([responseParts[0]]);
-          // 2つ目以降を3秒ずつ遅延して差し替え（追加ではなく）
-          for (let i = 1; i < responseParts.length; i++) {
-            const index = i;
-            setTimeout(() => {
-              setAiTexts([responseParts[index]]); // 配列全体を差し替え
-            }, 3000 * index);
-          }
+          showAiSequence(responseParts);
         }
 
         const next = data?.meta?.step ?? 0;
@@ -324,7 +342,7 @@ setChoices(isChoiceStep(next) ? uniqueByNormalized(inline) : []);
 
   // AI応答が更新されるたびに、ランダムで「手を広げる」を短時間表示
   useEffect(() => {
-    if (aiTexts.length === 0) return;
+    if (!aiText) return;
 
     // すでに「バンザイ」表示中なら邪魔しない（競合回避）
     if (hoapSrc === "/hoap-up.png") return;
@@ -342,7 +360,7 @@ setChoices(isChoiceStep(next) ? uniqueByNormalized(inline) : []);
         revertTimerRef.current = null;
       }, 1600);
     }
-  }, [aiTexts, hoapSrc]);
+  }, [aiText, hoapSrc]);
 
   // スマホのキーボード高さを CSS 変数 --kb に同期
   useEffect(() => {
@@ -390,7 +408,8 @@ setChoices(isChoiceStep(next) ? uniqueByNormalized(inline) : []);
 
     // タイピング開始
     setIsTyping(true);
-    setAiTexts([]);
+    clearMessageTimers();
+    setAiText("");
 
     try {
       const res = await fetch('/api/chat', {
@@ -412,7 +431,7 @@ setChoices(isChoiceStep(next) ? uniqueByNormalized(inline) : []);
         // サーバが JSON を返さない時は落とさず画面に可視化
         const statusLine = `サーバ応答: ${res.status}`;
         const bodyLine = raw ? `本文: ${raw.slice(0, 200)}` : '本文なし';
-        setAiTexts([`${statusLine}\n${bodyLine}`]);
+        showAiSequence([`${statusLine}\n${bodyLine}`]);
         setIsTyping(false);
         return;
       }
@@ -424,28 +443,19 @@ setChoices(isChoiceStep(next) ? uniqueByNormalized(inline) : []);
       if (data.meta?.show_summary_after_delay && data.meta?.summary_data) {
         // 最終メッセージを\n\nで分割して表示
         const finalParts = (data.response || "").split("\n\n").filter(Boolean);
-        
+
         if (finalParts.length > 0) {
-          // 最初の部分を即座に表示
-          setAiTexts([finalParts[0]]);
+          showAiSequence(finalParts);
           setIsTyping(false);
-          
-          // 2つ目以降があれば3秒後に表示
-          if (finalParts.length > 1) {
-            setTimeout(() => {
-              setAiTexts(finalParts);
-            }, 3000);
-          }
-          
-          // さらに3秒後に仮シートを表示（最後のメッセージが表示されてから）
-          const sheetDelay = finalParts.length > 1 ? 6000 : 3000;
+
+          const sheetDelay = Math.max(3000, finalParts.length * 3000);
           setTimeout(() => {
             setSummaryData(data.meta.summary_data);
             setShowSummary(true);
           }, sheetDelay);
         } else {
           // メッセージがない場合は即座に表示
-          setAiTexts([data.response]);
+          showAiSequence([data.response]);
           setIsTyping(false);
           setTimeout(() => {
             setSummaryData(data.meta.summary_data);
@@ -453,25 +463,17 @@ setChoices(isChoiceStep(next) ? uniqueByNormalized(inline) : []);
           }, data.meta.show_summary_after_delay);
         }
       } else if (responseParts.length === 0 || !data.response || data.response.trim() === "") {
-        setAiTexts(["（応答を処理中...）"]);
+        showAiSequence(["（応答を処理中...）"]);
         setIsTyping(false);
         console.warn("[Frontend] Empty response received from server");
       } else if (responseParts.length === 1) {
         // 1つだけの場合は即座に表示
-        setAiTexts([responseParts[0]]);
+        showAiSequence([responseParts[0]]);
         setIsTyping(false);
       } else {
         // 複数ある場合は順次表示（差し替え形式）
-        setAiTexts([responseParts[0]]); // 最初の吹き出しを即座に表示
+        showAiSequence(responseParts);
         setIsTyping(false);
-
-        // 2つ目以降を3秒ずつ遅延して差し替え（追加ではなく置き換え）
-        for (let i = 1; i < responseParts.length; i++) {
-          const index = i;
-          setTimeout(() => {
-            setAiTexts([responseParts[index]]); // 配列全体を差し替え
-          }, 3000 * index);
-        }
       }
 
       // 次ステップ
@@ -490,7 +492,7 @@ setChoices(isChoiceStep(next) ? uniqueByNormalized(inline) : []);
       );
     } catch (err) {
       console.error(err);
-      setAiTexts(['通信エラーが発生したよ🙏']);
+      showAiSequence(['通信エラーが発生したよ🙏']);
       setIsTyping(false);
     } finally {
       setSending(false);
@@ -534,6 +536,7 @@ setChoices(isChoiceStep(next) ? uniqueByNormalized(inline) : []);
         clearTimeout(revertTimerRef.current);
         revertTimerRef.current = null;
       }
+      clearMessageTimers();
     };
   }, []);
 
@@ -565,16 +568,14 @@ setChoices(isChoiceStep(next) ? uniqueByNormalized(inline) : []);
               <div className="duo-stage__bubble" aria-live="polite">
                 下のボタンから選んでね！
               </div>
-            ) : aiTexts.length === 0 ? (
+            ) : aiText ? (
+              <div className="duo-stage__bubble" aria-live="polite">
+                {aiText}
+              </div>
+            ) : (
               <div className="duo-stage__bubble" aria-live="polite">
                 …
               </div>
-            ) : (
-              aiTexts.map((text, index) => (
-                <div key={index} className="duo-stage__bubble" aria-live="polite">
-                  {text}
-                </div>
-              ))
             )}
           </div>
         </div>

@@ -67,6 +67,7 @@ function ensureArray(value) {
 let QUALIFICATIONS = ensureArray(loadJson("qualifications.json"));
 let LICENSE_SOURCES = loadJson("licenses.json") || {};
 let TAGS_DATA = loadJson("tags.json") || {};
+const TAG_NAME_BY_ID = new Map();
 
 try {
   // eslint-disable-next-line global-require
@@ -87,6 +88,16 @@ try {
   TAGS_DATA = require("../../tags.json") || {};
 } catch (e) {
   // フォールバックに任せる
+}
+
+if (Array.isArray(TAGS_DATA?.tags)) {
+  for (const tag of TAGS_DATA.tags) {
+    const id = Number(tag?.id);
+    const name = typeof tag?.name === "string" ? tag.name.trim() : "";
+    if (Number.isInteger(id) && name) {
+      TAG_NAME_BY_ID.set(id, name);
+    }
+  }
 }
 
 const QUAL_NAME_BY_ID = new Map();
@@ -1057,6 +1068,65 @@ function applyMustStatus(session, status, meta) {
   }
 }
 
+function sanitizeStep4Empathy(userText, responseText) {
+  if (!responseText) return responseText;
+  const original = String(responseText);
+  const user = String(userText || "");
+  const normalizedUser = user.normalize("NFKC");
+  const neutralKeywords = ["夜勤", "残業", "深夜", "夜間", "交代", "シフト"];
+  const positiveIndicators = ["好き", "やりたい", "希望", "したい", "惹かれて", "わくわく", "ワクワク", "楽しみ", "挑戦したい", "興味がある"];
+
+  const mentionsNeutral = neutralKeywords.some((kw) => normalizedUser.includes(kw));
+  if (!mentionsNeutral) return original;
+
+  const hasPositiveCue = positiveIndicators.some((kw) => normalizedUser.includes(kw));
+  if (hasPositiveCue) return original;
+
+  let sanitized = original;
+  const patterns = [
+    /[^。！？!?]*惹かれる[^。！？!?]*[。！？!?]/g,
+    /[^。！？!?]*魅力[^。！？!?]*[。！？!?]/g,
+  ];
+
+  for (const pattern of patterns) {
+    sanitized = sanitized.replace(pattern, "");
+  }
+
+  sanitized = sanitized.trim();
+  return sanitized || "教えてくれてありがとう。";
+}
+
+function formatMustSummary(session) {
+  if (!session?.status) return "";
+  const {
+    must_have_ids: mustIds = [],
+    ng_ids: ngIds = [],
+    pending_ids: pendingIds = [],
+    must_text: mustText = "",
+  } = session.status;
+
+  const toName = (id) => {
+    const num = Number(id);
+    if (Number.isNaN(num)) return `ID:${id}`;
+    return TAG_NAME_BY_ID.get(num) || `ID:${num}`;
+  };
+
+  const lines = [];
+
+  for (const id of mustIds) {
+    lines.push(`◎ あってほしい：${toName(id)}`);
+  }
+  for (const id of ngIds) {
+    lines.push(`✕ 避けたい：${toName(id)}`);
+  }
+  for (const id of pendingIds) {
+    lines.push(`△ あれば嬉しい：${toName(id)}`);
+  }
+
+  const summary = lines.join("\n").trim();
+  return summary || String(mustText || "");
+}
+
 async function handleStep4(session, userText) {
   // サーバー側カウンター初期化（LLM呼び出し前に確実に初期化）
   if (!session.meta) session.meta = {};
@@ -1193,9 +1263,12 @@ async function handleStep4(session, userText) {
     session.meta.step4_deepening_count = 0;
 
     const step5Response = await handleStep5(session, "");
+    const bridgeMessage = ["ありがとう！", "では最後の質問だよ！", step5Response.response]
+      .filter(Boolean)
+      .join("\n\n");
     // must_textは表示せず、STEP5の質問のみを返す（LLMの不要な発話を防ぐ）
     return {
-      response: step5Response.response,
+      response: bridgeMessage,
       status: session.status,
       meta: { step: session.step },
       drill: step5Response.drill,
@@ -1294,8 +1367,10 @@ async function handleStep4(session, userText) {
       case 5: {
         // STEP5（Self）の初回質問を取得
         const step5Response = await handleStep5(session, "");
-        // 共感メッセージ → STEP5の質問を結合
-        const combinedResponse = ["ありがとう！", step5Response.response].filter(Boolean).join("\n\n");
+        // 共感メッセージ → ブリッジ → STEP5の質問を結合
+        const combinedResponse = ["ありがとう！", "では最後の質問だよ！", step5Response.response]
+          .filter(Boolean)
+          .join("\n\n");
         return {
           response: combinedResponse || step5Response.response,
           status: session.status,
@@ -1440,6 +1515,10 @@ async function handleStep4(session, userText) {
       }
     }
 
+    if (parsed.control.phase === "empathy") {
+      responseText = sanitizeStep4Empathy(userText, responseText);
+    }
+
     // LLMの応答が空の場合のフォールバック（origin/mainから追加）
     if (!responseText || responseText.trim() === "") {
       console.warn(`[STEP4 WARNING] Empty response from LLM (phase: ${parsed.control.phase}). Using fallback.`);
@@ -1581,7 +1660,8 @@ async function handleStep5(session, userText) {
         } else if (step5Texts.length > 0) {
           // LLM失敗時：最後の発話を整形してself_textに設定
           const lastText = step5Texts[step5Texts.length - 1];
-          session.status.self_text = lastText.length > 50 ? lastText : `${lastText}という自分らしさがあります。`;
+          const trimmed = lastText.trim();
+          session.status.self_text = trimmed || "あなたらしさについて伺いました。";
         } else {
           session.status.self_text = "あなたらしさについて伺いました。";
         }
@@ -1706,16 +1786,11 @@ async function handleStep6(session, userText) {
       .filter(Boolean);
     if (step4UserTexts.length > 0) {
       parts.push("【Must（譲れない条件）】\n" + step4UserTexts.join("\n"));
-    } else if (Array.isArray(session.status.must_have_ids) && session.status.must_have_ids.length > 0) {
-      const mustNames = session.status.must_have_ids
-        .map(id => QUAL_NAME_BY_ID.get(Number(id)))
-        .filter(Boolean)
-        .join("、");
-      if (mustNames) {
-        parts.push("【Must（譲れない条件）】\n" + mustNames);
+    } else {
+      const mustSummary = formatMustSummary(session);
+      if (mustSummary) {
+        parts.push("【Must（譲れない条件）】\n" + mustSummary);
       }
-    } else if (session.status.must_text) {
-      parts.push("【Must（譲れない条件）】\n" + session.status.must_text);
     }
 
     // STEP5（Self）: ユーザーの発話を優先
@@ -1734,15 +1809,19 @@ async function handleStep6(session, userText) {
       .filter(h => h.step === 6 && h.role === "user" && h.text)
       .map(h => h.text.trim())
       .filter(Boolean);
-    if (step6UserTexts.length > 0) {
-      parts.push("【Doing / Being（あなたの行動・価値観）】\n" + step6UserTexts.join("\n"));
-    } else {
-      if (session.status.doing_text) {
-        parts.push("【Doing（あなたの行動・実践）】\n" + session.status.doing_text);
-      }
-      if (session.status.being_text) {
-        parts.push("【Being（あなたの価値観・関わり方）】\n" + session.status.being_text);
-      }
+    const doingText = typeof session.status.doing_text === "string" ? session.status.doing_text.trim() : "";
+    const beingText = typeof session.status.being_text === "string" ? session.status.being_text.trim() : "";
+
+    if (doingText) {
+      parts.push("【Doing（あなたの行動・実践）】\n" + doingText);
+    } else if (step6UserTexts.length > 0) {
+      parts.push("【Doing（あなたの行動・実践）】\n" + step6UserTexts.join("\n"));
+    }
+
+    if (beingText) {
+      parts.push("【Being（あなたの価値観・関わり方）】\n" + beingText);
+    } else if (step6UserTexts.length > 0) {
+      parts.push("【Being（あなたの価値観・関わり方）】\n" + step6UserTexts.join("\n"));
     }
 
     const summaryData = parts.join("\n\n");
