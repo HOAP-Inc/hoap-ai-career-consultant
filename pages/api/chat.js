@@ -1844,6 +1844,11 @@ async function handleStep5(session, userText) {
 
 async function handleStep6(session, _userText) {
   // STEP6ではLLMを使ってDoing（行動・実践）とBeing（価値観・関わり方）を生成
+  console.log("[STEP6] ===== START =====");
+  console.log("[STEP6] can_text:", session.status.can_text);
+  console.log("[STEP6] will_text:", session.status.will_text);
+  console.log("[STEP6] must_text:", session.status.must_text);
+  console.log("[STEP6] self_text:", session.status.self_text);
   console.log("[STEP6] Generating Doing and Being using LLM.");
   
   // STEP6は最終ステップなので、stepは6のまま
@@ -1986,8 +1991,11 @@ async function handler(req, res) {
   saveSession(session);
 
   try {
+    console.log(`[HANDLER] Received message: "${message}", session.step: ${session.step}`);
+    
     // STEP6では空メッセージでも処理を続行（自動開始のため）
     if ((!message || message.trim() === "") && session.step !== 6) {
+      console.log("[HANDLER] Empty message and not STEP6, returning greeting");
       const greeting = initialGreeting(session);
       // ここでも CORS ヘッダは既にセット済み
       res.status(200).json(greeting);
