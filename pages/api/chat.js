@@ -577,38 +577,42 @@ async function handleStep2(session, userText) {
     };
   }
 
-  const { empathy, paraphrase, ask_next, meta } = parsed;
+  // generation フェーズ（Can確定、STEP3へ移行）
+  if (parsed?.status?.can_text && typeof parsed.status.can_text === "string") {
+    // LLM生成のcan_textを保存
+    session.status.can_text = parsed.status.can_text;
+    if (!Array.isArray(session.status.can_texts)) {
+      session.status.can_texts = [];
+    }
+    session.status.can_texts.push(parsed.status.can_text);
+    const nextStep = Number(parsed?.meta?.step) || 3;
+    session.step = nextStep;
+    session.stage.turnIndex = 0;
+    // deepening_countをリセット
+    if (session.meta) session.meta.step2_deepening_count = 0;
+
+    // STEP3の初回質問を取得して結合
+    const step3Response = await handleStep3(session, "");
+    const combinedResponse = ["ありがとう！", step3Response.response].filter(Boolean).join("\n\n");
+    return {
+      response: combinedResponse || step3Response.response,
+      status: session.status,
+      meta: { step: session.step },
+      drill: step3Response.drill,
+    };
+  }
+
+  const { empathy, ask_next, meta } = parsed;
 
   // 基本検査
   if (typeof empathy !== "string" || (ask_next != null && typeof ask_next !== "string")) {
     return buildSchemaError(2, session, "あなたの「やってきたこと、これからも活かしていきたいこと」の処理でエラーが起きたみたい。もう一度話してみて！");
   }
 
-  // LLM生成のparaphraseを優先、なければユーザー発話をそのまま使用
-  const paraphraseDisplay = (typeof paraphrase === "string" && paraphrase.trim()) ? paraphrase.trim() : String(userText || "").trim();
-  const userTextNorm = normKey(paraphraseDisplay);
-
   // session.meta 初期化（安全）
   if (!session.meta) session.meta = {};
-  if (typeof session.meta.last_can_text_norm !== "string") session.meta.last_can_text_norm = "";
-  if (typeof session.meta.can_repeat_count !== "number") session.meta.can_repeat_count = 0;
-  if (typeof session.meta.deepening_attempt_total !== "number") session.meta.deepening_attempt_total = Number(session.meta.deepening_attempt_total || 0);
-
-  // can_texts 履歴初期化
-  if (!Array.isArray(session.status.can_texts)) session.status.can_texts = [];
-
-  // 履歴に追加（LLM生成のparaphraseを保存、同一判定は正規化キーで行う）
-  const alreadyInHistory = session.status.can_texts.some(ct => normKey(String(ct || "")) === userTextNorm);
-  if (paraphraseDisplay && !alreadyInHistory) {
-    session.status.can_texts.push(paraphraseDisplay);
-  }
-
-  // ユーザー発話の安定判定（正規化キーで比較）
-  if (userTextNorm && session.meta.last_can_text_norm === userTextNorm) {
-    session.meta.can_repeat_count = (Number(session.meta.can_repeat_count) || 0) + 1;
-  } else {
-    session.meta.can_repeat_count = 1;
-    session.meta.last_can_text_norm = userTextNorm;
+  if (typeof session.meta.step2_deepening_count !== "number") {
+    session.meta.step2_deepening_count = 0;
   }
 
   // サーバー側でdeepening_countを管理（フェイルセーフ）
@@ -687,47 +691,54 @@ async function handleStep2(session, userText) {
   }
 
   if (nextStep !== session.step) {
-    // can_textはLLM生成のparaphraseを使用
-    if (paraphraseDisplay) {
-      session.status.can_text = paraphraseDisplay;
+    // STEP3へ移行
+    // フェイルセーフで遷移する場合でも、LLMにcan_textを生成させる
+    // session.historyからSTEP2のユーザー発話を取得
+    const step2Texts = session.history
+      .filter(h => h.step === 2 && h.role === "user")
+      .map(h => h.text)
+      .filter(Boolean);
+
+    // LLMにgenerationを依頼（強制的にcan_text生成）
+    const genPayload = {
+      locale: "ja",
+      stage: { turn_index: 999 }, // 終了フラグ
+      user_text: step2Texts.join("。"), // 全ての発話を結合
+      recent_texts: step2Texts,
+      status: session.status,
+      force_generation: true, // generationフェーズを強制
+    };
+
+    const genLLM = await callLLM(2, genPayload, session, { model: "gpt-4o" });
+    let generatedCan = "今までやってきたことについて伺いました。";
+
+    if (genLLM.ok && genLLM.parsed?.status?.can_text) {
+      generatedCan = genLLM.parsed.status.can_text;
+    } else if (step2Texts.length > 0) {
+      // LLM失敗時は最後の発話を整形
+      const lastText = step2Texts[step2Texts.length - 1];
+      generatedCan = lastText.length > 50 ? lastText : `${lastText}を活かしている`;
     }
+
+    session.status.can_text = generatedCan;
+    if (!Array.isArray(session.status.can_texts)) {
+      session.status.can_texts = [];
+    }
+    session.status.can_texts.push(generatedCan);
+
     session.step = nextStep;
     session.stage.turnIndex = 0;
     // deepening_countをリセット
-    if (session.meta) session.meta.step2_deepening_count = 0;
+    session.meta.step2_deepening_count = 0;
 
-    switch (nextStep) {
-      case 3: {
-        // STEP3の初回質問を取得
-        const step3Response = await handleStep3(session, "");
-        // STEP2の共感 → 中間メッセージ → STEP3の初回質問を結合して返す
-        const combinedResponse = [empathy, "ありがとう！", step3Response.response].filter(Boolean).join("\n\n");
-        return {
-          response: combinedResponse || step3Response.response,
-          status: step3Response.status,
-          meta: step3Response.meta,
-          drill: step3Response.drill,
-        };
-      }
-      case 4: {
-        // STEP4の初回質問を取得
-        const step4Response = await handleStep4(session, "");
-        const combinedResponse = [empathy, step4Response.response].filter(Boolean).join("\n\n");
-        return {
-          response: combinedResponse || step4Response.response,
-          status: step4Response.status,
-          meta: step4Response.meta,
-          drill: step4Response.drill,
-        };
-      }
-      default:
-        return {
-          response: [empathy, ask_next].filter(Boolean).join("\n\n") || "受け取ったよ。",
-          status: session.status,
-          meta: { step: session.step },
-          drill: session.drill,
-        };
-    }
+    const step3Response = await handleStep3(session, "");
+    const combinedResponse = [empathy, "ありがとう！", step3Response.response].filter(Boolean).join("\n\n");
+    return {
+      response: combinedResponse || step3Response.response,
+      status: session.status,
+      meta: { step: session.step },
+      drill: step3Response.drill,
+    };
   }
 
   // 通常の会話フェーズ（empathy と ask_next を \n\n で結合）
