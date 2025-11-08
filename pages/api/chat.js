@@ -1516,15 +1516,13 @@ async function handleStep5(session, userText) {
     // deepening_countをリセット
     if (session.meta) session.meta.step5_deepening_count = 0;
 
-    // STEP6の処理を取得して結合
-    const step6Response = await handleStep6(session, "");
-    // Self生成文 → 中間メッセージ → STEP6の初回質問を結合
-    const combinedResponse = [session.status.self_text, "ありがとう！", step6Response.response].filter(Boolean).join("\n\n");
+    // STEP6は次の通信で呼ばれるように、ここでは生成メッセージだけ返す
+    const transitionMessage = "たくさん話してくれてありがとう！\n\n今あなたオリジナルのキャリアシートを作成しているよ。少し待ってね";
     return {
-      response: combinedResponse || step6Response.response,
+      response: transitionMessage,
       status: session.status,
-      meta: step6Response.meta || { step: session.step },
-      drill: step6Response.drill,
+      meta: { step: session.step },
+      drill: session.drill,
     };
   }
 

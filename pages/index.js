@@ -33,6 +33,7 @@ export default function Home() {
   const cheeredMustRef = useRef(false); // STEP4
   const cheeredSelfRef = useRef(false); // STEP5
   const cheeredDoneRef = useRef(false); // STEP6
+  const step6AutoStartedRef = useRef(false); // STEP6自動開始フラグ
 
 function toBadges(resp, _currStep) {
   const st = resp?.status ?? {};
@@ -156,6 +157,7 @@ function toBadges(resp, _currStep) {
       cheeredMustRef.current = false;
       cheeredSelfRef.current = false;
       cheeredDoneRef.current = false;
+      step6AutoStartedRef.current = false;
     }
   }, [step]);
 
@@ -322,6 +324,19 @@ setChoices(isChoiceStep(next) ? uniqueByNormalized(inline) : []);
     }
   }, [step]);
 
+  // STEP6に到達したら自動的に空メッセージを送信（DoingBeing生成開始）
+  useEffect(() => {
+    if (step === 6 && !step6AutoStartedRef.current) {
+      step6AutoStartedRef.current = true;
+      // 3秒待ってから自動的にSTEP6の処理を開始
+      const timer = setTimeout(() => {
+        onSend("");
+      }, 3000);
+      return () => clearTimeout(timer);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [step]);
+
   // AI応答が更新されるたびに、ランダムで「手を広げる」を短時間表示
   useEffect(() => {
     if (aiTexts.length === 0) return;
@@ -379,7 +394,8 @@ setChoices(isChoiceStep(next) ? uniqueByNormalized(inline) : []);
     }
     if (sending) return;
     const text = forcedText != null ? String(forcedText) : input.trim();
-    if (!text) return;
+    // STEP6の場合は空文字列でもOK（DoingBeing生成開始）
+    if (!text && step !== 6) return;
 
     setSending(true);
 
@@ -657,7 +673,7 @@ setChoices(isChoiceStep(next) ? uniqueByNormalized(inline) : []);
           animation: "fadeIn 0.3s ease-out"
         }}>
           <div style={{
-            background: "linear-gradient(135deg, #fff5f0 0%, #fff8f5 50%, #fffaf7 100%)",
+            background: "linear-gradient(135deg, #fdf2f8 0%, #f5f3ff 50%, #eff6ff 100%)",
             borderRadius: "24px",
             padding: "clamp(20px, 4vw, 40px)",
             maxWidth: "1400px",
@@ -665,8 +681,8 @@ setChoices(isChoiceStep(next) ? uniqueByNormalized(inline) : []);
             maxHeight: "95vh",
             overflow: "auto",
             position: "relative",
-            boxShadow: "0 25px 80px rgba(249, 115, 22, 0.15), 0 10px 40px rgba(0, 0, 0, 0.1)",
-            border: "1px solid rgba(249, 115, 22, 0.1)"
+            boxShadow: "0 25px 80px rgba(236, 72, 153, 0.15), 0 10px 40px rgba(0, 0, 0, 0.1)",
+            border: "1px solid rgba(236, 72, 153, 0.1)"
           }}>
             {/* 閉じるボタン */}
             <button
@@ -678,14 +694,14 @@ setChoices(isChoiceStep(next) ? uniqueByNormalized(inline) : []);
                 position: "absolute",
                 top: "20px",
                 right: "20px",
-                background: "linear-gradient(135deg, #f97316, #fb923c)",
+                background: "linear-gradient(135deg, #ec4899, #8b5cf6)",
                 border: "none",
                 borderRadius: "50%",
                 width: "44px",
                 height: "44px",
                 fontSize: "24px",
                 cursor: "pointer",
-                boxShadow: "0 4px 12px rgba(249, 115, 22, 0.3)",
+                boxShadow: "0 4px 12px rgba(236, 72, 153, 0.3)",
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
@@ -696,11 +712,11 @@ setChoices(isChoiceStep(next) ? uniqueByNormalized(inline) : []);
               }}
               onMouseEnter={(e) => {
                 e.currentTarget.style.transform = "scale(1.1) rotate(90deg)";
-                e.currentTarget.style.boxShadow = "0 6px 16px rgba(249, 115, 22, 0.4)";
+                e.currentTarget.style.boxShadow = "0 6px 16px rgba(236, 72, 153, 0.4)";
               }}
               onMouseLeave={(e) => {
                 e.currentTarget.style.transform = "scale(1) rotate(0deg)";
-                e.currentTarget.style.boxShadow = "0 4px 12px rgba(249, 115, 22, 0.3)";
+                e.currentTarget.style.boxShadow = "0 4px 12px rgba(236, 72, 153, 0.3)";
               }}
             >
               ×
@@ -715,23 +731,15 @@ setChoices(isChoiceStep(next) ? uniqueByNormalized(inline) : []);
                 margin: 0,
                 fontSize: "clamp(24px, 5vw, 36px)",
                 fontWeight: 900,
-                background: "linear-gradient(135deg, #f97316, #fb923c, #fdba74)",
+                background: "linear-gradient(135deg, #ec4899, #8b5cf6, #3b82f6)",
                 WebkitBackgroundClip: "text",
                 backgroundClip: "text",
                 color: "transparent",
                 letterSpacing: "0.02em",
                 marginBottom: "8px"
               }}>
-                あなただけのキャリアシート
-              </h2>
-              <p style={{
-                margin: 0,
-                fontSize: "clamp(12px, 2.5vw, 14px)",
-                color: "#9ca3af",
-                fontWeight: 500
-              }}>
                 Your Unique Career Profile
-              </p>
+              </h2>
             </div>
 
             {/* 上段：資格・Can・Will・Must（4列） */}
@@ -751,18 +759,18 @@ setChoices(isChoiceStep(next) ? uniqueByNormalized(inline) : []);
                   backgroundColor: "white",
                   borderRadius: "16px",
                   padding: "16px",
-                  boxShadow: "0 2px 8px rgba(249, 115, 22, 0.08), 0 1px 3px rgba(0, 0, 0, 0.05)",
-                  border: "1.5px solid rgba(249, 115, 22, 0.12)",
+                  boxShadow: "0 2px 8px rgba(236, 72, 153, 0.08), 0 1px 3px rgba(0, 0, 0, 0.05)",
+                  border: "1.5px solid rgba(236, 72, 153, 0.12)",
                   transition: "all 0.2s ease",
                   cursor: "default"
                 }}
                 onMouseEnter={(e) => {
                   e.currentTarget.style.transform = "translateY(-2px)";
-                  e.currentTarget.style.boxShadow = "0 4px 16px rgba(249, 115, 22, 0.15), 0 2px 6px rgba(0, 0, 0, 0.08)";
+                  e.currentTarget.style.boxShadow = "0 4px 16px rgba(236, 72, 153, 0.15), 0 2px 6px rgba(0, 0, 0, 0.08)";
                 }}
                 onMouseLeave={(e) => {
                   e.currentTarget.style.transform = "translateY(0)";
-                  e.currentTarget.style.boxShadow = "0 2px 8px rgba(249, 115, 22, 0.08), 0 1px 3px rgba(0, 0, 0, 0.05)";
+                  e.currentTarget.style.boxShadow = "0 2px 8px rgba(236, 72, 153, 0.08), 0 1px 3px rgba(0, 0, 0, 0.05)";
                 }}
                 >
                   <div style={{
@@ -777,7 +785,7 @@ setChoices(isChoiceStep(next) ? uniqueByNormalized(inline) : []);
                         margin: 0,
                         fontSize: "15px",
                         fontWeight: 700,
-                        color: "#f97316",
+                        color: "#ec4899",
                         letterSpacing: "0.01em"
                       }}>
                         {item.key}
@@ -819,30 +827,30 @@ setChoices(isChoiceStep(next) ? uniqueByNormalized(inline) : []);
                 { key: "Being", subtitle: "価値観・関わり方", icon: "💫", value: displayBadgeValue("Being", status["Being"]) }
               ].map((item) => (
                 <div key={item.key} style={{
-                  backgroundColor: item.highlight ? "linear-gradient(135deg, #fff7ed, #ffedd5)" : "white",
-                  background: item.highlight ? "linear-gradient(135deg, #fff7ed, #ffedd5)" : "white",
+                  backgroundColor: item.highlight ? "linear-gradient(135deg, #fdf2f8, #f5f3ff)" : "white",
+                  background: item.highlight ? "linear-gradient(135deg, #fdf2f8, #f5f3ff)" : "white",
                   borderRadius: "20px",
                   padding: "24px",
                   boxShadow: item.highlight 
-                    ? "0 4px 16px rgba(249, 115, 22, 0.15), 0 2px 8px rgba(0, 0, 0, 0.08)"
-                    : "0 2px 8px rgba(249, 115, 22, 0.08), 0 1px 3px rgba(0, 0, 0, 0.05)",
+                    ? "0 4px 16px rgba(236, 72, 153, 0.15), 0 2px 8px rgba(0, 0, 0, 0.08)"
+                    : "0 2px 8px rgba(236, 72, 153, 0.08), 0 1px 3px rgba(0, 0, 0, 0.05)",
                   border: item.highlight 
-                    ? "2px solid rgba(249, 115, 22, 0.25)"
-                    : "1.5px solid rgba(249, 115, 22, 0.12)",
+                    ? "2px solid rgba(236, 72, 153, 0.25)"
+                    : "1.5px solid rgba(236, 72, 153, 0.12)",
                   transition: "all 0.2s ease",
                   cursor: "default"
                 }}
                 onMouseEnter={(e) => {
                   e.currentTarget.style.transform = "translateY(-4px)";
                   e.currentTarget.style.boxShadow = item.highlight
-                    ? "0 8px 24px rgba(249, 115, 22, 0.2), 0 4px 12px rgba(0, 0, 0, 0.1)"
-                    : "0 4px 16px rgba(249, 115, 22, 0.15), 0 2px 6px rgba(0, 0, 0, 0.08)";
+                    ? "0 8px 24px rgba(236, 72, 153, 0.2), 0 4px 12px rgba(0, 0, 0, 0.1)"
+                    : "0 4px 16px rgba(236, 72, 153, 0.15), 0 2px 6px rgba(0, 0, 0, 0.08)";
                 }}
                 onMouseLeave={(e) => {
                   e.currentTarget.style.transform = "translateY(0)";
                   e.currentTarget.style.boxShadow = item.highlight
-                    ? "0 4px 16px rgba(249, 115, 22, 0.15), 0 2px 8px rgba(0, 0, 0, 0.08)"
-                    : "0 2px 8px rgba(249, 115, 22, 0.08), 0 1px 3px rgba(0, 0, 0, 0.05)";
+                    ? "0 4px 16px rgba(236, 72, 153, 0.15), 0 2px 8px rgba(0, 0, 0, 0.08)"
+                    : "0 2px 8px rgba(236, 72, 153, 0.08), 0 1px 3px rgba(0, 0, 0, 0.05)";
                 }}
                 >
                   <div style={{
@@ -857,7 +865,7 @@ setChoices(isChoiceStep(next) ? uniqueByNormalized(inline) : []);
                         margin: 0,
                         fontSize: "17px",
                         fontWeight: 800,
-                        color: "#f97316",
+                        color: "#ec4899",
                         letterSpacing: "0.01em"
                       }}>
                         {item.key}
@@ -892,7 +900,7 @@ setChoices(isChoiceStep(next) ? uniqueByNormalized(inline) : []);
             <div style={{
               marginTop: "clamp(24px, 4vw, 32px)",
               paddingTop: "20px",
-              borderTop: "1px solid rgba(249, 115, 22, 0.1)",
+              borderTop: "1px solid rgba(236, 72, 153, 0.1)",
               textAlign: "center"
             }}>
               <p style={{
