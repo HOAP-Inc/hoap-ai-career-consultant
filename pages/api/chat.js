@@ -1843,13 +1843,8 @@ async function handleStep5(session, userText) {
 }
 
 async function handleStep6(session, _userText) {
-  // STEP6ではLLM生成を使わず、ユーザー発話のみを使用してキャリアシートを生成
-  console.log("[STEP6] Skipping LLM generation. Using user texts only.");
-  
-  // Doing/Beingは生成せず、ユーザー発話をそのまま使用
-  // doing_text と being_text は空のまま（後でユーザー発話から取得）
-  session.status.doing_text = "";
-  session.status.being_text = "";
+  // STEP6ではLLM生成を使わず、既存のcan_textとself_textを使用してキャリアシートを生成
+  console.log("[STEP6] Generating career sheet from existing data.");
   
   // STEP6は最終ステップなので、stepは6のまま
   session.step = 6;
@@ -1875,16 +1870,20 @@ async function handleStep6(session, _userText) {
   console.log("[STEP6 DEBUG] can_text:", session.status.can_text);
   console.log("[STEP6 DEBUG] step2_user_texts:", JSON.stringify(session.status.step2_user_texts));
   
+  let doingText = "";
   if (Array.isArray(session.status.can_texts) && session.status.can_texts.length > 0) {
-    const doingContent = session.status.can_texts.join("\n");
-    analysisParts.push("【Doing（あなたの行動・実践）】\n" + doingContent);
-    console.log("[STEP6 DEBUG] Using can_texts for Doing:", doingContent);
+    doingText = session.status.can_texts.join("\n");
+    analysisParts.push("【Doing（あなたの行動・実践）】\n" + doingText);
+    console.log("[STEP6 DEBUG] Using can_texts for Doing:", doingText);
   } else if (session.status.can_text) {
-    analysisParts.push("【Doing（あなたの行動・実践）】\n" + session.status.can_text);
-    console.log("[STEP6 DEBUG] Using can_text for Doing:", session.status.can_text);
+    doingText = session.status.can_text;
+    analysisParts.push("【Doing（あなたの行動・実践）】\n" + doingText);
+    console.log("[STEP6 DEBUG] Using can_text for Doing:", doingText);
   } else {
     console.warn("[STEP6 WARNING] No can_texts or can_text found. Doing section will be empty.");
   }
+  // フロントエンド用にdoing_textを設定
+  session.status.doing_text = doingText;
 
   // STEP3（Will）: Will（やりたいこと）
   // LLM生成のwill_textを優先的に使用
@@ -1909,12 +1908,16 @@ async function handleStep6(session, _userText) {
   console.log("[STEP6 DEBUG] self_text:", session.status.self_text);
   console.log("[STEP6 DEBUG] step5_user_texts:", JSON.stringify(session.status.step5_user_texts));
   
+  let beingText = "";
   if (session.status.self_text) {
-    analysisParts.push("【Being（あなたの価値観・関わり方）】\n" + session.status.self_text);
-    console.log("[STEP6 DEBUG] Using self_text for Being:", session.status.self_text);
+    beingText = session.status.self_text;
+    analysisParts.push("【Being（あなたの価値観・関わり方）】\n" + beingText);
+    console.log("[STEP6 DEBUG] Using self_text for Being:", beingText);
   } else {
     console.warn("[STEP6 WARNING] No self_text found. Being section will be empty.");
   }
+  // フロントエンド用にbeing_textを設定
+  session.status.being_text = beingText;
 
   const summaryData = analysisParts.filter(Boolean).join("\n\n");
 
