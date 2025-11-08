@@ -1522,8 +1522,6 @@ async function handleStep4(session, userText) {
           question = "それって『残業なし』がいい？それとも『多少の残業はOK』くらい？";
         } else if (combinedText.includes("給料") || combinedText.includes("給与") || combinedText.includes("年収") || combinedText.includes("収入") || combinedText.includes("昇給")) {
           question = "それって『高めの給与』がいい？それとも『平均的でも安定』がいい？";
-        } else if (combinedText.includes("リモート") || combinedText.includes("在宅")) {
-          question = "それって『フルリモート』がいい？それとも『週に何回かリモート』くらい？";
         } else if (combinedText.includes("休み") || combinedText.includes("休日")) {
           question = "休日はどのくらい欲しい？『完全週休2日』？それとも『月6日以上あればOK』？";
         } else if (combinedText.includes("オンコール") || combinedText.includes("呼び出し")) {
@@ -1539,8 +1537,6 @@ async function handleStep4(session, userText) {
           // 初回：方向性を確認（あってほしいのか、なしにしてほしいのか）
           if (userInput.includes("残業")) {
             question = "『残業なし』がいい？それとも『多少の残業はOK』くらい？";
-          } else if (userInput.includes("リモート") || userInput.includes("在宅")) {
-            question = "『フルリモート』がいい？それとも『週に何回かリモート』くらい？";
           } else if (userInput.includes("休み") || userInput.includes("休日")) {
             question = "休日はどのくらい欲しい？『完全週休2日』？それとも『月6日以上あればOK』？";
           } else {
@@ -1552,8 +1548,6 @@ async function handleStep4(session, userText) {
             // 残業の場合
             if (combinedText.includes("残業")) {
               question = "それって『残業なし』がいい？それとも『多少の残業はOK』くらい？";
-            } else if (combinedText.includes("リモート") || combinedText.includes("在宅")) {
-              question = "それって『フルリモート』がいい？それとも『週に何回かリモート』くらい？";
             } else if (combinedText.includes("休み") || combinedText.includes("休日")) {
               question = "それって『完全週休2日』がいい？それとも『月6日以上あればOK』くらい？";
             } else {
@@ -1603,8 +1597,6 @@ async function handleStep4(session, userText) {
           responseText = "それって『残業なし』がいい？それとも『多少の残業はOK』くらい？";
         } else if (combinedText.includes("給料") || combinedText.includes("給与") || combinedText.includes("年収") || combinedText.includes("収入") || combinedText.includes("昇給")) {
           responseText = "それって『高めの給与』がいい？それとも『平均的でも安定』がいい？";
-        } else if (combinedText.includes("リモート") || combinedText.includes("在宅")) {
-          responseText = "それって『フルリモート』がいい？それとも『週に何回かリモート』くらい？";
         } else if (combinedText.includes("休み") || combinedText.includes("休日")) {
           responseText = "それって『完全週休2日』がいい？それとも『月6日以上あればOK』くらい？";
         } else {
@@ -1624,8 +1616,6 @@ async function handleStep4(session, userText) {
           // 方向性を確認する質問
           if (combinedText.includes("残業")) {
             comparisonQuestion = "それって『残業なし』がいい？それとも『多少の残業はOK』くらい？";
-          } else if (combinedText.includes("リモート") || combinedText.includes("在宅")) {
-            comparisonQuestion = "それって『フルリモート』がいい？それとも『週に何回かリモート』くらい？";
           } else if (combinedText.includes("休み") || combinedText.includes("休日")) {
             comparisonQuestion = "それって『完全週休2日』がいい？それとも『月6日以上あればOK』くらい？";
           } else {
@@ -1853,17 +1843,45 @@ async function handleStep5(session, userText) {
 }
 
 async function handleStep6(session, _userText) {
-  // STEP6ではLLM生成を使わず、ユーザー発話のみを使用してキャリアシートを生成
-  console.log("[STEP6] Skipping LLM generation. Using user texts only.");
-  
-  // Doing/Beingは生成せず、ユーザー発話をそのまま使用
-  // doing_text と being_text は空のまま（後でユーザー発話から取得）
-  session.status.doing_text = "";
-  session.status.being_text = "";
+  // STEP6ではLLMを使ってDoing（行動・実践）とBeing（価値観・関わり方）を生成
+  console.log("[STEP6] Generating Doing and Being using LLM.");
   
   // STEP6は最終ステップなので、stepは6のまま
   session.step = 6;
   session.stage.turnIndex = 0;
+
+  // LLMにCan/Will/Must/Selfの情報を渡してDoing/Beingを生成
+  const payload = {
+    locale: "ja",
+    can_text: session.status.can_text || "",
+    can_texts: session.status.can_texts || [],
+    will_text: session.status.will_text || "",
+    will_texts: session.status.will_texts || [],
+    must_text: session.status.must_text || "",
+    self_text: session.status.self_text || "",
+    status: {
+      can_text: session.status.can_text,
+      will_text: session.status.will_text,
+      must_text: session.status.must_text,
+      self_text: session.status.self_text,
+    },
+  };
+
+  // GPT-4oを使用してDoing/Beingを生成
+  const llmResult = await callLLM(6, payload, session, { model: "gpt-4o" });
+
+  if (llmResult.ok && llmResult.parsed?.status?.doing_text && llmResult.parsed?.status?.being_text) {
+    // LLM生成成功
+    session.status.doing_text = llmResult.parsed.status.doing_text;
+    session.status.being_text = llmResult.parsed.status.being_text;
+    console.log("[STEP6] LLM generated Doing:", session.status.doing_text);
+    console.log("[STEP6] LLM generated Being:", session.status.being_text);
+  } else {
+    // LLM失敗時のフォールバック
+    console.warn("[STEP6 WARNING] LLM generation failed. Using fallback.");
+    session.status.doing_text = session.status.can_text || "行動・実践について伺いました。";
+    session.status.being_text = session.status.self_text || "価値観・関わり方について伺いました。";
+  }
 
   const analysisParts = [];
 
@@ -1878,22 +1896,11 @@ async function handleStep6(session, _userText) {
     }
   }
 
-  // STEP2（Can）: Doing（行動・実践）
-  // LLM生成のcan_textを優先的に使用（can_textsに保存されている）
-  console.log("[STEP6 DEBUG] ===== Doing Generation =====");
-  console.log("[STEP6 DEBUG] can_texts:", JSON.stringify(session.status.can_texts));
-  console.log("[STEP6 DEBUG] can_text:", session.status.can_text);
-  console.log("[STEP6 DEBUG] step2_user_texts:", JSON.stringify(session.status.step2_user_texts));
-  
+  // STEP2（Can）: Can（今できること）
   if (Array.isArray(session.status.can_texts) && session.status.can_texts.length > 0) {
-    const doingContent = session.status.can_texts.join("\n");
-    analysisParts.push("【Doing（あなたの行動・実践）】\n" + doingContent);
-    console.log("[STEP6 DEBUG] Using can_texts for Doing:", doingContent);
+    analysisParts.push("【Can（今できること）】\n" + session.status.can_texts.join("\n"));
   } else if (session.status.can_text) {
-    analysisParts.push("【Doing（あなたの行動・実践）】\n" + session.status.can_text);
-    console.log("[STEP6 DEBUG] Using can_text for Doing:", session.status.can_text);
-  } else {
-    console.warn("[STEP6 WARNING] No can_texts or can_text found. Doing section will be empty.");
+    analysisParts.push("【Can（今できること）】\n" + session.status.can_text);
   }
 
   // STEP3（Will）: Will（やりたいこと）
@@ -1913,17 +1920,17 @@ async function handleStep6(session, _userText) {
     analysisParts.push("【Must（譲れない条件）】\n" + session.status.must_text);
   }
 
-  // STEP5（Self）: Being（あなたの価値観・関わり方）
-  // LLM生成のself_textを優先的に使用
-  console.log("[STEP6 DEBUG] ===== Being Generation =====");
-  console.log("[STEP6 DEBUG] self_text:", session.status.self_text);
-  console.log("[STEP6 DEBUG] step5_user_texts:", JSON.stringify(session.status.step5_user_texts));
-  
+  // STEP5（Self）: 私はこんな人（自己分析）
   if (session.status.self_text) {
-    analysisParts.push("【Being（あなたの価値観・関わり方）】\n" + session.status.self_text);
-    console.log("[STEP6 DEBUG] Using self_text for Being:", session.status.self_text);
-  } else {
-    console.warn("[STEP6 WARNING] No self_text found. Being section will be empty.");
+    analysisParts.push("【私はこんな人（自己分析）】\n" + session.status.self_text);
+  }
+
+  // STEP6（Doing/Being）: LLM生成済み
+  if (session.status.doing_text) {
+    analysisParts.push("【Doing（あなたの行動・実践）】\n" + session.status.doing_text);
+  }
+  if (session.status.being_text) {
+    analysisParts.push("【Being（あなたの価値観・関わり方）】\n" + session.status.being_text);
   }
 
   const summaryData = analysisParts.filter(Boolean).join("\n\n");
