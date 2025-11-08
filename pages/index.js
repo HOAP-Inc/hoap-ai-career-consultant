@@ -344,6 +344,24 @@ setChoices(isChoiceStep(next) ? uniqueByNormalized(inline) : []);
     // すでに「バンザイ」表示中なら邪魔しない（競合回避）
     if (hoapSrc === "/hoap-up.png") return;
 
+    // 「ありがとう」が含まれている場合はバンザイ
+    const hasThankYou = aiTexts.some(text =>
+      text && (text.includes("ありがとう") || text.includes("ありがと"))
+    );
+
+    if (hasThankYou) {
+      if (revertTimerRef.current) {
+        clearTimeout(revertTimerRef.current);
+        revertTimerRef.current = null;
+      }
+      setHoapSrc("/hoap-up.png");
+      revertTimerRef.current = setTimeout(() => {
+        setHoapSrc("/hoap-basic.png");
+        revertTimerRef.current = null;
+      }, 2400);
+      return;
+    }
+
     // 33% くらいの確率で手を広げる
     if (Math.random() < 0.33) {
       if (revertTimerRef.current) {
@@ -477,15 +495,15 @@ setChoices(isChoiceStep(next) ? uniqueByNormalized(inline) : []);
         setAiTexts([responseParts[0]]);
         setIsTyping(false);
       } else {
-        // 複数ある場合は順次表示（差し替え形式）
+        // 複数ある場合は順次表示（1個ずつ追加）
         setAiTexts([responseParts[0]]); // 最初の吹き出しを即座に表示
         setIsTyping(false);
 
-        // 2つ目以降を3秒ずつ遅延して差し替え（追加ではなく置き換え）
+        // 2つ目以降を3秒ずつ遅延して追加
         for (let i = 1; i < responseParts.length; i++) {
           const index = i;
           setTimeout(() => {
-            setAiTexts([responseParts[index]]); // 配列全体を差し替え
+            setAiTexts(prev => [...prev, responseParts[index]]); // 配列に追加
           }, 3000 * index);
         }
       }
