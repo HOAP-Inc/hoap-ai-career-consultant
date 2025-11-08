@@ -1522,8 +1522,6 @@ async function handleStep4(session, userText) {
           question = "それって『残業なし』がいい？それとも『多少の残業はOK』くらい？";
         } else if (combinedText.includes("給料") || combinedText.includes("給与") || combinedText.includes("年収") || combinedText.includes("収入") || combinedText.includes("昇給")) {
           question = "それって『高めの給与』がいい？それとも『平均的でも安定』がいい？";
-        } else if (combinedText.includes("リモート") || combinedText.includes("在宅")) {
-          question = "それって『フルリモート』がいい？それとも『週に何回かリモート』くらい？";
         } else if (combinedText.includes("休み") || combinedText.includes("休日")) {
           question = "休日はどのくらい欲しい？『完全週休2日』？それとも『月6日以上あればOK』？";
         } else if (combinedText.includes("オンコール") || combinedText.includes("呼び出し")) {
@@ -1539,8 +1537,6 @@ async function handleStep4(session, userText) {
           // 初回：方向性を確認（あってほしいのか、なしにしてほしいのか）
           if (userInput.includes("残業")) {
             question = "『残業なし』がいい？それとも『多少の残業はOK』くらい？";
-          } else if (userInput.includes("リモート") || userInput.includes("在宅")) {
-            question = "『フルリモート』がいい？それとも『週に何回かリモート』くらい？";
           } else if (userInput.includes("休み") || userInput.includes("休日")) {
             question = "休日はどのくらい欲しい？『完全週休2日』？それとも『月6日以上あればOK』？";
           } else {
@@ -1552,8 +1548,6 @@ async function handleStep4(session, userText) {
             // 残業の場合
             if (combinedText.includes("残業")) {
               question = "それって『残業なし』がいい？それとも『多少の残業はOK』くらい？";
-            } else if (combinedText.includes("リモート") || combinedText.includes("在宅")) {
-              question = "それって『フルリモート』がいい？それとも『週に何回かリモート』くらい？";
             } else if (combinedText.includes("休み") || combinedText.includes("休日")) {
               question = "それって『完全週休2日』がいい？それとも『月6日以上あればOK』くらい？";
             } else {
@@ -1603,8 +1597,6 @@ async function handleStep4(session, userText) {
           responseText = "それって『残業なし』がいい？それとも『多少の残業はOK』くらい？";
         } else if (combinedText.includes("給料") || combinedText.includes("給与") || combinedText.includes("年収") || combinedText.includes("収入") || combinedText.includes("昇給")) {
           responseText = "それって『高めの給与』がいい？それとも『平均的でも安定』がいい？";
-        } else if (combinedText.includes("リモート") || combinedText.includes("在宅")) {
-          responseText = "それって『フルリモート』がいい？それとも『週に何回かリモート』くらい？";
         } else if (combinedText.includes("休み") || combinedText.includes("休日")) {
           responseText = "それって『完全週休2日』がいい？それとも『月6日以上あればOK』くらい？";
         } else {
@@ -1624,8 +1616,6 @@ async function handleStep4(session, userText) {
           // 方向性を確認する質問
           if (combinedText.includes("残業")) {
             comparisonQuestion = "それって『残業なし』がいい？それとも『多少の残業はOK』くらい？";
-          } else if (combinedText.includes("リモート") || combinedText.includes("在宅")) {
-            comparisonQuestion = "それって『フルリモート』がいい？それとも『週に何回かリモート』くらい？";
           } else if (combinedText.includes("休み") || combinedText.includes("休日")) {
             comparisonQuestion = "それって『完全週休2日』がいい？それとも『月6日以上あればOK』くらい？";
           } else {
