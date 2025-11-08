@@ -930,8 +930,19 @@ function findDirectIdMatches(userText, tagsData) {
     }
     
     // 部分一致（ユーザー発話にタグ名が含まれる、またはその逆）
+    // 「慢性期」「訪問看護」等の短縮形も検出
     if (text.includes(name) || name.includes(text)) {
       matches.push(tag);
+      continue;
+    }
+    
+    // 短縮形の特殊処理
+    // 「慢性期」→「慢性期・療養型病院」
+    if (name.includes("・") || name.includes("（")) {
+      const simplifiedName = name.split(/[・（]/)[0]; // 最初の部分のみ取得
+      if (text.includes(simplifiedName) || simplifiedName.includes(text)) {
+        matches.push(tag);
+      }
     }
   }
   
@@ -1474,11 +1485,18 @@ async function handleStep4(session, userText) {
       const recentTexts = session.history.slice(-3).map(item => item.text).join(" ");
       const combinedText = `${userInput} ${recentTexts}`;
 
+      // ネガティブキーワードがある場合は質問をスキップ（既に方向性が明確）
+      const hasNegativeKeywords = /嫌|避けたい|したくない|なし|いらない|不要|NG/.test(combinedText);
+      const hasPositiveKeywords = /欲しい|いい|希望|理想|好き|したい|あってほしい/.test(combinedText);
+
       let question;
       
-      // 自動ID確定済みの場合、have/ngを聞く質問を優先
-      if (autoConfirmedIds.length > 0) {
-        // 自動ID確定後は必ず「have/ng」を聞く
+      // ネガティブキーワードがある場合は質問をスキップ（方向性が明確なため）
+      if (hasNegativeKeywords && !hasPositiveKeywords) {
+        // 「嫌だ」「避けたい」等が明確な場合は質問不要
+        question = null;
+      } else if (autoConfirmedIds.length > 0) {
+        // 自動ID確定後は必ず「have/ng」を聞く質問を優先
         if (combinedText.includes("残業")) {
           question = "それって『残業なし』がいい？それとも『多少の残業はOK』くらい？";
         } else if (combinedText.includes("給料") || combinedText.includes("給与") || combinedText.includes("年収") || combinedText.includes("収入") || combinedText.includes("昇給")) {
@@ -1532,7 +1550,10 @@ async function handleStep4(session, userText) {
         }
       }
 
-      responseText = responseText ? `${responseText}\n\n${question}` : question;
+      // 質問がある場合のみ追加
+      if (question) {
+        responseText = responseText ? `${responseText}\n\n${question}` : question;
+      }
     }
 
     // 【安全装置2】曖昧な質問を検出して具体的な質問に置き換える
@@ -1829,10 +1850,15 @@ async function handleStep6(session, _userText) {
 
   // STEP2（Can）: Doing（行動・実践）
   // LLM生成のparaphraseを優先的に使用（can_textsに保存されている）
+  console.log("[STEP6 DEBUG] can_texts:", session.status.can_texts);
+  console.log("[STEP6 DEBUG] can_text:", session.status.can_text);
+  
   if (Array.isArray(session.status.can_texts) && session.status.can_texts.length > 0) {
     analysisParts.push("【Doing（あなたの行動・実践）】\n" + session.status.can_texts.join("\n"));
   } else if (session.status.can_text) {
     analysisParts.push("【Doing（あなたの行動・実践）】\n" + session.status.can_text);
+  } else {
+    console.warn("[STEP6 WARNING] No can_texts or can_text found. Doing section will be empty.");
   }
 
   // STEP3（Will）: Will（やりたいこと）
@@ -1854,8 +1880,12 @@ async function handleStep6(session, _userText) {
 
   // STEP5（Self）: Being（あなたの価値観・関わり方）
   // LLM生成のself_textを優先的に使用
+  console.log("[STEP6 DEBUG] self_text:", session.status.self_text);
+  
   if (session.status.self_text) {
     analysisParts.push("【Being（あなたの価値観・関わり方）】\n" + session.status.self_text);
+  } else {
+    console.warn("[STEP6 WARNING] No self_text found. Being section will be empty.");
   }
 
   const summaryData = analysisParts.filter(Boolean).join("\n\n");
