@@ -1091,11 +1091,33 @@ async function handleStep4(session, userText) {
   // userTextがある場合のみturnIndexをインクリメント
   session.stage.turnIndex += 1;
 
+  // 【超高速化】直接マッチングでID確定を試みる
+  const directMatches = findDirectIdMatches(userText, TAGS_DATA);
+  let autoConfirmedIds = [];
+
+  if (directMatches.length > 0 && directMatches.length <= 5) {
+    // 直接マッチが5件以下の場合、自動でID確定
+    autoConfirmedIds = directMatches.map(tag => tag.id);
+    console.log(`[STEP4 FAST] Auto-confirmed IDs: ${autoConfirmedIds.join(", ")} from direct match`);
+
+    // ID確定（LLMスキップ）
+    if (!session.status.must_have_ids) session.status.must_have_ids = [];
+    if (!session.status.direction_map) session.status.direction_map = {};
+
+    autoConfirmedIds.forEach(id => {
+      if (!session.status.must_have_ids.includes(id)) {
+        session.status.must_have_ids.push(id);
+        session.status.direction_map[String(id)] = "have"; // デフォルトはhave
+      }
+    });
+  }
+
   // 【高速化】ユーザー発話からタグを絞り込む（全2306行→数十行に削減）
   const filteredTags = filterTagsByUserText(userText, TAGS_DATA);
 
-  // LLMにはサーバー側カウンターを送る（step4_deepening_countをdeepeningCountとして送信）
-  // STEP4ではSTEP4の履歴のみを送る（STEP3の内容を参照しない）
+  // LLMの役割：
+  // - ID確定済みの場合：ネガ/ポジ判断 + 共感文生成のみ
+  // - ID未確定の場合：従来通りID化も含める
   const step4History = session.history.filter(h => h.step === 4);
   const payload = {
     locale: "ja",
@@ -1103,8 +1125,9 @@ async function handleStep4(session, userText) {
     user_text: userText,
     recent_texts: step4History.slice(-6).map(item => item.text),
     status: session.status,
-    deepening_attempt_total: session.meta.step4_deepening_count,  // サーバー側カウンターを送る
-    tags: filteredTags,  // 絞り込んだタグのみを送る
+    deepening_attempt_total: session.meta.step4_deepening_count,
+    tags: filteredTags,
+    auto_confirmed_ids: autoConfirmedIds.length > 0 ? autoConfirmedIds : undefined, // ID確定済みフラグ
   };
 
   const llm = await callLLM(4, payload, session, { model: "gpt-4o" });
@@ -1294,8 +1317,9 @@ async function handleStep4(session, userText) {
       case 5: {
         // STEP5（Self）の初回質問を取得
         const step5Response = await handleStep5(session, "");
-        // 共感メッセージ → STEP5の質問を結合
-        const combinedResponse = ["ありがとう！", step5Response.response].filter(Boolean).join("\n\n");
+        // LLM生成の共感文（ネガ/ポジ判断済み） → STEP5の質問を結合
+        const empathyMessage = parsed.response || "ありがとう！";
+        const combinedResponse = [empathyMessage, step5Response.response].filter(Boolean).join("\n\n");
         return {
           response: combinedResponse || step5Response.response,
           status: session.status,
