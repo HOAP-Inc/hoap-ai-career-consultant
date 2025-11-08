@@ -145,9 +145,9 @@ function toBadges(resp, _currStep) {
   // ポーズを元に戻すタイマー保持
   const revertTimerRef = useRef(null);
 
-  // 進捗バー
-  const MAX_STEP = 7;
-  const progress = Math.min(100, Math.max(0, Math.round((step / MAX_STEP) * 100)));
+  // 進捗バー（STEP1〜6の6段階）
+  const MAX_STEP = 6;
+  const progress = Math.min(100, Math.max(0, Math.round((Math.min(step, MAX_STEP) / MAX_STEP) * 100)));
 
   // セッションがリセットされたらフラグも戻す
   useEffect(() => {
@@ -638,7 +638,7 @@ setChoices(isChoiceStep(next) ? uniqueByNormalized(inline) : []);
         </>
       )}
 
-      {/* キャリアの説明書（モーダル表示） */}
+      {/* キャリアの説明書（モーダル表示） - Instagram風 最高級UI */}
       {showSummary && summaryData && (
         <div style={{
           position: "fixed",
@@ -646,25 +646,29 @@ setChoices(isChoiceStep(next) ? uniqueByNormalized(inline) : []);
           left: 0,
           right: 0,
           bottom: 0,
-          backgroundColor: "rgba(0, 0, 0, 0.6)",
+          backgroundColor: "rgba(0, 0, 0, 0.75)",
+          backdropFilter: "blur(8px)",
           zIndex: 1000,
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
-          padding: "16px",
-          overflow: "auto"
+          padding: "20px",
+          overflow: "auto",
+          animation: "fadeIn 0.3s ease-out"
         }}>
           <div style={{
-            background: "linear-gradient(180deg, #fdf2f8 0%, #f5f3ff 45%, #eff6ff 100%)",
-            borderRadius: "16px",
-            padding: "24px",
-            maxWidth: "1200px",
+            background: "linear-gradient(135deg, #fff5f0 0%, #fff8f5 50%, #fffaf7 100%)",
+            borderRadius: "24px",
+            padding: "clamp(20px, 4vw, 40px)",
+            maxWidth: "1400px",
             width: "100%",
-            maxHeight: "90vh",
+            maxHeight: "95vh",
             overflow: "auto",
             position: "relative",
-            boxShadow: "0 20px 60px rgba(0, 0, 0, 0.3)"
+            boxShadow: "0 25px 80px rgba(249, 115, 22, 0.15), 0 10px 40px rgba(0, 0, 0, 0.1)",
+            border: "1px solid rgba(249, 115, 22, 0.1)"
           }}>
+            {/* 閉じるボタン */}
             <button
               onClick={() => {
                 setShowSummary(false);
@@ -672,87 +676,233 @@ setChoices(isChoiceStep(next) ? uniqueByNormalized(inline) : []);
               }}
               style={{
                 position: "absolute",
-                top: "16px",
-                right: "16px",
-                background: "white",
+                top: "20px",
+                right: "20px",
+                background: "linear-gradient(135deg, #f97316, #fb923c)",
                 border: "none",
                 borderRadius: "50%",
-                width: "36px",
-                height: "36px",
-                fontSize: "20px",
+                width: "44px",
+                height: "44px",
+                fontSize: "24px",
                 cursor: "pointer",
-                boxShadow: "0 2px 8px rgba(0, 0, 0, 0.1)",
+                boxShadow: "0 4px 12px rgba(249, 115, 22, 0.3)",
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
-                color: "#6b7280"
+                color: "white",
+                fontWeight: 300,
+                transition: "all 0.2s ease",
+                zIndex: 10
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.transform = "scale(1.1) rotate(90deg)";
+                e.currentTarget.style.boxShadow = "0 6px 16px rgba(249, 115, 22, 0.4)";
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.transform = "scale(1) rotate(0deg)";
+                e.currentTarget.style.boxShadow = "0 4px 12px rgba(249, 115, 22, 0.3)";
               }}
             >
               ×
             </button>
-            <h2 style={{
-              marginTop: 0,
-              marginBottom: "24px",
-              fontSize: "clamp(20px, 4vw, 28px)",
-              fontWeight: 800,
-              background: "linear-gradient(90deg, #ec4899, #3b82f6)",
-              WebkitBackgroundClip: "text",
-              backgroundClip: "text",
-              color: "transparent",
-              textAlign: "center"
+
+            {/* タイトル */}
+            <div style={{
+              textAlign: "center",
+              marginBottom: "clamp(24px, 4vw, 40px)"
             }}>
-              キャリアの説明書
-            </h2>
-            
+              <h2 style={{
+                margin: 0,
+                fontSize: "clamp(24px, 5vw, 36px)",
+                fontWeight: 900,
+                background: "linear-gradient(135deg, #f97316, #fb923c, #fdba74)",
+                WebkitBackgroundClip: "text",
+                backgroundClip: "text",
+                color: "transparent",
+                letterSpacing: "0.02em",
+                marginBottom: "8px"
+              }}>
+                あなただけのキャリアシート
+              </h2>
+              <p style={{
+                margin: 0,
+                fontSize: "clamp(12px, 2.5vw, 14px)",
+                color: "#9ca3af",
+                fontWeight: 500
+              }}>
+                Your Unique Career Profile
+              </p>
+            </div>
+
+            {/* 上段：資格・Can・Will・Must（4列） */}
             <div style={{
               display: "grid",
-              gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))",
-              gap: "16px"
+              gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))",
+              gap: "12px",
+              marginBottom: "16px"
             }}>
-              {/* カード形式で各項目を表示 */}
               {[
-                { key: "資格", value: convertIdsToLabels(displayBadgeValue("資格", status["資格"]), true) },
-                { key: "Can", subtitle: "活かせる強み", value: displayBadgeValue("Can", status["Can"]) },
-                { key: "Will", subtitle: "やりたいこと", value: displayBadgeValue("Will", status["Will"]) },
-                { key: "Must", subtitle: "譲れない条件", value: convertIdsToLabels(displayBadgeValue("Must", status["Must"]), false) },
-                { key: "私はこんな人", value: displayBadgeValue("私はこんな人", status["私はこんな人"]) },
-                { key: "Doing", subtitle: "行動・実践", value: displayBadgeValue("Doing", status["Doing"]) },
-                { key: "Being", subtitle: "価値観・関わり方", value: displayBadgeValue("Being", status["Being"]) }
+                { key: "資格", icon: "🎓", value: convertIdsToLabels(displayBadgeValue("資格", status["資格"]), true) },
+                { key: "Can", subtitle: "活かせる強み", icon: "💪", value: displayBadgeValue("Can", status["Can"]) },
+                { key: "Will", subtitle: "やりたいこと", icon: "✨", value: displayBadgeValue("Will", status["Will"]) },
+                { key: "Must", subtitle: "譲れない条件", icon: "🎯", value: convertIdsToLabels(displayBadgeValue("Must", status["Must"]), false) }
               ].map((item) => (
                 <div key={item.key} style={{
                   backgroundColor: "white",
-                  borderRadius: "12px",
-                  padding: "20px",
-                  boxShadow: "0 4px 12px rgba(0, 0, 0, 0.08)",
-                  border: "1px solid #e9d5ff"
-                }}>
-                  <h3 style={{
-                    marginTop: 0,
-                    marginBottom: "12px",
-                    fontSize: "16px",
-                    fontWeight: 700,
-                    color: "#f97316",
-                    display: "flex",
-                    flexDirection: "column",
-                    gap: "4px"
-                  }}>
-                    <span>{item.key}</span>
-                    {item.subtitle && (
-                      <span style={{ fontSize: "12px", color: "#6b7280", fontWeight: 400 }}>
-                        {item.subtitle}
-                      </span>
-                    )}
-                  </h3>
+                  borderRadius: "16px",
+                  padding: "16px",
+                  boxShadow: "0 2px 8px rgba(249, 115, 22, 0.08), 0 1px 3px rgba(0, 0, 0, 0.05)",
+                  border: "1.5px solid rgba(249, 115, 22, 0.12)",
+                  transition: "all 0.2s ease",
+                  cursor: "default"
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.transform = "translateY(-2px)";
+                  e.currentTarget.style.boxShadow = "0 4px 16px rgba(249, 115, 22, 0.15), 0 2px 6px rgba(0, 0, 0, 0.08)";
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.transform = "translateY(0)";
+                  e.currentTarget.style.boxShadow = "0 2px 8px rgba(249, 115, 22, 0.08), 0 1px 3px rgba(0, 0, 0, 0.05)";
+                }}
+                >
                   <div style={{
-                    fontSize: "14px",
-                    lineHeight: "1.7",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "8px",
+                    marginBottom: "10px"
+                  }}>
+                    <span style={{ fontSize: "20px" }}>{item.icon}</span>
+                    <div style={{ flex: 1 }}>
+                      <h3 style={{
+                        margin: 0,
+                        fontSize: "15px",
+                        fontWeight: 700,
+                        color: "#f97316",
+                        letterSpacing: "0.01em"
+                      }}>
+                        {item.key}
+                      </h3>
+                      {item.subtitle && (
+                        <p style={{
+                          margin: 0,
+                          fontSize: "11px",
+                          color: "#9ca3af",
+                          fontWeight: 500
+                        }}>
+                          {item.subtitle}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                  <div style={{
+                    fontSize: "13px",
+                    lineHeight: "1.6",
                     whiteSpace: "pre-wrap",
-                    color: "#1f2937"
+                    color: "#374151",
+                    fontWeight: 400
                   }}>
                     {item.value || "未入力"}
                   </div>
                 </div>
               ))}
+            </div>
+
+            {/* 下段：私はこんな人（自己分析）・Doing・Being（3列） */}
+            <div style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))",
+              gap: "16px"
+            }}>
+              {[
+                { key: "私はこんな人（自己分析）", icon: "🌱", value: displayBadgeValue("私はこんな人", status["私はこんな人"]), highlight: true },
+                { key: "Doing", subtitle: "行動・実践", icon: "🚀", value: displayBadgeValue("Doing", status["Doing"]) },
+                { key: "Being", subtitle: "価値観・関わり方", icon: "💫", value: displayBadgeValue("Being", status["Being"]) }
+              ].map((item) => (
+                <div key={item.key} style={{
+                  backgroundColor: item.highlight ? "linear-gradient(135deg, #fff7ed, #ffedd5)" : "white",
+                  background: item.highlight ? "linear-gradient(135deg, #fff7ed, #ffedd5)" : "white",
+                  borderRadius: "20px",
+                  padding: "24px",
+                  boxShadow: item.highlight 
+                    ? "0 4px 16px rgba(249, 115, 22, 0.15), 0 2px 8px rgba(0, 0, 0, 0.08)"
+                    : "0 2px 8px rgba(249, 115, 22, 0.08), 0 1px 3px rgba(0, 0, 0, 0.05)",
+                  border: item.highlight 
+                    ? "2px solid rgba(249, 115, 22, 0.25)"
+                    : "1.5px solid rgba(249, 115, 22, 0.12)",
+                  transition: "all 0.2s ease",
+                  cursor: "default"
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.transform = "translateY(-4px)";
+                  e.currentTarget.style.boxShadow = item.highlight
+                    ? "0 8px 24px rgba(249, 115, 22, 0.2), 0 4px 12px rgba(0, 0, 0, 0.1)"
+                    : "0 4px 16px rgba(249, 115, 22, 0.15), 0 2px 6px rgba(0, 0, 0, 0.08)";
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.transform = "translateY(0)";
+                  e.currentTarget.style.boxShadow = item.highlight
+                    ? "0 4px 16px rgba(249, 115, 22, 0.15), 0 2px 8px rgba(0, 0, 0, 0.08)"
+                    : "0 2px 8px rgba(249, 115, 22, 0.08), 0 1px 3px rgba(0, 0, 0, 0.05)";
+                }}
+                >
+                  <div style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "10px",
+                    marginBottom: "14px"
+                  }}>
+                    <span style={{ fontSize: "24px" }}>{item.icon}</span>
+                    <div style={{ flex: 1 }}>
+                      <h3 style={{
+                        margin: 0,
+                        fontSize: "17px",
+                        fontWeight: 800,
+                        color: "#f97316",
+                        letterSpacing: "0.01em"
+                      }}>
+                        {item.key}
+                      </h3>
+                      {item.subtitle && (
+                        <p style={{
+                          margin: 0,
+                          fontSize: "12px",
+                          color: "#9ca3af",
+                          fontWeight: 500,
+                          marginTop: "2px"
+                        }}>
+                          {item.subtitle}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                  <div style={{
+                    fontSize: "14px",
+                    lineHeight: "1.8",
+                    whiteSpace: "pre-wrap",
+                    color: "#1f2937",
+                    fontWeight: 400
+                  }}>
+                    {item.value || "未入力"}
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* フッター */}
+            <div style={{
+              marginTop: "clamp(24px, 4vw, 32px)",
+              paddingTop: "20px",
+              borderTop: "1px solid rgba(249, 115, 22, 0.1)",
+              textAlign: "center"
+            }}>
+              <p style={{
+                margin: 0,
+                fontSize: "12px",
+                color: "#9ca3af",
+                fontWeight: 500
+              }}>
+                Created with 💛 by ほーぷちゃん
+              </p>
             </div>
           </div>
         </div>
