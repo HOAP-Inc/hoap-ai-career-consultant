@@ -66,6 +66,7 @@ function ensureArray(value) {
 
 let QUALIFICATIONS = ensureArray(loadJson("qualifications.json"));
 let LICENSE_SOURCES = loadJson("licenses.json") || {};
+let TAGS_DATA = loadJson("tags.json") || {};
 
 try {
   // eslint-disable-next-line global-require
@@ -77,6 +78,13 @@ try {
 try {
   // eslint-disable-next-line global-require
   LICENSE_SOURCES = require("../../licenses.json") || {};
+} catch (e) {
+  // フォールバックに任せる
+}
+
+try {
+  // eslint-disable-next-line global-require
+  TAGS_DATA = require("../../tags.json") || {};
 } catch (e) {
   // フォールバックに任せる
 }
@@ -883,6 +891,7 @@ async function handleStep4(session, userText) {
     recent_texts: step4History.slice(-6).map(item => item.text),
     status: session.status,
     deepening_attempt_total: session.meta.step4_deepening_count,  // サーバー側カウンターを送る
+    tags: TAGS_DATA,
   };
 
   const llm = await callLLM(4, payload, session, { model: "gpt-4o" });
@@ -940,6 +949,7 @@ async function handleStep4(session, userText) {
       recent_texts: step4Texts,
       status: session.status,
       force_generation: true, // generationフェーズを強制
+      tags: TAGS_DATA,
     };
 
     const genLLM = await callLLM(4, genPayload, session, { model: "gpt-4o" });

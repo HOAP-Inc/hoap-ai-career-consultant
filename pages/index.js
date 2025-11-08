@@ -28,11 +28,17 @@ export default function Home() {
   const [tagsMap, setTagsMap] = useState(new Map());
   const [qualificationsMap, setQualificationsMap] = useState(new Map());
 
+  // STEP到達時に1度だけポーズを切り替えるためのフラグ
+  const cheeredIdRef = useRef(false);   // STEP2
+  const cheeredMustRef = useRef(false); // STEP4
+  const cheeredSelfRef = useRef(false); // STEP5
+  const cheeredDoneRef = useRef(false); // STEP6
+
 function toBadges(resp, _currStep) {
   const st = resp?.status ?? {};
 
   const joinIds = (arr) =>
-    Array.isArray(arr) && arr.length ? `ID:${arr.join(",")}` : "";
+    Array.isArray(arr) && arr.length ? arr.map((id) => `ID:${id}`).join(",") : "";
 
   const joinTxt = (arr) =>
     Array.isArray(arr) && arr.length ? arr.join("／") : "";
@@ -41,13 +47,25 @@ function toBadges(resp, _currStep) {
     // 資格：qual_ids（ID）、なければrole_ids（ID）のみを表示
     資格: joinIds(st?.qual_ids) || joinIds(st?.role_ids) || "未入力",
     // Can / Will：配列でも単文でも受ける
-    Can: Array.isArray(st?.can_texts) ? st.can_texts.join("／")
-       : (st?.can_text ? String(st.can_text) : "未入力"),
+    Can: Array.isArray(st?.can_texts)
+      ? st.can_texts.join("／")
+      : st?.can_text
+        ? String(st.can_text)
+        : "未入力",
 
-    Will: Array.isArray(st?.will_texts) ? st.will_texts.join("／")
-        : (st?.will_text ? String(st.will_text) : "未入力"),
+    Will: Array.isArray(st?.will_texts)
+      ? st.will_texts.join("／")
+      : st?.will_text
+        ? String(st.will_text)
+        : "未入力",
     // Must: status_barがあればそれを使用、なければIDまたはテキスト
-    Must: (st?.status_bar ? st.status_bar : (joinIds(st?.must_have_ids) || joinIds(st?.ng_ids) || joinTxt(st?.memo?.must_have_raw) || "未入力")),
+    Must:
+      st?.status_bar
+        ? st.status_bar
+        : joinIds(st?.must_have_ids) ||
+          joinIds(st?.ng_ids) ||
+          joinTxt(st?.memo?.must_have_raw) ||
+          "未入力",
     // 私はこんな人：self_textを使用
     私はこんな人: st?.self_text ? String(st.self_text) : "未入力",
     Doing: st?.doing_text ? String(st.doing_text) : "未入力",
@@ -124,16 +142,22 @@ function toBadges(resp, _currStep) {
   // ほーぷちゃん画像の切替用（初期は基本）
   const [hoapSrc, setHoapSrc] = useState("/hoap-basic.png");
 
-  // 「ID取得後／完了後」のバンザイを一度だけにするためのフラグ
-  const cheeredIdRef = useRef(false);
-  const cheeredDoneRef = useRef(false);
-
   // ポーズを元に戻すタイマー保持
   const revertTimerRef = useRef(null);
 
   // 進捗バー
   const MAX_STEP = 7;
   const progress = Math.min(100, Math.max(0, Math.round((step / MAX_STEP) * 100)));
+
+  // セッションがリセットされたらフラグも戻す
+  useEffect(() => {
+    if (step <= 1) {
+      cheeredIdRef.current = false;
+      cheeredMustRef.current = false;
+      cheeredSelfRef.current = false;
+      cheeredDoneRef.current = false;
+    }
+  }, [step]);
 
   // tags.jsonとqualifications.jsonを読み込んでIDからラベルに変換するマップを作成
   useEffect(() => {
@@ -172,17 +196,32 @@ function toBadges(resp, _currStep) {
 
   // ID文字列をラベルに変換する関数（資格用とタグ用で使い分け）
   function convertIdsToLabels(idString, isQualification = false) {
-    if (!idString || !idString.startsWith('ID:')) {
+    if (!idString || typeof idString !== "string" || !idString.includes("ID")) {
       return idString;
     }
     const map = isQualification ? qualificationsMap : tagsMap;
-    const ids = idString.replace('ID:', '').split(',').map(id => parseInt(id.trim())).filter(id => !isNaN(id));
-    // ID: ラベル名 の形式で表示
-    const labelsWithIds = ids.map(id => {
-      const label = map.get(id);
-      return label ? `${id}: ${label}` : `${id}`;
-    }).filter(Boolean);
-    return labelsWithIds.length > 0 ? labelsWithIds.join('、') : idString;
+
+    const parts = idString
+      .split(",")
+      .map((part) => part.trim())
+      .filter(Boolean);
+
+    const labelsWithIds = parts
+      .map((part) => {
+        const match = part.match(/^ID[:]?(\d+)(?:\/(\w+))?$/i);
+        if (!match) return null;
+        const id = Number(match[1]);
+        if (Number.isNaN(id)) return null;
+        const direction = match[2]?.toLowerCase();
+        const label = map.get(id);
+        if (!label) return `ID${id}`;
+        if (direction === "ng") return `ID${id}：${label}（なし）`;
+        if (direction === "pending") return `ID${id}：${label}（保留）`;
+        return `ID${id}：${label}`;
+      })
+      .filter(Boolean);
+
+    return labelsWithIds.length > 0 ? labelsWithIds.join("、") : idString;
   }
 
   // ★最初の挨拶をサーバーから1回だけ取得
@@ -239,7 +278,7 @@ setChoices(isChoiceStep(next) ? uniqueByNormalized(inline) : []);
       revertTimerRef.current = null;
     }
 
-    // 初回ID番号取得後（stepが2以上に上がった最初のタイミング）
+    // STEP2到達時：初回ID番号取得後
     if (step >= 2 && !cheeredIdRef.current) {
       cheeredIdRef.current = true;
       setHoapSrc("/hoap-up.png");
@@ -250,6 +289,29 @@ setChoices(isChoiceStep(next) ? uniqueByNormalized(inline) : []);
       return;
     }
 
+    // STEP4到達時：Must（譲れない条件）がまとまったら
+    if (step >= 4 && !cheeredMustRef.current) {
+      cheeredMustRef.current = true;
+      setHoapSrc("/hoap-up.png");
+      revertTimerRef.current = setTimeout(() => {
+        setHoapSrc("/hoap-basic.png");
+        revertTimerRef.current = null;
+      }, 2400);
+      return;
+    }
+
+    // STEP5到達時：Self（私はこんな人）がまとまったら
+    if (step >= 5 && !cheeredSelfRef.current) {
+      cheeredSelfRef.current = true;
+      setHoapSrc("/hoap-up.png");
+      revertTimerRef.current = setTimeout(() => {
+        setHoapSrc("/hoap-basic.png");
+        revertTimerRef.current = null;
+      }, 2400);
+      return;
+    }
+
+    // STEP6到達時：最終まとめ完了
     if (step >= 6 && !cheeredDoneRef.current) {
       cheeredDoneRef.current = true;
       setHoapSrc("/hoap-up.png");
@@ -390,9 +452,10 @@ setChoices(isChoiceStep(next) ? uniqueByNormalized(inline) : []);
             setShowSummary(true);
           }, data.meta.show_summary_after_delay);
         }
-      } else if (responseParts.length === 0) {
-        setAiTexts([]);
+      } else if (responseParts.length === 0 || !data.response || data.response.trim() === "") {
+        setAiTexts(["（応答を処理中...）"]);
         setIsTyping(false);
+        console.warn("[Frontend] Empty response received from server");
       } else if (responseParts.length === 1) {
         // 1つだけの場合は即座に表示
         setAiTexts([responseParts[0]]);
