@@ -722,7 +722,7 @@ async function handleStep2(session, userText) {
       }
       default:
         return {
-          response: [empathy, ask_next].filter(Boolean).join("\n\n") || paraphraseDisplay || "受け取ったよ。",
+          response: [empathy, ask_next].filter(Boolean).join("\n\n") || "受け取ったよ。",
           status: session.status,
           meta: { step: session.step },
           drill: session.drill,
