@@ -1502,10 +1502,10 @@ async function handleStep4(session, userText) {
 
       let question;
       
-      // ネガティブキーワードがある場合は質問をスキップ（方向性が明確なため）
+      // ネガティブキーワードがある場合は方向性確認をスキップし、次の条件を聞く
       if (hasNegativeKeywords && !hasPositiveKeywords) {
-        // 「嫌だ」「避けたい」等が明確な場合は質問不要
-        question = null;
+        // 「嫌だ」「避けたい」等が明確な場合は方向性確認不要、次の条件を聞く
+        question = "他に『ここだけは譲れない』って思う条件はある？";
       } else if (autoConfirmedIds.length > 0) {
         // 自動ID確定後は必ず「have/ng」を聞く質問を優先
         if (combinedText.includes("残業")) {
