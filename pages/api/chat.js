@@ -832,6 +832,132 @@ async function handleStep3(session, userText) {
   };
 }
 
+/**
+ * ユーザー発話からタグを絞り込む（高速化）
+ * 戦略：
+ * 1. キーワードマッチング：頻出ワード（残業、夜勤等）で即座に絞り込み
+ * 2. カテゴリー推定：発話内容からカテゴリーを推定し、該当カテゴリーのタグのみを返す
+ * 3. 全タグ：該当なしの場合のみ全タグを返す（フォールバック）
+ */
+function filterTagsByUserText(userText, tagsData) {
+  if (!userText || !tagsData?.tags || !Array.isArray(tagsData.tags)) {
+    return tagsData;
+  }
+
+  const text = userText.toLowerCase();
+  const allTags = tagsData.tags;
+
+  // 【ステップ1】キーワードマッチング（最優先）
+  // 頻出ワードで即座にID候補を絞り込む
+  const keywordMap = {
+    // 勤務時間関連
+    "残業": ["勤務時間"],
+    "夜勤": ["勤務時間"],
+    "日勤": ["勤務時間"],
+    "オンコール": ["勤務時間"],
+    "時短": ["勤務時間"],
+    "夜間": ["勤務時間"],
+    "深夜": ["勤務時間"],
+    
+    // 休日関連
+    "休み": ["休日"],
+    "休日": ["休日"],
+    "週休": ["休日"],
+    "連休": ["休日"],
+    "有給": ["休日"],
+    
+    // 給与関連
+    "給料": ["給与・賞与"],
+    "給与": ["給与・賞与"],
+    "年収": ["給与・賞与"],
+    "賞与": ["給与・賞与"],
+    "ボーナス": ["給与・賞与"],
+    "昇給": ["給与・賞与"],
+    
+    // 福利厚生関連
+    "リモート": ["福利厚生"],
+    "在宅": ["福利厚生"],
+    "テレワーク": ["福利厚生"],
+    "託児": ["福利厚生"],
+    "保育": ["福利厚生"],
+    "育休": ["福利厚生"],
+    "産休": ["福利厚生"],
+    
+    // アクセス関連
+    "通勤": ["アクセス"],
+    "駅": ["アクセス"],
+    "車": ["アクセス"],
+    "バス": ["アクセス"],
+    
+    // 教育・研修関連
+    "研修": ["教育体制・研修制度"],
+    "勉強": ["教育体制・研修制度"],
+    "教育": ["教育体制・研修制度"],
+    "セミナー": ["教育体制・研修制度"],
+    
+    // サービス形態関連
+    "病院": ["サービス形態"],
+    "クリニック": ["サービス形態"],
+    "施設": ["サービス形態"],
+    "訪問": ["サービス形態"],
+    "デイ": ["サービス形態"],
+    "老健": ["サービス形態"],
+    "特養": ["サービス形態"],
+    
+    // 診療科関連
+    "内科": ["診療科・分野"],
+    "外科": ["診療科・分野"],
+    "小児": ["診療科・分野"],
+    "整形": ["診療科・分野"],
+    "精神": ["診療科・分野"],
+    "リハビリ": ["診療科・分野"],
+    "透析": ["診療科・分野"],
+  };
+
+  // キーワードで該当するカテゴリーを収集
+  const matchedCategories = new Set();
+  for (const [keyword, categories] of Object.entries(keywordMap)) {
+    if (text.includes(keyword)) {
+      categories.forEach(cat => matchedCategories.add(cat));
+    }
+  }
+
+  // キーワードマッチした場合、該当カテゴリーのタグのみを返す
+  if (matchedCategories.size > 0) {
+    const filtered = allTags.filter(tag => matchedCategories.has(tag.category));
+    console.log(`[STEP4 Filter] Keyword match: ${Array.from(matchedCategories).join(", ")} (${filtered.length}/${allTags.length} tags)`);
+    return { tags: filtered };
+  }
+
+  // 【ステップ2】カテゴリー推定（キーワードマッチなしの場合）
+  // 文脈から推定
+  const contextMap = {
+    "働き方": ["勤務時間", "休日", "福利厚生"],
+    "雰囲気": ["サービス形態"],
+    "環境": ["サービス形態", "福利厚生"],
+    "待遇": ["給与・賞与", "福利厚生"],
+    "場所": ["アクセス", "サービス形態"],
+    "スキル": ["教育体制・研修制度", "専門資格"],
+    "専門": ["診療科・分野", "専門資格"],
+  };
+
+  for (const [keyword, categories] of Object.entries(contextMap)) {
+    if (text.includes(keyword)) {
+      categories.forEach(cat => matchedCategories.add(cat));
+    }
+  }
+
+  if (matchedCategories.size > 0) {
+    const filtered = allTags.filter(tag => matchedCategories.has(tag.category));
+    console.log(`[STEP4 Filter] Context match: ${Array.from(matchedCategories).join(", ")} (${filtered.length}/${allTags.length} tags)`);
+    return { tags: filtered };
+  }
+
+  // 【ステップ3】フォールバック：全タグを返す
+  console.log(`[STEP4 Filter] No match. Returning all tags (${allTags.length} tags)`);
+  return tagsData;
+}
+
 function applyMustStatus(session, status, meta) {
   session.status.must_have_ids = Array.isArray(status?.must_ids) ? status.must_ids : [];
   session.status.ng_ids = Array.isArray(status?.ng_ids) ? status.ng_ids : [];
@@ -881,6 +1007,9 @@ async function handleStep4(session, userText) {
   // userTextがある場合のみturnIndexをインクリメント
   session.stage.turnIndex += 1;
 
+  // 【高速化】ユーザー発話からタグを絞り込む（全2306行→数十行に削減）
+  const filteredTags = filterTagsByUserText(userText, TAGS_DATA);
+
   // LLMにはサーバー側カウンターを送る（step4_deepening_countをdeepeningCountとして送信）
   // STEP4ではSTEP4の履歴のみを送る（STEP3の内容を参照しない）
   const step4History = session.history.filter(h => h.step === 4);
@@ -891,7 +1020,7 @@ async function handleStep4(session, userText) {
     recent_texts: step4History.slice(-6).map(item => item.text),
     status: session.status,
     deepening_attempt_total: session.meta.step4_deepening_count,  // サーバー側カウンターを送る
-    tags: TAGS_DATA,
+    tags: filteredTags,  // 絞り込んだタグのみを送る
   };
 
   const llm = await callLLM(4, payload, session, { model: "gpt-4o" });
@@ -942,14 +1071,18 @@ async function handleStep4(session, userText) {
       .filter(Boolean);
 
     // LLMにgenerationを依頼（強制的にmust_ids生成）
+    // 全発話を結合してタグを絞り込む
+    const combinedText = step4Texts.join("。");
+    const filteredTagsForGen = filterTagsByUserText(combinedText, TAGS_DATA);
+    
     const genPayload = {
       locale: "ja",
       stage: { turn_index: 999 }, // 終了フラグ
-      user_text: step4Texts.join("。"), // 全ての発話を結合
+      user_text: combinedText, // 全ての発話を結合
       recent_texts: step4Texts,
       status: session.status,
       force_generation: true, // generationフェーズを強制
-      tags: TAGS_DATA,
+      tags: filteredTagsForGen,  // 絞り込んだタグのみを送る
     };
 
     const genLLM = await callLLM(4, genPayload, session, { model: "gpt-4o" });
@@ -976,9 +1109,9 @@ async function handleStep4(session, userText) {
     session.meta.step4_deepening_count = 0;
 
     const step5Response = await handleStep5(session, "");
-    const combinedResponse = [session.status.must_text, "ありがとう！", step5Response.response].filter(Boolean).join("\n\n");
+    // must_textは表示せず、STEP5の質問のみを返す（LLMの不要な発話を防ぐ）
     return {
-      response: combinedResponse || step5Response.response,
+      response: step5Response.response,
       status: session.status,
       meta: { step: session.step },
       drill: step5Response.drill,
@@ -1003,13 +1136,18 @@ async function handleStep4(session, userText) {
         .map(h => h.text)
         .filter(Boolean);
       
+      // 全発話を結合してタグを絞り込む
+      const combinedText = step4Texts.join("。");
+      const filteredTagsForGen = filterTagsByUserText(combinedText, TAGS_DATA);
+      
       const genPayload = {
         locale: "ja",
         stage: { turn_index: 999 },
-        user_text: step4Texts.join("。"),
+        user_text: combinedText,
         recent_texts: step4Texts,
         status: session.status,
         force_generation: true,
+        tags: filteredTagsForGen,  // 絞り込んだタグのみを送る
       };
       
       const genLLM = await callLLM(4, genPayload, session, { model: "gpt-4o" });
@@ -1070,11 +1208,11 @@ async function handleStep4(session, userText) {
 
     switch (nextStep) {
       case 5: {
-        // STEP5（Self）の初回質問を取得して結合
+        // STEP5（Self）の初回質問を取得
         const step5Response = await handleStep5(session, "");
-        const combinedResponse = [session.status.must_text, step5Response.response].filter(Boolean).join("\n\n");
+        // must_textは表示せず、STEP5の質問のみを返す（LLMの不要な発話を防ぐ）
         return {
-          response: combinedResponse || step5Response.response,
+          response: step5Response.response,
           status: session.status,
           meta: { step: session.step, deepening_count: 0 },
           drill: step5Response.drill,
@@ -1253,7 +1391,7 @@ async function handleStep5(session, userText) {
   // STEP5はGPT-5を使用（自己分析深掘り）
   const llm = await callLLM(5, payload, session, { model: "gpt-5" });
   if (!llm.ok) {
-    return buildSchemaError(5, session, "Selfの生成で少しつまずいたよ。もう一度話してみてね。", llm.error);
+    return buildSchemaError(5, session, "ちょっと処理に時間がかかってるみたい。もう一度話してみてね。", llm.error);
   }
   const parsed = llm.parsed || {};
 
