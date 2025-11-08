@@ -1473,11 +1473,17 @@ async function handleStep5(session, userText) {
     session.stage.turnIndex += 1;
   }
   const payload = buildStepPayload(session, userText, 6);
-  // STEP5はGPT-4oを使用（速度重視）
-  const llm = await callLLM(5, payload, session, { model: "gpt-4o" });
+  // STEP5はGPT-5を使用（自己分析深掘り）
+  let llm = await callLLM(5, payload, session, { model: "gpt-5" });
+  if (!llm.ok) {
+    console.warn(
+      `[STEP5 WARNING] GPT-5 call failed (${llm.error || "unknown error"}). Retrying with GPT-4o.`
+    );
+    llm = await callLLM(5, payload, session, { model: "gpt-4o" });
+  }
   if (!llm.ok) {
     console.error(
-      `[STEP5 ERROR] GPT-4o call failed. Returning fallback message. Error: ${llm.error || "unknown"}`
+      `[STEP5 ERROR] GPT-5/GPT-4o both failed. Returning fallback message. Error: ${llm.error || "unknown"}`
     );
     return buildSchemaError(5, session, "ちょっと処理に時間がかかってるみたい。もう一度話してみてね。", llm.error);
   }
@@ -1568,7 +1574,7 @@ async function handleStep5(session, userText) {
           force_generation: true,
         };
 
-        const genLLM = await callLLM(5, genPayload, session, { model: "gpt-4o" });
+        const genLLM = await callLLM(5, genPayload, session, { model: "gpt-5" });
 
         if (genLLM.ok && genLLM.parsed?.status?.self_text) {
           session.status.self_text = genLLM.parsed.status.self_text;
