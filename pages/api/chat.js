@@ -1843,12 +1843,45 @@ async function handleStep5(session, userText) {
 }
 
 async function handleStep6(session, _userText) {
-  // STEP6ではLLM生成を使わず、既存のcan_textとself_textを使用してキャリアシートを生成
-  console.log("[STEP6] Generating career sheet from existing data.");
+  // STEP6ではLLMを使ってDoing（行動・実践）とBeing（価値観・関わり方）を生成
+  console.log("[STEP6] Generating Doing and Being using LLM.");
   
   // STEP6は最終ステップなので、stepは6のまま
   session.step = 6;
   session.stage.turnIndex = 0;
+
+  // LLMにCan/Will/Must/Selfの情報を渡してDoing/Beingを生成
+  const payload = {
+    locale: "ja",
+    can_text: session.status.can_text || "",
+    can_texts: session.status.can_texts || [],
+    will_text: session.status.will_text || "",
+    will_texts: session.status.will_texts || [],
+    must_text: session.status.must_text || "",
+    self_text: session.status.self_text || "",
+    status: {
+      can_text: session.status.can_text,
+      will_text: session.status.will_text,
+      must_text: session.status.must_text,
+      self_text: session.status.self_text,
+    },
+  };
+
+  // GPT-4oを使用してDoing/Beingを生成
+  const llmResult = await callLLM(6, payload, session, { model: "gpt-4o" });
+
+  if (llmResult.ok && llmResult.parsed?.status?.doing_text && llmResult.parsed?.status?.being_text) {
+    // LLM生成成功
+    session.status.doing_text = llmResult.parsed.status.doing_text;
+    session.status.being_text = llmResult.parsed.status.being_text;
+    console.log("[STEP6] LLM generated Doing:", session.status.doing_text);
+    console.log("[STEP6] LLM generated Being:", session.status.being_text);
+  } else {
+    // LLM失敗時のフォールバック
+    console.warn("[STEP6 WARNING] LLM generation failed. Using fallback.");
+    session.status.doing_text = session.status.can_text || "行動・実践について伺いました。";
+    session.status.being_text = session.status.self_text || "価値観・関わり方について伺いました。";
+  }
 
   const analysisParts = [];
 
@@ -1863,27 +1896,12 @@ async function handleStep6(session, _userText) {
     }
   }
 
-  // STEP2（Can）: Doing（行動・実践）
-  // LLM生成のcan_textを優先的に使用（can_textsに保存されている）
-  console.log("[STEP6 DEBUG] ===== Doing Generation =====");
-  console.log("[STEP6 DEBUG] can_texts:", JSON.stringify(session.status.can_texts));
-  console.log("[STEP6 DEBUG] can_text:", session.status.can_text);
-  console.log("[STEP6 DEBUG] step2_user_texts:", JSON.stringify(session.status.step2_user_texts));
-  
-  let doingText = "";
+  // STEP2（Can）: Can（今できること）
   if (Array.isArray(session.status.can_texts) && session.status.can_texts.length > 0) {
-    doingText = session.status.can_texts.join("\n");
-    analysisParts.push("【Doing（あなたの行動・実践）】\n" + doingText);
-    console.log("[STEP6 DEBUG] Using can_texts for Doing:", doingText);
+    analysisParts.push("【Can（今できること）】\n" + session.status.can_texts.join("\n"));
   } else if (session.status.can_text) {
-    doingText = session.status.can_text;
-    analysisParts.push("【Doing（あなたの行動・実践）】\n" + doingText);
-    console.log("[STEP6 DEBUG] Using can_text for Doing:", doingText);
-  } else {
-    console.warn("[STEP6 WARNING] No can_texts or can_text found. Doing section will be empty.");
+    analysisParts.push("【Can（今できること）】\n" + session.status.can_text);
   }
-  // フロントエンド用にdoing_textを設定
-  session.status.doing_text = doingText;
 
   // STEP3（Will）: Will（やりたいこと）
   // LLM生成のwill_textを優先的に使用
@@ -1902,22 +1920,18 @@ async function handleStep6(session, _userText) {
     analysisParts.push("【Must（譲れない条件）】\n" + session.status.must_text);
   }
 
-  // STEP5（Self）: Being（あなたの価値観・関わり方）
-  // LLM生成のself_textを優先的に使用
-  console.log("[STEP6 DEBUG] ===== Being Generation =====");
-  console.log("[STEP6 DEBUG] self_text:", session.status.self_text);
-  console.log("[STEP6 DEBUG] step5_user_texts:", JSON.stringify(session.status.step5_user_texts));
-  
-  let beingText = "";
+  // STEP5（Self）: 私はこんな人（自己分析）
   if (session.status.self_text) {
-    beingText = session.status.self_text;
-    analysisParts.push("【Being（あなたの価値観・関わり方）】\n" + beingText);
-    console.log("[STEP6 DEBUG] Using self_text for Being:", beingText);
-  } else {
-    console.warn("[STEP6 WARNING] No self_text found. Being section will be empty.");
+    analysisParts.push("【私はこんな人（自己分析）】\n" + session.status.self_text);
   }
-  // フロントエンド用にbeing_textを設定
-  session.status.being_text = beingText;
+
+  // STEP6（Doing/Being）: LLM生成済み
+  if (session.status.doing_text) {
+    analysisParts.push("【Doing（あなたの行動・実践）】\n" + session.status.doing_text);
+  }
+  if (session.status.being_text) {
+    analysisParts.push("【Being（あなたの価値観・関わり方）】\n" + session.status.being_text);
+  }
 
   const summaryData = analysisParts.filter(Boolean).join("\n\n");
 
