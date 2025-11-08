@@ -1861,8 +1861,8 @@ async function handleStep6(session, _userText) {
   session.status.doing_text = "";
   session.status.being_text = "";
   
-  const nextStep = 7;
-  session.step = nextStep;
+  // STEP6は最終ステップなので、stepは6のまま
+  session.step = 6;
   session.stage.turnIndex = 0;
 
   const analysisParts = [];
