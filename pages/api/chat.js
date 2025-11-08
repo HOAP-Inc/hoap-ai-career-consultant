@@ -765,6 +765,7 @@ async function handleStep3(session, userText) {
 
   // generation フェーズ（Will確定、STEP4へ移行）
   if (parsed?.status?.will_text && typeof parsed.status.will_text === "string") {
+    // LLM生成のwill_textは内部用にのみ保存（ユーザーには表示しない）
     session.status.will_text = parsed.status.will_text;
     if (!Array.isArray(session.status.will_texts)) {
       session.status.will_texts = [];
@@ -778,8 +779,8 @@ async function handleStep3(session, userText) {
 
     // STEP4の初回質問を取得して結合
     const step4Response = await handleStep4(session, "");
-    // Will生成文 → 中間メッセージ → STEP4の初回質問を結合
-    const combinedResponse = [parsed.status.will_text, "ありがとう！", step4Response.response].filter(Boolean).join("\n\n");
+    // LLM生成文は表示せず、ブリッジメッセージ → STEP4の初回質問のみ
+    const combinedResponse = ["ありがとう！次の質問に移るね", step4Response.response].filter(Boolean).join("\n\n");
     return {
       response: combinedResponse || step4Response.response,
       status: session.status,
@@ -1393,10 +1394,37 @@ async function handleStep4(session, userText) {
       case 5: {
         // STEP5（Self）の初回質問を取得
         const step5Response = await handleStep5(session, "");
-        const empathyMessage = sanitizeStep4Empathy(userText, parsed.response || "ありがとう！");
-        // 共感メッセージ → ブリッジ → STEP5の質問を結合
+        
+        // ID化が成功した場合、確認メッセージを追加
+        const hasMustIds = Array.isArray(session.status.must_have_ids) && session.status.must_have_ids.length > 0;
+        const hasNgIds = Array.isArray(session.status.ng_ids) && session.status.ng_ids.length > 0;
+        
+        let confirmMessage = "";
+        if (hasMustIds || hasNgIds) {
+          // ID化成功：確認メッセージ
+          const idNames = [];
+          if (hasMustIds) {
+            session.status.must_have_ids.forEach(id => {
+              const name = TAG_NAME_BY_ID.get(Number(id));
+              if (name) idNames.push(name);
+            });
+          }
+          if (hasNgIds) {
+            session.status.ng_ids.forEach(id => {
+              const name = TAG_NAME_BY_ID.get(Number(id));
+              if (name) idNames.push(name);
+            });
+          }
+          if (idNames.length > 0) {
+            confirmMessage = `「${idNames.join("、")}」について確認できたよ！`;
+          }
+        }
+        
+        const empathyMessage = sanitizeStep4Empathy(userText, parsed.response || "");
+        // 共感 → 確認 → ブリッジ → STEP5の質問を結合
         const combinedResponse = [
           empathyMessage,
+          confirmMessage,
           "ありがとう！",
           "では最後の質問だよ！",
           step5Response.response,
@@ -1699,15 +1727,14 @@ async function handleStep5(session, userText) {
           force_generation: true,
         };
 
-        const genLLM = await callLLM(5, genPayload, session, { model: "gpt-5" });
+        // フェイルセーフでもGPT-4oを使用（タイムアウト回避）
+        const genLLM = await callLLM(5, genPayload, session, { model: "gpt-4o" });
 
         if (genLLM.ok && genLLM.parsed?.status?.self_text) {
           session.status.self_text = genLLM.parsed.status.self_text;
         } else if (step5Texts.length > 0) {
-          // LLM失敗時：最後の発話を整形してself_textに設定
-          const lastText = step5Texts[step5Texts.length - 1];
-          const trimmed = lastText.trim();
-          session.status.self_text = trimmed || "あなたらしさについて伺いました。";
+          // LLM失敗時：ユーザー発話をそのまま保存
+          session.status.self_text = step5Texts.join("、");
         } else {
           session.status.self_text = "あなたらしさについて伺いました。";
         }
@@ -1753,155 +1780,114 @@ async function handleStep5(session, userText) {
 }
 
 async function handleStep6(session, userText) {
-  session.stage.turnIndex += 1;
-  const payload = buildStepPayload(session, userText, 8);
-  // STEP6はGPT-5を試し、失敗時はGPT-4oにフォールバック
-  let llm = await callLLM(6, payload, session, { model: "gpt-5" });
-  if (!llm.ok) {
-    console.warn(
-      `[STEP6 WARNING] GPT-5 call failed (${llm.error || "unknown error"}). Retrying with GPT-4o.`
-    );
-    llm = await callLLM(6, payload, session, { model: "gpt-4o" });
-  }
-  if (!llm.ok) {
-    console.error(
-      `[STEP6 ERROR] GPT-5/GPT-4o both failed. Returning fallback message. Error: ${llm.error || "unknown"}`
-    );
-    return buildSchemaError(6, session, "作成に失敗しちゃった。少し待って再送してみてね。", llm.error);
-  }
-  const parsed = llm.parsed || {};
-  const doing = parsed?.status?.doing_text;
-  const being = parsed?.status?.being_text;
+  // STEP6ではLLM生成を使わず、ユーザー発話のみを使用してキャリアシートを生成
+  console.log("[STEP6] Skipping LLM generation. Using user texts only.");
+  
+  // Doing/Beingは生成せず、ユーザー発話をそのまま使用
+  // doing_text と being_text は空のまま（後でユーザー発話から取得）
+  session.status.doing_text = "";
+  session.status.being_text = "";
+  
+  const nextStep = 7;
+  session.step = nextStep;
+  session.stage.turnIndex = 0;
 
-  // generation フェーズ（Doing/Being生成完了）
-  if ((typeof doing === "string" && doing) || (typeof being === "string" && being)) {
-    if (typeof doing === "string" && doing) {
-      session.status.doing_text = doing;
+  // 各STEPの情報を整形して表示
+  const parts = [];
+
+  // STEP1（資格）: IDをタグ名に変換
+  if (Array.isArray(session.status.qual_ids) && session.status.qual_ids.length > 0) {
+    const qualNames = session.status.qual_ids
+      .map(id => QUAL_NAME_BY_ID.get(Number(id)))
+      .filter(Boolean)
+      .join("、");
+    if (qualNames) {
+      parts.push("【資格】\n" + qualNames);
     }
-    if (typeof being === "string" && being) {
-      session.status.being_text = being;
-    }
-    const nextStep = Number(parsed?.meta?.step) || 7;
-    session.step = nextStep;
-    session.stage.turnIndex = 0;
-
-    // 各STEPの情報を整形して表示
-    const parts = [];
-
-    // STEP1（資格）: IDをタグ名に変換
-    if (Array.isArray(session.status.qual_ids) && session.status.qual_ids.length > 0) {
-      const qualNames = session.status.qual_ids
-        .map(id => QUAL_NAME_BY_ID.get(Number(id)))
-        .filter(Boolean)
-        .join("、");
-      if (qualNames) {
-        parts.push("【資格】\n" + qualNames);
-      }
-    }
-
-    // STEP2（Can）: ユーザーの発話を優先
-    const step2UserTexts = session.history
-      .filter(h => h.step === 2 && h.role === "user" && h.text)
-      .map(h => h.text.trim())
-      .filter(Boolean);
-    if (step2UserTexts.length > 0) {
-      parts.push("【Can（活かせる強み）】\n" + step2UserTexts.join("\n"));
-    } else if (Array.isArray(session.status.can_texts) && session.status.can_texts.length > 0) {
-      parts.push("【Can（活かせる強み）】\n" + session.status.can_texts.join("\n"));
-    } else if (session.status.can_text) {
-      parts.push("【Can（活かせる強み）】\n" + session.status.can_text);
-    }
-
-    // STEP3（Will）: ユーザーの発話を優先
-    const step3UserTexts = session.history
-      .filter(h => h.step === 3 && h.role === "user" && h.text)
-      .map(h => h.text.trim())
-      .filter(Boolean);
-    if (step3UserTexts.length > 0) {
-      parts.push("【Will（やりたいこと）】\n" + step3UserTexts.join("\n"));
-    } else if (Array.isArray(session.status.will_texts) && session.status.will_texts.length > 0) {
-      parts.push("【Will（やりたいこと）】\n" + session.status.will_texts.join("\n"));
-    } else if (session.status.will_text) {
-      parts.push("【Will（やりたいこと）】\n" + session.status.will_text);
-    }
-
-    // STEP4（Must）: ユーザーの発話を優先
-    const step4UserTexts = session.history
-      .filter(h => h.step === 4 && h.role === "user" && h.text)
-      .map(h => h.text.trim())
-      .filter(Boolean);
-    if (step4UserTexts.length > 0) {
-      parts.push("【Must（譲れない条件）】\n" + step4UserTexts.join("\n"));
-    } else {
-      const mustSummary = formatMustSummary(session);
-      if (mustSummary) {
-        parts.push("【Must（譲れない条件）】\n" + mustSummary);
-      }
-    }
-
-    // STEP5（Self）: ユーザーの発話を優先
-    const step5UserTexts = session.history
-      .filter(h => h.step === 5 && h.role === "user" && h.text)
-      .map(h => h.text.trim())
-      .filter(Boolean);
-    if (step5UserTexts.length > 0) {
-      parts.push("【私はこんな人（自己分析）】\n" + step5UserTexts.join("\n"));
-    } else if (session.status.self_text) {
-      parts.push("【私はこんな人（自己分析）】\n" + session.status.self_text);
-    }
-
-    // STEP6（Doing/Being）: ユーザーの発話を優先
-    const step6UserTexts = session.history
-      .filter(h => h.step === 6 && h.role === "user" && h.text)
-      .map(h => h.text.trim())
-      .filter(Boolean);
-    const doingText = typeof session.status.doing_text === "string" ? session.status.doing_text.trim() : "";
-    const beingText = typeof session.status.being_text === "string" ? session.status.being_text.trim() : "";
-
-    if (doingText) {
-      parts.push("【Doing（あなたの行動・実践）】\n" + doingText);
-    } else if (step6UserTexts.length > 0) {
-      parts.push("【Doing（あなたの行動・実践）】\n" + step6UserTexts.join("\n"));
-    }
-
-    if (beingText) {
-      parts.push("【Being（あなたの価値観・関わり方）】\n" + beingText);
-    } else if (step6UserTexts.length > 0) {
-      parts.push("【Being（あなたの価値観・関わり方）】\n" + step6UserTexts.join("\n"));
-    }
-
-    const summaryData = parts.join("\n\n");
-
-    // 最終メッセージと一覧データを分離
-    // フロントエンド側で1.5秒後に一覧を表示する
-    const finalMessage = "ここまでたくさんの話を聞かせてくれて、ありがとう！あなただけのオリジナルの「あなたらしさ」を表現してみたよ！\n\nこのあと出力するから中身を確認してね。";
-
-    return {
-      response: finalMessage,
-      status: session.status,
-      meta: {
-        step: session.step,
-        show_summary_after_delay: 1500, // 1.5秒後に表示
-        summary_data: summaryData || "キャリアの説明書を作成しました。",
-      },
-      drill: session.drill,
-    };
   }
 
-  // 会話フェーズ（念のため）
-  if (typeof parsed?.response === "string") {
-    return {
-      response: parsed.response,
-      status: session.status,
-      meta: { step: 6 },
-      drill: session.drill,
-    };
+  // STEP2（Can）: ユーザーの発話を優先
+  const step2UserTexts = session.history
+    .filter(h => h.step === 2 && h.role === "user" && h.text)
+    .map(h => h.text.trim())
+    .filter(Boolean);
+  if (step2UserTexts.length > 0) {
+    parts.push("【Can（活かせる強み）】\n" + step2UserTexts.join("\n"));
+  } else if (Array.isArray(session.status.can_texts) && session.status.can_texts.length > 0) {
+    parts.push("【Can（活かせる強み）】\n" + session.status.can_texts.join("\n"));
+  } else if (session.status.can_text) {
+    parts.push("【Can（活かせる強み）】\n" + session.status.can_text);
   }
+
+  // STEP3（Will）: ユーザーの発話を優先
+  const step3UserTexts = session.history
+    .filter(h => h.step === 3 && h.role === "user" && h.text)
+    .map(h => h.text.trim())
+    .filter(Boolean);
+  if (step3UserTexts.length > 0) {
+    parts.push("【Will（やりたいこと）】\n" + step3UserTexts.join("\n"));
+  } else if (Array.isArray(session.status.will_texts) && session.status.will_texts.length > 0) {
+    parts.push("【Will（やりたいこと）】\n" + session.status.will_texts.join("\n"));
+  } else if (session.status.will_text) {
+    parts.push("【Will（やりたいこと）】\n" + session.status.will_text);
+  }
+
+  // STEP4（Must）: ユーザーの発話を優先
+  const step4UserTexts = session.history
+    .filter(h => h.step === 4 && h.role === "user" && h.text)
+    .map(h => h.text.trim())
+    .filter(Boolean);
+  if (step4UserTexts.length > 0) {
+    parts.push("【Must（譲れない条件）】\n" + step4UserTexts.join("\n"));
+  } else {
+    const mustSummary = formatMustSummary(session);
+    if (mustSummary) {
+      parts.push("【Must（譲れない条件）】\n" + mustSummary);
+    }
+  }
+
+  // STEP5（Self）: ユーザーの発話を優先
+  const step5UserTexts = session.history
+    .filter(h => h.step === 5 && h.role === "user" && h.text)
+    .map(h => h.text.trim())
+    .filter(Boolean);
+  if (step5UserTexts.length > 0) {
+    parts.push("【私はこんな人（自己分析）】\n" + step5UserTexts.join("\n"));
+  } else if (session.status.self_text) {
+    parts.push("【私はこんな人（自己分析）】\n" + session.status.self_text);
+  }
+
+  // STEP6（Doing/Being）: ユーザーの発話のみを使用（LLM生成は使わない）
+  // Doing: STEP2（Can）のユーザー発話を使用
+  if (step2UserTexts.length > 0) {
+    parts.push("【Doing（あなたの行動・実践）】\n" + step2UserTexts.join("\n"));
+  } else if (Array.isArray(session.status.can_texts) && session.status.can_texts.length > 0) {
+    parts.push("【Doing（あなたの行動・実践）】\n" + session.status.can_texts.join("\n"));
+  } else if (session.status.can_text) {
+    parts.push("【Doing（あなたの行動・実践）】\n" + session.status.can_text);
+  }
+
+  // Being: STEP5（Self）のユーザー発話を使用（価値観・あなたらしさ）
+  if (step5UserTexts.length > 0) {
+    parts.push("【Being（あなたの価値観・関わり方）】\n" + step5UserTexts.join("\n"));
+  } else if (session.status.self_text) {
+    parts.push("【Being（あなたの価値観・関わり方）】\n" + session.status.self_text);
+  }
+
+  const summaryData = parts.join("\n\n");
+
+  // 最終メッセージと一覧データを分離
+  // フロントエンド側で1.5秒後に一覧を表示する
+  const finalMessage = "ここまでたくさんの話を聞かせてくれて、ありがとう！あなただけのオリジナルの「あなたらしさ」を表現してみたよ！\n\nこのあと出力するから中身を確認してね。";
 
   return {
-    response: "これまでの話をまとめるね。少し待ってて。",
+    response: finalMessage,
     status: session.status,
-    meta: { step: 6 },
+    meta: {
+      step: session.step,
+      show_summary_after_delay: 1500, // 1.5秒後に表示
+      summary_data: summaryData || "キャリアの説明書を作成しました。",
+    },
     drill: session.drill,
   };
 }
