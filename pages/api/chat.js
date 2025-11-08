@@ -580,11 +580,13 @@ async function handleStep2(session, userText) {
   // generation フェーズ（Can確定、STEP3へ移行）
   if (parsed?.status?.can_text && typeof parsed.status.can_text === "string") {
     // LLM生成のcan_textを保存
+    console.log("[STEP2 GENERATION] can_text generated:", parsed.status.can_text);
     session.status.can_text = parsed.status.can_text;
     if (!Array.isArray(session.status.can_texts)) {
       session.status.can_texts = [];
     }
     session.status.can_texts.push(parsed.status.can_text);
+    console.log("[STEP2 GENERATION] can_texts after push:", session.status.can_texts);
     const nextStep = Number(parsed?.meta?.step) || 3;
     session.step = nextStep;
     session.stage.turnIndex = 0;
@@ -601,6 +603,8 @@ async function handleStep2(session, userText) {
       drill: step3Response.drill,
     };
   }
+  
+  console.log("[STEP2 DEBUG] No generation phase detected. parsed.status:", parsed?.status);
 
   const { empathy, ask_next, meta } = parsed;
 
@@ -712,12 +716,17 @@ async function handleStep2(session, userText) {
     const genLLM = await callLLM(2, genPayload, session, { model: "gpt-4o" });
     let generatedCan = "今までやってきたことについて伺いました。";
 
+    console.log("[STEP2 FAILSAFE] genLLM.ok:", genLLM.ok);
+    console.log("[STEP2 FAILSAFE] genLLM.parsed?.status?.can_text:", genLLM.parsed?.status?.can_text);
+    
     if (genLLM.ok && genLLM.parsed?.status?.can_text) {
       generatedCan = genLLM.parsed.status.can_text;
+      console.log("[STEP2 FAILSAFE] Using LLM generated can_text:", generatedCan);
     } else if (step2Texts.length > 0) {
       // LLM失敗時は最後の発話を整形
       const lastText = step2Texts[step2Texts.length - 1];
       generatedCan = lastText.length > 50 ? lastText : `${lastText}を活かしている`;
+      console.log("[STEP2 FAILSAFE] Using fallback can_text:", generatedCan);
     }
 
     session.status.can_text = generatedCan;
@@ -725,6 +734,7 @@ async function handleStep2(session, userText) {
       session.status.can_texts = [];
     }
     session.status.can_texts.push(generatedCan);
+    console.log("[STEP2 FAILSAFE] Final can_texts:", session.status.can_texts);
 
     session.step = nextStep;
     session.stage.turnIndex = 0;
@@ -1713,6 +1723,7 @@ async function handleStep5(session, userText) {
 
   // generation フェーズ（Self確定、STEP6へ移行）
   if (parsed?.status?.self_text && typeof parsed.status.self_text === "string") {
+    console.log("[STEP5 GENERATION] self_text generated:", parsed.status.self_text);
     session.status.self_text = parsed.status.self_text;
     // STEP5では meta.step は 6 のみが有効
     let nextStep = Number(parsed?.meta?.step) || 6;
@@ -1734,6 +1745,8 @@ async function handleStep5(session, userText) {
       drill: session.drill,
     };
   }
+  
+  console.log("[STEP5 DEBUG] No generation phase detected. parsed.status:", parsed?.status);
 
   // empathy + deepening フェーズ（STEP2/3と同じ構造）
   const { empathy, ask_next, meta } = parsed;
@@ -1784,13 +1797,19 @@ async function handleStep5(session, userText) {
         // フェイルセーフでもGPT-4oを使用（タイムアウト回避）
         const genLLM = await callLLM(5, genPayload, session, { model: "gpt-4o" });
 
+        console.log("[STEP5 FAILSAFE] genLLM.ok:", genLLM.ok);
+        console.log("[STEP5 FAILSAFE] genLLM.parsed?.status?.self_text:", genLLM.parsed?.status?.self_text);
+        
         if (genLLM.ok && genLLM.parsed?.status?.self_text) {
           session.status.self_text = genLLM.parsed.status.self_text;
+          console.log("[STEP5 FAILSAFE] Using LLM generated self_text:", session.status.self_text);
         } else if (step5Texts.length > 0) {
           // LLM失敗時：ユーザー発話をそのまま保存（複数行可）
           session.status.self_text = step5Texts.join("\n\n");
+          console.log("[STEP5 FAILSAFE] Using fallback self_text:", session.status.self_text);
         } else {
           session.status.self_text = "あなたらしさについて伺いました。";
+          console.log("[STEP5 FAILSAFE] Using default self_text");
         }
       }
       nextStep = 6;
@@ -1842,8 +1861,8 @@ async function handleStep6(session, _userText) {
   session.status.doing_text = "";
   session.status.being_text = "";
   
-  const nextStep = 7;
-  session.step = nextStep;
+  // STEP6は最終ステップなので、stepは6のまま
+  session.step = 6;
   session.stage.turnIndex = 0;
 
   const analysisParts = [];
@@ -1860,14 +1879,19 @@ async function handleStep6(session, _userText) {
   }
 
   // STEP2（Can）: Doing（行動・実践）
-  // LLM生成のparaphraseを優先的に使用（can_textsに保存されている）
-  console.log("[STEP6 DEBUG] can_texts:", session.status.can_texts);
+  // LLM生成のcan_textを優先的に使用（can_textsに保存されている）
+  console.log("[STEP6 DEBUG] ===== Doing Generation =====");
+  console.log("[STEP6 DEBUG] can_texts:", JSON.stringify(session.status.can_texts));
   console.log("[STEP6 DEBUG] can_text:", session.status.can_text);
+  console.log("[STEP6 DEBUG] step2_user_texts:", JSON.stringify(session.status.step2_user_texts));
   
   if (Array.isArray(session.status.can_texts) && session.status.can_texts.length > 0) {
-    analysisParts.push("【Doing（あなたの行動・実践）】\n" + session.status.can_texts.join("\n"));
+    const doingContent = session.status.can_texts.join("\n");
+    analysisParts.push("【Doing（あなたの行動・実践）】\n" + doingContent);
+    console.log("[STEP6 DEBUG] Using can_texts for Doing:", doingContent);
   } else if (session.status.can_text) {
     analysisParts.push("【Doing（あなたの行動・実践）】\n" + session.status.can_text);
+    console.log("[STEP6 DEBUG] Using can_text for Doing:", session.status.can_text);
   } else {
     console.warn("[STEP6 WARNING] No can_texts or can_text found. Doing section will be empty.");
   }
@@ -1891,10 +1915,13 @@ async function handleStep6(session, _userText) {
 
   // STEP5（Self）: Being（あなたの価値観・関わり方）
   // LLM生成のself_textを優先的に使用
+  console.log("[STEP6 DEBUG] ===== Being Generation =====");
   console.log("[STEP6 DEBUG] self_text:", session.status.self_text);
+  console.log("[STEP6 DEBUG] step5_user_texts:", JSON.stringify(session.status.step5_user_texts));
   
   if (session.status.self_text) {
     analysisParts.push("【Being（あなたの価値観・関わり方）】\n" + session.status.self_text);
+    console.log("[STEP6 DEBUG] Using self_text for Being:", session.status.self_text);
   } else {
     console.warn("[STEP6 WARNING] No self_text found. Being section will be empty.");
   }
