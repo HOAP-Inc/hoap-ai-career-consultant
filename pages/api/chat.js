@@ -1733,8 +1733,8 @@ async function handleStep5(session, userText) {
         if (genLLM.ok && genLLM.parsed?.status?.self_text) {
           session.status.self_text = genLLM.parsed.status.self_text;
         } else if (step5Texts.length > 0) {
-          // LLM失敗時：ユーザー発話をそのまま保存
-          session.status.self_text = step5Texts.join("、");
+          // LLM失敗時：ユーザー発話をそのまま保存（複数行可）
+          session.status.self_text = step5Texts.join("\n\n");
         } else {
           session.status.self_text = "あなたらしさについて伺いました。";
         }
@@ -1792,89 +1792,115 @@ async function handleStep6(session, userText) {
   session.step = nextStep;
   session.stage.turnIndex = 0;
 
-  // 各STEPの情報を整形して表示
-  const parts = [];
+  const sanitizeForQuote = (text) => (text || "").replace(/\s+/g, " ").trim();
+  const collectFromString = (value) => {
+    if (typeof value !== "string") return [];
+    return value
+      .split(/\n+/)
+      .map((line) => sanitizeForQuote(line))
+      .filter(Boolean);
+  };
+  const gatherSources = (primary = [], secondary = [], fallback = "") => {
+    if (primary.length > 0) return primary;
+    if (secondary.length > 0) return secondary;
+    if (fallback) return [fallback];
+    return [];
+  };
+  const toQuoteStr = (texts = []) => {
+    const quotes = texts.map((t) => `「${sanitizeForQuote(t)}」`).filter(Boolean);
+    return quotes.join("／");
+  };
+
+  const analysisParts = [];
 
   // STEP1（資格）: IDをタグ名に変換
   if (Array.isArray(session.status.qual_ids) && session.status.qual_ids.length > 0) {
     const qualNames = session.status.qual_ids
-      .map(id => QUAL_NAME_BY_ID.get(Number(id)))
+      .map((id) => QUAL_NAME_BY_ID.get(Number(id)))
       .filter(Boolean)
       .join("、");
     if (qualNames) {
-      parts.push("【資格】\n" + qualNames);
+      analysisParts.push("【資格】\n" + qualNames);
     }
   }
 
-  // STEP2（Can）: ユーザーの発話を優先
+  // STEP2（Can）: 行動の傾向を分析
   const step2UserTexts = session.history
-    .filter(h => h.step === 2 && h.role === "user" && h.text)
-    .map(h => h.text.trim())
+    .filter((h) => h.step === 2 && h.role === "user" && h.text)
+    .map((h) => sanitizeForQuote(h.text))
     .filter(Boolean);
-  if (step2UserTexts.length > 0) {
-    parts.push("【Can（活かせる強み）】\n" + step2UserTexts.join("\n"));
-  } else if (Array.isArray(session.status.can_texts) && session.status.can_texts.length > 0) {
-    parts.push("【Can（活かせる強み）】\n" + session.status.can_texts.join("\n"));
-  } else if (session.status.can_text) {
-    parts.push("【Can（活かせる強み）】\n" + session.status.can_text);
+  const canFallbackArray = Array.isArray(session.status.can_texts)
+    ? session.status.can_texts.map(sanitizeForQuote).filter(Boolean)
+    : [];
+  const canSources = gatherSources(
+    step2UserTexts,
+    canFallbackArray,
+    session.status.can_text ? sanitizeForQuote(session.status.can_text) : ""
+  );
+  if (canSources.length > 0) {
+    const quotes = toQuoteStr(canSources);
+    analysisParts.push(
+      "【行動の傾向】\n" +
+        `${quotes}と語っており、日常の現場で何を大切にしているかが素直に伝わる。`
+    );
   }
 
-  // STEP3（Will）: ユーザーの発話を優先
+  // STEP3（Will）: 目指す方向を分析
   const step3UserTexts = session.history
-    .filter(h => h.step === 3 && h.role === "user" && h.text)
-    .map(h => h.text.trim())
+    .filter((h) => h.step === 3 && h.role === "user" && h.text)
+    .map((h) => sanitizeForQuote(h.text))
     .filter(Boolean);
-  if (step3UserTexts.length > 0) {
-    parts.push("【Will（やりたいこと）】\n" + step3UserTexts.join("\n"));
-  } else if (Array.isArray(session.status.will_texts) && session.status.will_texts.length > 0) {
-    parts.push("【Will（やりたいこと）】\n" + session.status.will_texts.join("\n"));
-  } else if (session.status.will_text) {
-    parts.push("【Will（やりたいこと）】\n" + session.status.will_text);
+  const willFallbackArray = Array.isArray(session.status.will_texts)
+    ? session.status.will_texts.map(sanitizeForQuote).filter(Boolean)
+    : [];
+  const willSources = gatherSources(
+    step3UserTexts,
+    willFallbackArray,
+    session.status.will_text ? sanitizeForQuote(session.status.will_text) : ""
+  );
+  if (willSources.length > 0) {
+    const quotes = toQuoteStr(willSources);
+    analysisParts.push(
+      "【これから挑戦したいこと】\n" +
+        `${quotes}という言葉が積み重なっていて、描いている未来像が明瞭。`
+    );
   }
 
-  // STEP4（Must）: ユーザーの発話を優先
+  // STEP4（Must）: 譲れない条件を分析
   const step4UserTexts = session.history
-    .filter(h => h.step === 4 && h.role === "user" && h.text)
-    .map(h => h.text.trim())
+    .filter((h) => h.step === 4 && h.role === "user" && h.text)
+    .map((h) => sanitizeForQuote(h.text))
     .filter(Boolean);
   if (step4UserTexts.length > 0) {
-    parts.push("【Must（譲れない条件）】\n" + step4UserTexts.join("\n"));
+    const quotes = toQuoteStr(step4UserTexts);
+    analysisParts.push(
+      "【譲れない条件】\n" +
+        `${quotes}と明言していて、働き方の境界線を自分の言葉で引いている。`
+    );
   } else {
-    const mustSummary = formatMustSummary(session);
+    const mustSummaryRaw = formatMustSummary(session);
+    const mustSummary = typeof mustSummaryRaw === "string" ? mustSummaryRaw.trim() : "";
     if (mustSummary) {
-      parts.push("【Must（譲れない条件）】\n" + mustSummary);
+      analysisParts.push("【譲れない条件】\n" + mustSummary);
     }
   }
 
-  // STEP5（Self）: ユーザーの発話を優先
+  // STEP5（Self）: 価値観・関わり方を分析
   const step5UserTexts = session.history
-    .filter(h => h.step === 5 && h.role === "user" && h.text)
-    .map(h => h.text.trim())
+    .filter((h) => h.step === 5 && h.role === "user" && h.text)
+    .map((h) => sanitizeForQuote(h.text))
     .filter(Boolean);
-  if (step5UserTexts.length > 0) {
-    parts.push("【私はこんな人（自己分析）】\n" + step5UserTexts.join("\n"));
-  } else if (session.status.self_text) {
-    parts.push("【私はこんな人（自己分析）】\n" + session.status.self_text);
+  const selfFallback = collectFromString(session.status.self_text);
+  const selfSources = gatherSources(step5UserTexts, selfFallback);
+  if (selfSources.length > 0) {
+    const quotes = toQuoteStr(selfSources);
+    analysisParts.push(
+      "【あなたらしさ】\n" +
+        `${quotes}と表現しており、人との向き合い方に一貫したスタンスが見えている。`
+    );
   }
 
-  // STEP6（Doing/Being）: ユーザーの発話のみを使用（LLM生成は使わない）
-  // Doing: STEP2（Can）のユーザー発話を使用
-  if (step2UserTexts.length > 0) {
-    parts.push("【Doing（あなたの行動・実践）】\n" + step2UserTexts.join("\n"));
-  } else if (Array.isArray(session.status.can_texts) && session.status.can_texts.length > 0) {
-    parts.push("【Doing（あなたの行動・実践）】\n" + session.status.can_texts.join("\n"));
-  } else if (session.status.can_text) {
-    parts.push("【Doing（あなたの行動・実践）】\n" + session.status.can_text);
-  }
-
-  // Being: STEP5（Self）のユーザー発話を使用（価値観・あなたらしさ）
-  if (step5UserTexts.length > 0) {
-    parts.push("【Being（あなたの価値観・関わり方）】\n" + step5UserTexts.join("\n"));
-  } else if (session.status.self_text) {
-    parts.push("【Being（あなたの価値観・関わり方）】\n" + session.status.self_text);
-  }
-
-  const summaryData = parts.join("\n\n");
+  const summaryData = analysisParts.filter(Boolean).join("\n\n");
 
   // 最終メッセージと一覧データを分離
   // フロントエンド側で1.5秒後に一覧を表示する
