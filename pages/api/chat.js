@@ -621,49 +621,10 @@ async function handleStep2(session, userText) {
     const deepeningCount = Number(meta?.deepening_count) || 0;
     const serverCount = session.meta.step2_deepening_count || 0;
 
-    // ユーザー素材の把握
-    const userStep2Texts = session.history
-      .filter(h => h.step === 2 && h.role === "user" && typeof h.text === "string")
-      .map(h => h.text.trim())
-      .filter(Boolean);
-    const distinctStrengths = new Set(
-      (session.status.can_texts || []).map(ct => normKey(String(ct || "")))
-    );
-
-    const hasEnoughStrengths = distinctStrengths.size >= 2;
-    const hasEnoughEpisodes = userStep2Texts.length >= 2;
-    const hasEnoughMaterial = hasEnoughStrengths && hasEnoughEpisodes;
-
-    if (nextStep === 3) {
-      if (hasEnoughMaterial) {
-        console.log(
-          `[STEP2 INFO] Adequate material confirmed. Proceeding to STEP3. ` +
-            `DistinctStrengths=${distinctStrengths.size}, UserTexts=${userStep2Texts.length}`
-        );
-      } else {
-        console.log(
-          `[STEP2 INFO] Holding transition to enrich material. ` +
-            `DistinctStrengths=${distinctStrengths.size}, UserTexts=${userStep2Texts.length}, ` +
-            `LLM count=${deepeningCount}, Server count=${serverCount}`
-        );
-        nextStep = session.step;
-      }
-    }
-
-    const MAX_DEEPENING = 3;
-
-    if (!hasEnoughMaterial && Math.max(deepeningCount, serverCount) >= MAX_DEEPENING) {
-      console.warn(
-        `[STEP2 WARN] Max deepening reached without sufficient material. Proceeding to STEP3 forcibly. ` +
-          `DistinctStrengths=${distinctStrengths.size}, UserTexts=${userStep2Texts.length}, ` +
-          `LLM count=${deepeningCount}, Server count=${serverCount}`
-      );
+    if (session.meta.can_repeat_count >= 2) {
       nextStep = 3;
-    } else if (hasEnoughMaterial && Math.max(deepeningCount, serverCount) >= MAX_DEEPENING) {
-      console.log(
-        `[STEP2 INFO] Max deepening reached with sufficient material. Proceeding to STEP3. ` +
-          `DistinctStrengths=${distinctStrengths.size}, UserTexts=${userStep2Texts.length}`
-      );
+    } else if (deepeningCount >= 3 || serverCount >= 3) {
+      // LLMのdeepening_countまたはサーバー側カウントが3回に達したら強制終了
       nextStep = 3;
     }
   }
