@@ -26,8 +26,8 @@ const LLM_BRAKE_PROMPT = safeRead(path.join(PROMPTS_DIR, "llm_brake_system.txt")
 
 // 各STEPの初回質問（プロンプトファイルから抽出）
 const STEP_INTRO_QUESTIONS = {
-  2: "教えてくれてありがとう！\n\n次は、仕事中に自然にやってることを教えて！患者さん（利用者さん）と接するとき、無意識にやってることでもOKだよ✨",
-  3: "ありがとう！\n\n次は、今の職場ではできないけど、やってみたいことを教えて！『これができたらいいな』って思うことでOKだよ✨",
+  2: "次は、仕事中に自然にやってることを教えて！患者さん（利用者さん）と接するとき、無意識にやってることでもOKだよ✨",
+  3: "次は、今の職場ではできないけど、やってみたいことを教えて！『これができたらいいな』って思うことでOKだよ✨",
   4: "働きたい事業形態や労働条件を教えて！たとえば『クリニックがいい』『夜勤は避けたい』みたいな感じでOKだよ✨",
   5: "最後に、仕事以外の話を聞かせて！友達や家族に『あなたってこういう人だよね』って言われることって、ある？😊",
 };
@@ -589,9 +589,9 @@ async function handleStep2(session, userText) {
 
   // generation フェーズ（Can確定、STEP3へ移行）
   if (parsed?.status?.can_text && typeof parsed.status.can_text === "string") {
+    const llmCan = normalizeSelfText(parsed.status.can_text);
     const compactCan = buildCompactSummary(session, 2, 3);
-    const fallbackCan = normalizeSelfText(parsed.status.can_text);
-    const finalCan = compactCan || fallbackCan || "今までやってきたことについて伺いました。";
+    const finalCan = llmCan || compactCan || "今までやってきたことについて伺いました。";
 
     session.status.can_text = finalCan;
     session.status.can_texts = finalCan ? [finalCan] : [];
@@ -725,13 +725,19 @@ async function handleStep2(session, userText) {
     console.log("[STEP2 FAILSAFE] genLLM.ok:", genLLM.ok);
     console.log("[STEP2 FAILSAFE] genLLM.parsed?.status?.can_text:", genLLM.parsed?.status?.can_text);
 
-    let generatedCan = buildCompactSummaryFromTexts(step2Texts, 3);
+    let generatedCan = "";
+
+    if (genLLM.ok && genLLM.parsed?.status?.can_text) {
+      generatedCan = normalizeSelfText(genLLM.parsed.status.can_text);
+      console.log("[STEP2 FAILSAFE] Using LLM generated can_text:", generatedCan);
+    }
 
     if (!generatedCan) {
-      if (genLLM.ok && genLLM.parsed?.status?.can_text) {
-        generatedCan = normalizeSelfText(genLLM.parsed.status.can_text);
-        console.log("[STEP2 FAILSAFE] Using LLM generated can_text:", generatedCan);
-      } else if (step2Texts.length > 0) {
+      generatedCan = buildCompactSummaryFromTexts(step2Texts, 3);
+    }
+
+    if (!generatedCan) {
+      if (step2Texts.length > 0) {
         // LLM失敗時は最後の発話を整形
         const lastText = step2Texts[step2Texts.length - 1];
         const normalizedLast = String(lastText || "").replace(/\s+/g, " ").trim();
@@ -802,9 +808,9 @@ async function handleStep3(session, userText) {
 
   // generation フェーズ（Will確定、STEP4へ移行）
   if (parsed?.status?.will_text && typeof parsed.status.will_text === "string") {
+    const llmWill = normalizeSelfText(parsed.status.will_text);
     const compactWill = buildCompactSummary(session, 3, 3);
-    const fallbackWill = normalizeSelfText(parsed.status.will_text);
-    const finalWill = compactWill || fallbackWill || "これから挑戦したいことについて伺いました。";
+    const finalWill = llmWill || compactWill || "これから挑戦したいことについて伺いました。";
 
     session.status.will_text = finalWill;
     session.status.will_texts = finalWill ? [finalWill] : [];
@@ -1199,10 +1205,63 @@ function formatMustSummary(session) {
   return summary || String(mustText || "");
 }
 
+function sanitizeEmpathyOutput(text) {
+  if (!text) return text;
+  let sanitized = String(text);
+  sanitized = sanitized.replace(/[？?]+/g, "！");
+  sanitized = sanitized.replace(/(教えて|聞かせて|話して)(ね|ください|ほしい|欲しい)[！。]*/g, "");
+  sanitized = sanitized.replace(/\s{2,}/g, " ").trim();
+  return sanitized;
+}
+
+function ensureAutoConfirmedIds(session, autoConfirmedIds, autoDirections) {
+  if (!Array.isArray(autoConfirmedIds) || autoConfirmedIds.length === 0) return;
+  if (!session.status) session.status = {};
+  if (!Array.isArray(session.status.must_have_ids)) session.status.must_have_ids = [];
+  if (!Array.isArray(session.status.ng_ids)) session.status.ng_ids = [];
+  if (!Array.isArray(session.status.pending_ids)) session.status.pending_ids = [];
+  if (!session.status.direction_map || typeof session.status.direction_map !== "object") {
+    session.status.direction_map = {};
+  }
+
+  const statusBarParts = new Set(
+    typeof session.status.status_bar === "string" && session.status.status_bar.trim()
+      ? session.status.status_bar.split(",").map((s) => s.trim()).filter(Boolean)
+      : []
+  );
+
+  for (const id of autoConfirmedIds) {
+    const direction = autoDirections[String(id)] || "have";
+    if (direction === "have") {
+      if (!session.status.must_have_ids.includes(id)) session.status.must_have_ids.push(id);
+      session.status.ng_ids = session.status.ng_ids.filter((value) => value !== id);
+      session.status.pending_ids = session.status.pending_ids.filter((value) => value !== id);
+    } else if (direction === "ng") {
+      if (!session.status.ng_ids.includes(id)) session.status.ng_ids.push(id);
+      session.status.must_have_ids = session.status.must_have_ids.filter((value) => value !== id);
+      session.status.pending_ids = session.status.pending_ids.filter((value) => value !== id);
+    } else {
+      if (!session.status.pending_ids.includes(id)) session.status.pending_ids.push(id);
+      session.status.must_have_ids = session.status.must_have_ids.filter((value) => value !== id);
+      session.status.ng_ids = session.status.ng_ids.filter((value) => value !== id);
+    }
+    session.status.direction_map[String(id)] = direction;
+    statusBarParts.add(`ID:${id}/${direction}`);
+  }
+
+  session.status.status_bar = Array.from(statusBarParts).join(",");
+}
+
 function buildStep4BridgeMessage(empathyMessage, confirmMessage) {
   const parts = [];
   const trimmedEmpathy = empathyMessage && empathyMessage.trim();
-  const trimmedConfirm = confirmMessage && confirmMessage.trim();
+  let trimmedConfirm = confirmMessage && confirmMessage.trim();
+  if (trimmedConfirm && /次の質問に(移る|進む)/.test(trimmedConfirm)) {
+    trimmedConfirm = "";
+  }
+  if (trimmedConfirm && /^ありがとう/.test(trimmedConfirm)) {
+    trimmedConfirm = trimmedConfirm.replace(/^ありがとう[！!。]*/, "").trim();
+  }
   if (trimmedEmpathy) parts.push(trimmedEmpathy);
   if (trimmedConfirm) parts.push(trimmedConfirm);
 
@@ -1537,6 +1596,7 @@ async function handleStep4(session, userText) {
     if (genLLM.ok && genLLM.parsed?.status) {
       // LLM生成成功：statusを適用
       applyMustStatus(session, genLLM.parsed.status, genLLM.parsed.meta || {});
+      ensureAutoConfirmedIds(session, autoConfirmedIds, autoDirectionMap);
     }
     
     // ID化できなかった場合でも、ユーザー発話をそのまま保存（内部用語は使わない）
@@ -1581,6 +1641,7 @@ async function handleStep4(session, userText) {
   if (parsed?.status && typeof parsed.status === "object") {
     // LLM から帰ってきた譲れない条件をセッションへ適用
     applyMustStatus(session, parsed.status, parsed.meta || {});
+    ensureAutoConfirmedIds(session, autoConfirmedIds, autoDirectionMap);
     
     // ID化が行われていない場合、強制的にID化を試みる
     const hasMustIds = Array.isArray(session.status.must_have_ids) && session.status.must_have_ids.length > 0;
@@ -1710,7 +1771,7 @@ async function handleStep4(session, userText) {
 
   // 通常の会話フェーズ（empathy, candidate_extraction, direction_check, deepening など）
   if (parsed?.control?.phase) {
-    let responseText = parsed.response || "";
+    let responseText = sanitizeEmpathyOutput(parsed.response || "");
 
     // 【安全装置1】empathyフェーズの場合、共感だけでなく質問も追加
     if (parsed.control.phase === "empathy") {
@@ -1728,19 +1789,16 @@ async function handleStep4(session, userText) {
       // ネガティブキーワードがある場合は方向性確認をスキップし、次の条件を聞く
       if (hasNegativeKeywords && !hasPositiveKeywords) {
         // 「嫌だ」「避けたい」等が明確な場合は方向性確認不要、次の条件を聞く
-        question = "他に『ここだけは譲れない』って思う条件はある？";
+        question = "他に『ここだけは譲れない』って思う条件があったら教えてほしいな✨";
       } else if (autoConfirmedIds.length > 0) {
-        // 自動ID確定後は必ず「have/ng」を聞く質問を優先
-        if (combinedText.includes("残業")) {
-          question = "それって『残業なし』がいい？それとも『多少の残業はOK』くらい？";
-        } else if (combinedText.includes("給料") || combinedText.includes("給与") || combinedText.includes("年収") || combinedText.includes("収入") || combinedText.includes("昇給")) {
-          question = "それって『高めの給与』がいい？それとも『平均的でも安定』がいい？";
-        } else if (combinedText.includes("休み") || combinedText.includes("休日")) {
-          question = "休日はどのくらい欲しい？『完全週休2日』？それとも『月6日以上あればOK』？";
-        } else if (combinedText.includes("オンコール") || combinedText.includes("呼び出し")) {
-          question = "それって『絶対なし』がいい？それとも『たまにならOK』くらい？";
+        const needsDirection = autoConfirmedIds.some((id) => {
+          const key = String(id);
+          return (autoDirectionMap[key] || session.status.direction_map?.[key]) === "pending";
+        });
+        if (needsDirection) {
+          question = "『絶対あってほしい』『絶対なしにしてほしい』のどちらかで教えてほしいな。";
         } else {
-          question = "それって『絶対あってほしい』こと？それとも『絶対なしにしてほしい』こと？";
+          question = "他に『ここだけは譲れない』条件が思い浮かんだら教えてほしいな✨";
         }
       } else {
         // 通常の質問生成ロジック
@@ -1760,12 +1818,12 @@ async function handleStep4(session, userText) {
           if (serverCount === 1) {
             // 残業の場合
             if (combinedText.includes("残業")) {
-              question = "それって『残業なし』がいい？それとも『多少の残業はOK』くらい？";
+            question = "残業については『残業なし』と『多少の残業はOK』のどちらが合うか教えてほしいな。";
             } else if (combinedText.includes("休み") || combinedText.includes("休日")) {
-              question = "それって『完全週休2日』がいい？それとも『月6日以上あればOK』くらい？";
+            question = "休日面では『完全週休2日』と『月6日以上あればOK』のどちらが理想かな？";
             } else {
               // デフォルト：方向性を確認
-              question = "それって『絶対あってほしい』こと？それとも『絶対なしにしてほしい』こと？";
+            question = "その条件は『絶対あってほしい』『絶対なしにしてほしい』のどちらかで教えてほしいな。";
             }
           } else {
             // 3回目以降：重要度や具体的な場面を確認
@@ -1807,13 +1865,13 @@ async function handleStep4(session, userText) {
       } else if (serverCount === 1) {
         // 方向性を確認する質問
         if (combinedText.includes("残業")) {
-          responseText = "それって『残業なし』がいい？それとも『多少の残業はOK』くらい？";
+        responseText = "残業については『残業なし』と『多少の残業はOK』のどちらが合うか教えてほしいな。";
         } else if (combinedText.includes("給料") || combinedText.includes("給与") || combinedText.includes("年収") || combinedText.includes("収入") || combinedText.includes("昇給")) {
-          responseText = "それって『高めの給与』がいい？それとも『平均的でも安定』がいい？";
+          responseText = "給与については『高めの給与』と『平均的でも安定』のどちらに惹かれるか教えてほしいな。";
         } else if (combinedText.includes("休み") || combinedText.includes("休日")) {
-          responseText = "それって『完全週休2日』がいい？それとも『月6日以上あればOK』くらい？";
+          responseText = "休日面では『完全週休2日』と『月6日以上あればOK』のどちらが理想かな？";
         } else {
-          responseText = "それって『絶対あってほしい』こと？それとも『絶対なしにしてほしい』こと？";
+          responseText = "その条件は『絶対あってほしい』『絶対なしにしてほしい』のどちらかで教えてほしいな。";
         }
       } else {
         // 3回目以降：方向性が確定していない場合は方向性を確認、確定している場合は重要度を確認
@@ -1828,11 +1886,11 @@ async function handleStep4(session, userText) {
         if (!hasPositiveKeywords && !hasNegativeKeywords) {
           // 方向性を確認する質問
           if (combinedText.includes("残業")) {
-            comparisonQuestion = "それって『残業なし』がいい？それとも『多少の残業はOK』くらい？";
+            comparisonQuestion = "残業については『残業なし』と『多少の残業はOK』のどちらが合うか教えてほしいな。";
           } else if (combinedText.includes("休み") || combinedText.includes("休日")) {
-            comparisonQuestion = "それって『完全週休2日』がいい？それとも『月6日以上あればOK』くらい？";
+            comparisonQuestion = "休日面では『完全週休2日』と『月6日以上あればOK』のどちらが理想かな？";
           } else {
-            comparisonQuestion = "それって『絶対あってほしい』こと？それとも『絶対なしにしてほしい』こと？";
+            comparisonQuestion = "その条件は『絶対あってほしい』『絶対なしにしてほしい』のどちらかで教えてほしいな。";
           }
         } else {
           // 方向性が確定している場合は重要度を確認
@@ -2192,19 +2250,19 @@ async function handleStep6(session, _userText) {
   session.status.ai_analysis = aiAnalysisTextCombined;
 
   const heroHtml = `
-    <div class="summary-hero">
-      <div class="summary-hero__header">
-        <p class="summary-hero__label">CAREER SNAPSHOT</p>
-        <h2 class="summary-hero__title">無料キャリア診断レポート</h2>
+    <section class="summary-hero">
+      <div class="summary-hero__intro">
+        <span class="summary-hero__badge">🧭 CAREER SNAPSHOT</span>
+        <h2 class="summary-hero__title">あなたのキャリアレポート</h2>
         <p class="summary-hero__lead">
-          あなたが話してくれた言葉をもとに、現在の強みと行動のスタイルをまとめました。
+          これまでのヒアリングで見えてきた強みと価値観を、コンパクトにまとめたよ。大切にしたいことを一緒に確認してみよう！
         </p>
       </div>
       <div class="summary-hero__steps">
         ${[
-          { step: "ステップ1", title: "ヒアリング完了", desc: "あなたの言葉でCan / Will / Mustを確認しました。" },
-          { step: "ステップ2", title: "自己整理", desc: "「私はこんな人」を一緒に言語化しました。" },
-          { step: "ステップ3", title: "AI分析", desc: "強み・行動・価値観を俯瞰して整理しました。" },
+          { step: "STEP 1", title: "ヒアリング完了", desc: "Can / Will / Must をあなたの言葉で整理しました。" },
+          { step: "STEP 2", title: "自己分析", desc: "「私はこんな人」を一緒に言語化しました。" },
+          { step: "STEP 3", title: "AI分析", desc: "強み・行動・価値観を俯瞰してまとめました。" },
         ]
           .map(
             (card) => `
@@ -2217,13 +2275,13 @@ async function handleStep6(session, _userText) {
           )
           .join("")}
       </div>
-    </div>
+    </section>
   `;
 
   const hearingHtml = `
     <section class="summary-section summary-section--hearing">
-      <h3 class="summary-section__title">ヒアリングメモ</h3>
-      <p class="summary-section__note">これまで伺った情報をそのままの言葉で整理しています。</p>
+      <h3 class="summary-section__title">📌 ヒアリングメモ</h3>
+      <p class="summary-section__note">あなたが話してくれた言葉を、そのままの温度感でメモしています。</p>
       <div class="summary-pill-grid">
         ${
           hearingCards.length
@@ -2250,7 +2308,7 @@ async function handleStep6(session, _userText) {
 
   const selfHtml = `
     <section class="summary-section summary-section--self">
-      <h3 class="summary-section__title">自己分析（あなたの言葉）</h3>
+      <h3 class="summary-section__title">🌱 自己分析（あなたの言葉）</h3>
       <article class="summary-card summary-card--self">
         <p>${selfSummary ? escapeHtml(selfSummary).replace(/\n/g, "<br />") : "未入力"}</p>
       </article>
@@ -2277,10 +2335,25 @@ async function handleStep6(session, _userText) {
 
   const aiHtml = `
     <section class="summary-section summary-section--analysis">
-      <h3 class="summary-section__title">AI分析レポート</h3>
-      <p class="summary-section__note">AIが俯瞰した客観視点で、強み・行動・価値観をコンパクトに整理しました。</p>
+      <h3 class="summary-section__title">🔍 AI分析レポート</h3>
+      <p class="summary-section__note">AI視点で整理した「強み」「行動」「価値観」をチェックしてみてね。</p>
       <div class="summary-ai-grid">
         ${aiAnalysisCardsHtml}
+      </div>
+    </section>
+  `;
+
+  const ctaHtml = `
+    <section class="summary-section summary-section--cta">
+      <div class="summary-cta">
+        <div class="summary-cta__text">
+          <h3>🚀 もっと詳しいキャリアシートを作成しよう</h3>
+          <p>
+            履歴書代わりになる詳細なシートを作りたい人は、ここから無料登録してね！<br />
+            これまでの経歴を入力したり、今回の内容をもとにキャリア相談もできるよ✨
+          </p>
+        </div>
+        <button type="button" class="summary-cta__button choice-btn">無料で登録する</button>
       </div>
     </section>
   `;
@@ -2294,6 +2367,7 @@ async function handleStep6(session, _userText) {
           ${selfHtml}
           ${aiHtml}
         </div>
+        ${ctaHtml}
       </div>
     </div>
   `.trim();
@@ -2301,7 +2375,8 @@ async function handleStep6(session, _userText) {
   const finalMessage = [
     "ここまでたくさん話してくれて本当にありがとう！",
     "このあと『ヒアリング内容』と『分析』をまとめたシートを開くね。",
-    "まずはあなたの言葉を振り返ってみて、次にAIからの分析もチェックしてみて！"
+    "まずはあなたの言葉を振り返ってみて、次にAIからの分析もチェックしてみて！",
+    "レポートを表示するまで数秒だけ待っててね✨"
   ].join("\n\n");
 
   return {
