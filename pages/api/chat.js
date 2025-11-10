@@ -2116,16 +2116,18 @@ async function handleStep6(session, _userText) {
   session.status.ai_analysis = aiAnalysisTextCombined;
 
   const hearingHtml = `
-    <section class="summary-section">
-      <h3>ヒアリング内容</h3>
-      <p class="note">あなたが話してくれた言葉をほぼそのまま整理しました。</p>
-      <div class="summary-cards">
+    <section class="summary-section summary-section--hearing">
+      <div class="section-heading">
+        <h3>ヒアリング内容</h3>
+        <p class="note">あなたが話してくれた言葉を、そのままの温度感でまとめています。</p>
+      </div>
+      <div class="summary-cards summary-cards--compact">
         ${
           hearingCards.length
             ? hearingCards
                 .map(
                   (card) => `
-                    <article class="summary-card">
+                    <article class="summary-card summary-card--compact">
                       <h4>${escapeHtml(card.title)}</h4>
                       <p>${escapeHtml(card.body).replace(/\n/g, "<br />")}</p>
                     </article>
@@ -2133,7 +2135,7 @@ async function handleStep6(session, _userText) {
                 )
                 .join("")
             : `
-              <article class="summary-card summary-card--empty">
+              <article class="summary-card summary-card--compact summary-card--empty">
                 <h4>ヒアリング内容</h4>
                 <p>入力された内容がまだありません。</p>
               </article>
@@ -2143,38 +2145,45 @@ async function handleStep6(session, _userText) {
     </section>
   `;
 
-  const highlightHtml = `
-    <article class="summary-card summary-card--highlight">
+  const selfCardHtml = `
+    <article class="summary-card summary-card--self">
       <h4>私はこんな人（自己分析）</h4>
       <p>${selfSummary ? escapeHtml(selfSummary).replace(/\n/g, "<br />") : "未入力"}</p>
     </article>
   `;
 
-  const aiAnalysisCardsHtml = aiAnalysisEntries.length
+  const aiCardBody = aiAnalysisEntries.length
     ? aiAnalysisEntries
-        .map((entry) => {
-          return `
-            <article class="summary-card summary-card--analysis">
-              <h4>${entry.title}</h4>
+        .map(
+          (entry) => `
+            <div class="ai-chip">
+              <h5>${escapeHtml(entry.title)}</h5>
               <p>${escapeHtml(entry.body).replace(/\n/g, "<br />")}</p>
-            </article>
-          `;
-        })
+            </div>
+          `
+        )
         .join("")
     : `
-      <article class="summary-card summary-card--analysis summary-card--empty">
-        <h4>AI分析</h4>
+      <div class="ai-chip ai-chip--empty">
+        <h5>AIコメント</h5>
         <p>今回のヒアリングではAI分析がまだ生成されていません。</p>
-      </article>
+      </div>
     `;
 
   const analysisSectionHtml = `
     <section class="summary-section summary-section--analysis">
-      <h3>分析</h3>
-      <p class="note">あなた自身の振り返り（左）と、AIが客観的に整理したアウトライン（右）です。</p>
-      <div class="summary-cards summary-cards--analysis">
-        ${highlightHtml}
-        ${aiAnalysisCardsHtml}
+      <div class="section-heading">
+        <h3>分析</h3>
+        <p class="note">左があなた自身の振り返り、右がAI視点のアウトラインです。</p>
+      </div>
+      <div class="analysis-columns">
+        ${selfCardHtml}
+        <article class="summary-card summary-card--ai">
+          <h4>AIの分析</h4>
+          <div class="ai-chip-wrap">
+            ${aiCardBody}
+          </div>
+        </article>
       </div>
     </section>
   `;

@@ -61,7 +61,14 @@ function getStatusRowDisplay(key, statusMeta = {}) {
         ...(statusMeta.pending_ids || []),
       ];
       const value = formatIds(ids);
-      return value || "未入力";
+      if (value) return value;
+      const text = (statusMeta.must_text && String(statusMeta.must_text).trim()) || "";
+      if (text) return text;
+      const memoRaw = statusMeta.memo?.must_have_raw;
+      if (Array.isArray(memoRaw) && memoRaw.length > 0) {
+        return memoRaw.filter(Boolean).join("／");
+      }
+      return "未入力";
     }
     case "私はこんな人": {
       return statusMeta.self_text ? "済" : "未入力";
