@@ -1,18 +1,8 @@
-import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
-
-const statusInit = {
-  資格: "未入力",
-  Can: "未入力",          // 60〜90字（将来的に複数でも表示は1本でOK）
-  Will: "未入力",         // 60〜90字
-  Must: "未入力",         // 既存IDロジックを流用
-  私はこんな人: "未入力", // 180〜280字
-  "AIの分析": "未入力",   // Doing & Being を統合した分析
-};
+import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 
 export default function Home() {
   // ← 最初は空配列でOK（ここは触らない）
   const [messages, setMessages] = useState([]);
-  const [status, setStatus] = useState(statusInit);
   const [statusMeta, setStatusMeta] = useState({});
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
@@ -25,8 +15,6 @@ export default function Home() {
   const [choices, setChoices] = useState([]);
   const [showSummary, setShowSummary] = useState(false);
   const [summaryData, setSummaryData] = useState(null);
-  const [tagsMap, setTagsMap] = useState(new Map());
-  const [qualificationsMap, setQualificationsMap] = useState(new Map());
 
   // STEP到達時に1度だけポーズを切り替えるためのフラグ
   const cheeredIdRef = useRef(false);   // STEP2
@@ -34,56 +22,6 @@ export default function Home() {
   const cheeredSelfRef = useRef(false); // STEP5
   const cheeredDoneRef = useRef(false); // STEP6
   const step6AutoStartedRef = useRef(false); // STEP6自動開始フラグ
-
-function toBadges(resp, _currStep) {
-  const st = resp?.status ?? {};
-
-  const joinIds = (arr) =>
-    Array.isArray(arr) && arr.length ? arr.map((id) => `ID:${id}`).join(",") : "";
-
-  const joinTxt = (arr) =>
-    Array.isArray(arr) && arr.length ? arr.join("／") : "";
-
-  return {
-    // 資格：qual_ids（ID）、なければrole_ids（ID）のみを表示
-    資格: joinIds(st?.qual_ids) || joinIds(st?.role_ids) || "未入力",
-    // Can / Will：配列でも単文でも受ける
-    Can: Array.isArray(st?.can_texts)
-      ? st.can_texts.join("／")
-      : st?.can_text
-        ? String(st.can_text)
-        : "未入力",
-
-    Will: Array.isArray(st?.will_texts)
-      ? st.will_texts.join("／")
-      : st?.will_text
-        ? String(st.will_text)
-        : "未入力",
-    // Must: status_barがあればそれを使用、なければIDまたはテキスト
-    Must:
-      st?.status_bar
-        ? st.status_bar
-        : joinIds(st?.must_have_ids) ||
-          joinIds(st?.ng_ids) ||
-          joinTxt(st?.memo?.must_have_raw) ||
-          "未入力",
-    // 私はこんな人：self_textを使用
-    私はこんな人: st?.self_text ? String(st.self_text) : "未入力",
-    "AIの分析":
-      st?.ai_analysis
-        ? String(st.ai_analysis)
-        : (() => {
-            const sections = [];
-            if (st?.doing_text) {
-              sections.push(`＜Doing（行動・実践）＞\n${st.doing_text}`);
-            }
-            if (st?.being_text) {
-              sections.push(`＜Being（価値観・関わり方）＞\n${st.being_text}`);
-            }
-            return sections.length ? sections.join("\n\n") : "未入力";
-          })(),
-  };
-}
 
 function getStatusRowDisplay(key, statusMeta = {}) {
   const formatIds = (ids) =>
@@ -140,11 +78,6 @@ function getStatusRowDisplay(key, statusMeta = {}) {
   }
 }
 
-  function displayBadgeValue(_key, val) {
-    const s = String(val ?? "").trim();
-    return s && s !== "未入力" ? s : "";
-  }
-
   function isChoiceStep(n) {
    return n === 1 || n === 4;
 }
@@ -171,23 +104,26 @@ function getStatusRowDisplay(key, statusMeta = {}) {
   }
 
   // 表記ゆれ正規化（() を全角に、空白を圧縮）
-  function normalizeChoiceKey(s) {
+  const normalizeChoiceKey = useCallback((s) => {
     return String(s || "")
       .replace(/\(/g, "（")
       .replace(/\)/g, "）")
       .replace(/\s+/g, " ")
       .trim();
-  }
+  }, []);
 
   // 正規化キーで一意化
-  function uniqueByNormalized(arr) {
-    const map = new Map();
-    for (const item of arr || []) {
-      const k = normalizeChoiceKey(item);
-      if (!map.has(k)) map.set(k, item); // 先勝ち
-    }
-    return Array.from(map.values());
-  }
+  const uniqueByNormalized = useCallback(
+    (arr) => {
+      const map = new Map();
+      for (const item of arr || []) {
+        const k = normalizeChoiceKey(item);
+        if (!map.has(k)) map.set(k, item); // 先勝ち
+      }
+      return Array.from(map.values());
+    },
+    [normalizeChoiceKey]
+  );
 
   // Step4 の特定質問タイミングでは固定ボタンを出す
   function getInlineChoices(step, responseText, _meta) {
@@ -228,79 +164,14 @@ function getStatusRowDisplay(key, statusMeta = {}) {
     }
   }, [step]);
 
-  // tags.jsonとqualifications.jsonを読み込んでIDからラベルに変換するマップを作成
-  useEffect(() => {
-    // tags.json（職場タグ用）
-    fetch('/tags.json')
-      .then(res => res.json())
-      .then(data => {
-        const map = new Map();
-        if (data.tags && Array.isArray(data.tags)) {
-          data.tags.forEach(tag => {
-            if (tag.id && tag.name) {
-              map.set(tag.id, tag.name);
-            }
-          });
-        }
-        setTagsMap(map);
-      })
-      .catch(err => console.error('Failed to load tags.json:', err));
-
-    // qualifications.json（資格用）
-    fetch('/qualifications.json')
-      .then(res => res.json())
-      .then(data => {
-        const map = new Map();
-        if (data.qualifications && Array.isArray(data.qualifications)) {
-          data.qualifications.forEach(qual => {
-            if (qual.id && qual.name) {
-              map.set(qual.id, qual.name);
-            }
-          });
-        }
-        setQualificationsMap(map);
-      })
-      .catch(err => console.error('Failed to load qualifications.json:', err));
-  }, []);
-
-  // ID文字列をラベルに変換する関数（資格用とタグ用で使い分け）
-  function convertIdsToLabels(idString, isQualification = false) {
-    if (!idString || typeof idString !== "string" || !idString.includes("ID")) {
-      return idString;
-    }
-    const map = isQualification ? qualificationsMap : tagsMap;
-
-    const parts = idString
-      .split(",")
-      .map((part) => part.trim())
-      .filter(Boolean);
-
-    const labelsWithIds = parts
-      .map((part) => {
-        const match = part.match(/^ID[:]?(\d+)(?:\/(\w+))?$/i);
-        if (!match) return null;
-        const id = Number(match[1]);
-        if (Number.isNaN(id)) return null;
-        const direction = match[2]?.toLowerCase();
-        const label = map.get(id);
-        if (!label) return `ID${id}`;
-        if (direction === "ng") return `ID${id}：${label}（なし）`;
-        if (direction === "pending") return `ID${id}：${label}（保留）`;
-        return `ID${id}：${label}`;
-      })
-      .filter(Boolean);
-
-    return labelsWithIds.length > 0 ? labelsWithIds.join("、") : idString;
-  }
-
-  function clearMessageTimers() {
+  const clearMessageTimers = useCallback(() => {
     if (Array.isArray(messageTimersRef.current)) {
       messageTimersRef.current.forEach((timerId) => clearTimeout(timerId));
     }
     messageTimersRef.current = [];
-  }
+  }, []);
 
-  function showAiSequence(parts) {
+  const showAiSequence = useCallback((parts) => {
     clearMessageTimers();
     if (!Array.isArray(parts) || parts.length === 0) {
       setAiText("");
@@ -318,7 +189,7 @@ function getStatusRowDisplay(key, statusMeta = {}) {
       }, 3000 * i);
       messageTimersRef.current.push(timerId);
     }
-  }
+  }, [clearMessageTimers]);
 
   // ★最初の挨拶をサーバーから1回だけ取得
   useEffect(() => {
@@ -343,19 +214,18 @@ const data = raw ? JSON.parse(raw) : null;
         }
 
         const next = data?.meta?.step ?? 0;
-        setStatus(toBadges(data, next));
         setStatusMeta(data?.status || {});
 
         setStep(next);
 
         const inline = extractChoices(data.response);
-setChoices(isChoiceStep(next) ? uniqueByNormalized(inline) : []);
+        setChoices(isChoiceStep(next) ? uniqueByNormalized(inline) : []);
       } catch (e) {
         setMessages([{ type: "ai", content: "初期メッセージの取得に失敗したよ🙏" }]);
       }
     })();
     return () => { aborted = true; };
-  }, [sessionId]);
+  }, [sessionId, showAiSequence, uniqueByNormalized]);
 
   // step変化でトリガー：ID取得後(2以上に到達)／完了(10)で一度だけバンザイ
   useEffect(() => {
@@ -576,8 +446,7 @@ setChoices(isChoiceStep(next) ? uniqueByNormalized(inline) : []);
       // 次ステップ
       const nextStep = data.meta && data.meta.step != null ? data.meta.step : step;
 
-      // ステータス・ステップ更新（バッジを整形して適用）
-      setStatus(toBadges(data));
+      // ステータス・ステップ更新
       setStatusMeta(data.status || {});
       setStep(nextStep);
 
