@@ -587,14 +587,13 @@ async function handleStep2(session, userText) {
 
   // generation フェーズ（Can確定、STEP3へ移行）
   if (parsed?.status?.can_text && typeof parsed.status.can_text === "string") {
-    // LLM生成のcan_textを保存
-    console.log("[STEP2 GENERATION] can_text generated:", parsed.status.can_text);
-    session.status.can_text = parsed.status.can_text;
-    if (!Array.isArray(session.status.can_texts)) {
-      session.status.can_texts = [];
-    }
-    session.status.can_texts.push(parsed.status.can_text);
-    console.log("[STEP2 GENERATION] can_texts after push:", session.status.can_texts);
+    const compactCan = buildCompactSummary(session, 2, 3);
+    const fallbackCan = normalizeSelfText(parsed.status.can_text);
+    const finalCan = compactCan || fallbackCan || "今までやってきたことについて伺いました。";
+
+    session.status.can_text = finalCan;
+    session.status.can_texts = finalCan ? [finalCan] : [];
+    console.log("[STEP2 GENERATION] can_text (compact):", finalCan);
     const nextStep = Number(parsed?.meta?.step) || 3;
     session.step = nextStep;
     session.stage.turnIndex = 0;
@@ -721,27 +720,32 @@ async function handleStep2(session, userText) {
     };
 
     const genLLM = await callLLM(2, genPayload, session, { model: "gpt-4o" });
-    let generatedCan = "今までやってきたことについて伺いました。";
-
     console.log("[STEP2 FAILSAFE] genLLM.ok:", genLLM.ok);
     console.log("[STEP2 FAILSAFE] genLLM.parsed?.status?.can_text:", genLLM.parsed?.status?.can_text);
-    
-    if (genLLM.ok && genLLM.parsed?.status?.can_text) {
-      generatedCan = genLLM.parsed.status.can_text;
-      console.log("[STEP2 FAILSAFE] Using LLM generated can_text:", generatedCan);
-    } else if (step2Texts.length > 0) {
-      // LLM失敗時は最後の発話を整形
-      const lastText = step2Texts[step2Texts.length - 1];
-      generatedCan = lastText.length > 50 ? lastText : `${lastText}を活かしている`;
-      console.log("[STEP2 FAILSAFE] Using fallback can_text:", generatedCan);
+
+    let generatedCan = buildCompactSummaryFromTexts(step2Texts, 3);
+
+    if (!generatedCan) {
+      if (genLLM.ok && genLLM.parsed?.status?.can_text) {
+        generatedCan = normalizeSelfText(genLLM.parsed.status.can_text);
+        console.log("[STEP2 FAILSAFE] Using LLM generated can_text:", generatedCan);
+      } else if (step2Texts.length > 0) {
+        // LLM失敗時は最後の発話を整形
+        const lastText = step2Texts[step2Texts.length - 1];
+        const normalizedLast = String(lastText || "").replace(/\s+/g, " ").trim();
+        generatedCan =
+          normalizedLast.length > 0
+            ? (/[。.!?！？]$/.test(normalizedLast) ? normalizedLast : `${normalizedLast}。`)
+            : "今までやってきたことについて伺いました。";
+        console.log("[STEP2 FAILSAFE] Using fallback can_text:", generatedCan);
+      } else {
+        generatedCan = "今までやってきたことについて伺いました。";
+      }
     }
 
     session.status.can_text = generatedCan;
-    if (!Array.isArray(session.status.can_texts)) {
-      session.status.can_texts = [];
-    }
-    session.status.can_texts.push(generatedCan);
-    console.log("[STEP2 FAILSAFE] Final can_texts:", session.status.can_texts);
+    session.status.can_texts = generatedCan ? [generatedCan] : [];
+    console.log("[STEP2 FAILSAFE] Final can_text:", generatedCan);
 
     session.step = nextStep;
     session.stage.turnIndex = 0;
@@ -796,12 +800,12 @@ async function handleStep3(session, userText) {
 
   // generation フェーズ（Will確定、STEP4へ移行）
   if (parsed?.status?.will_text && typeof parsed.status.will_text === "string") {
-    // LLM生成のwill_textは内部用にのみ保存（ユーザーには表示しない）
-    session.status.will_text = parsed.status.will_text;
-    if (!Array.isArray(session.status.will_texts)) {
-      session.status.will_texts = [];
-    }
-    session.status.will_texts.push(parsed.status.will_text);
+    const compactWill = buildCompactSummary(session, 3, 3);
+    const fallbackWill = normalizeSelfText(parsed.status.will_text);
+    const finalWill = compactWill || fallbackWill || "これから挑戦したいことについて伺いました。";
+
+    session.status.will_text = finalWill;
+    session.status.will_texts = finalWill ? [finalWill] : [];
     const nextStep = Number(parsed?.meta?.step) || 4;
     session.step = nextStep;
     session.stage.turnIndex = 0;
@@ -871,21 +875,25 @@ async function handleStep3(session, userText) {
       };
 
       const genLLM = await callLLM(3, genPayload, session, { model: "gpt-4o" });
-      let generatedWill = "これから挑戦したいことについて伺いました。";
+      let generatedWill = buildCompactSummaryFromTexts(step3Texts, 3);
 
-      if (genLLM.ok && genLLM.parsed?.status?.will_text) {
-        generatedWill = genLLM.parsed.status.will_text;
-      } else if (step3Texts.length > 0) {
-        // LLM失敗時は最後の発話を整形
-        const lastText = step3Texts[step3Texts.length - 1];
-        generatedWill = lastText.length > 50 ? lastText : `${lastText}に挑戦したい`;
+      if (!generatedWill) {
+        if (genLLM.ok && genLLM.parsed?.status?.will_text) {
+          generatedWill = normalizeSelfText(genLLM.parsed.status.will_text);
+        } else if (step3Texts.length > 0) {
+          const lastText = step3Texts[step3Texts.length - 1];
+          const normalizedLast = String(lastText || "").replace(/\s+/g, " ").trim();
+          generatedWill =
+            normalizedLast.length > 0
+              ? (/[。.!?！？]$/.test(normalizedLast) ? normalizedLast : `${normalizedLast}。`)
+              : "これから挑戦したいことについて伺いました。";
+        } else {
+          generatedWill = "これから挑戦したいことについて伺いました。";
+        }
       }
 
       session.status.will_text = generatedWill;
-      if (!Array.isArray(session.status.will_texts)) {
-        session.status.will_texts = [];
-      }
-      session.status.will_texts.push(generatedWill);
+      session.status.will_texts = generatedWill ? [generatedWill] : [];
 
       session.step = nextStep;
       session.stage.turnIndex = 0;
@@ -1215,16 +1223,58 @@ function formatSelfTextFallback(texts) {
     .trim();
 }
 
+function collectUserStepTexts(session, step) {
+  if (!session?.history) return [];
+  return session.history
+    .filter((h) => h.step === step && h.role === "user" && typeof h.text === "string")
+    .map((h) =>
+      String(h.text || "")
+        .replace(/\s+/g, " ")
+        .trim()
+    )
+    .filter(Boolean);
+}
+
+function buildCompactSummaryFromTexts(texts, maxSentences = 3) {
+  const seen = new Set();
+  const sentences = [];
+  for (const raw of texts || []) {
+    const normalized = String(raw || "")
+      .replace(/\s+/g, " ")
+      .trim();
+    if (!normalized) continue;
+    const key = normKey(normalized);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    const ended = /[。.!?！？]$/.test(normalized) ? normalized : `${normalized}。`;
+    sentences.push(ended);
+    if (sentences.length >= maxSentences) break;
+  }
+  return sentences.join("").trim();
+}
+
+function buildCompactSummary(session, step, maxSentences = 3) {
+  const texts = collectUserStepTexts(session, step);
+  return buildCompactSummaryFromTexts(texts, maxSentences);
+}
+
 function smoothAnalysisText(text) {
   if (!text) return "";
-  return String(text)
+  let result = String(text)
+    .replace(/(^|\n)この人は[、\s]*/g, "$1")
     .replace(/この人は/g, "")
     .replace(/のだ。/g, "。")
     .replace(/なのだ。/g, "。")
     .replace(/\s*\n\s*/g, "\n")
     .replace(/\n{2,}/g, "\n\n")
     .replace(/\s{2,}/g, " ")
-    .trim();
+    .replace(/(^|\n)[、\s]+/g, "$1");
+
+  result = result.trim();
+  if (!result) return result;
+  // 先頭が句読点で始まる場合は削除
+  result = result.replace(/^[、。．．]/, "");
+  return result.trim();
 }
 
 async function handleStep4(session, userText) {

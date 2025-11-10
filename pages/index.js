@@ -766,6 +766,26 @@ setChoices(isChoiceStep(next) ? uniqueByNormalized(inline) : []);
               </h2>
             </div>
 
+            {/* ヒアリング内容 */}
+            <div style={{ marginBottom: "12px" }}>
+              <h3 style={{
+                margin: 0,
+                fontSize: "clamp(18px, 2.6vw, 24px)",
+                fontWeight: 700,
+                color: "#ec4899",
+                letterSpacing: "0.02em"
+              }}>
+                ヒアリング内容
+              </h3>
+              <p style={{
+                margin: "4px 0 0",
+                fontSize: "13px",
+                color: "#6b7280"
+              }}>
+                あなたが話してくれた言葉を、ほぼそのまま整理したメモです。
+              </p>
+            </div>
+
             {/* 上段：資格・Can・Will・Must（4列） */}
             <div style={{
               display: "grid",
@@ -837,6 +857,26 @@ setChoices(isChoiceStep(next) ? uniqueByNormalized(inline) : []);
                   </div>
                 </div>
               ))}
+            </div>
+
+            {/* 分析 */}
+            <div style={{ margin: "28px 0 12px" }}>
+              <h3 style={{
+                margin: 0,
+                fontSize: "clamp(18px, 2.6vw, 24px)",
+                fontWeight: 700,
+                color: "#8b5cf6",
+                letterSpacing: "0.02em"
+              }}>
+                分析
+              </h3>
+              <p style={{
+                margin: "4px 0 0",
+                fontSize: "13px",
+                color: "#6b7280"
+              }}>
+                あなた自身の振り返りと、AIが客観的に整理した分析です。
+              </p>
             </div>
 
             {/* 下段：私はこんな人（自己分析）・AIの分析（Doing & Being）（2列） */}
