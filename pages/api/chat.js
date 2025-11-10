@@ -1315,21 +1315,15 @@ async function handleStep4(session, userText) {
   const directMatches = findDirectIdMatches(userText, TAGS_DATA);
   let autoConfirmedIds = [];
 
-  if (directMatches.length > 0 && directMatches.length <= 5) {
-    // 直接マッチが5件以下の場合、自動でID確定
+  if (directMatches.length === 1) {
     autoConfirmedIds = directMatches.map(tag => tag.id);
-    console.log(`[STEP4 FAST] Auto-confirmed IDs: ${autoConfirmedIds.join(", ")} from direct match`);
-
-    // ID確定（LLMスキップ）
-    if (!session.status.must_have_ids) session.status.must_have_ids = [];
-    if (!session.status.direction_map) session.status.direction_map = {};
-
-    autoConfirmedIds.forEach(id => {
-      if (!session.status.must_have_ids.includes(id)) {
-        session.status.must_have_ids.push(id);
-        session.status.direction_map[String(id)] = "have"; // デフォルトはhave
-      }
-    });
+    console.log(
+      `[STEP4 FAST] Auto-confirmed ID: ${autoConfirmedIds[0]} (${directMatches[0].name})`
+    );
+  } else if (directMatches.length > 1) {
+    console.log(
+      `[STEP4 FAST] Multiple direct matches detected (${directMatches.length}). Deferring to LLM.`
+    );
   }
 
   // 【高速化】ユーザー発話からタグを絞り込む（全2306行→数十行に削減）
@@ -1440,9 +1434,16 @@ async function handleStep4(session, userText) {
     session.meta.step4_deepening_count = 0;
 
     const step5Response = await handleStep5(session, "");
-    const bridgeMessage = ["ありがとう！", "では最後の質問だよ！", step5Response.response]
-      .filter(Boolean)
-      .join("\n\n");
+    const step5Message = step5Response.response || "";
+    const bridgeParts = [];
+    if (!/^ありがとう/.test(step5Message)) {
+      bridgeParts.push("ありがとう！");
+    }
+    bridgeParts.push("では最後の質問だよ！");
+    if (step5Message) {
+      bridgeParts.push(step5Message);
+    }
+    const bridgeMessage = bridgeParts.filter(Boolean).join("\n\n");
     // must_textは表示せず、STEP5の質問のみを返す（LLMの不要な発話を防ぐ）
     return {
       response: bridgeMessage,

@@ -13,6 +13,7 @@ export default function Home() {
   // ← 最初は空配列でOK（ここは触らない）
   const [messages, setMessages] = useState([]);
   const [status, setStatus] = useState(statusInit);
+  const [statusMeta, setStatusMeta] = useState({});
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
   const [sessionId] = useState(() => Math.random().toString(36).slice(2));
@@ -82,6 +83,61 @@ function toBadges(resp, _currStep) {
             return sections.length ? sections.join("\n\n") : "未入力";
           })(),
   };
+}
+
+function getStatusRowDisplay(key, statusMeta = {}) {
+  const formatIds = (ids) =>
+    Array.isArray(ids) && ids.length ? ids.map((id) => `ID:${id}`).join("、") : "";
+
+  switch (key) {
+    case "資格": {
+      const value =
+        formatIds(statusMeta.qual_ids) ||
+        formatIds(statusMeta.role_ids) ||
+        "";
+      return value || "未入力";
+    }
+    case "Can": {
+      const hasCan =
+        (Array.isArray(statusMeta.can_texts) && statusMeta.can_texts.length > 0) ||
+        Boolean(statusMeta.can_text);
+      return hasCan ? "済" : "未入力";
+    }
+    case "Will": {
+      const hasWill =
+        (Array.isArray(statusMeta.will_texts) && statusMeta.will_texts.length > 0) ||
+        Boolean(statusMeta.will_text);
+      return hasWill ? "済" : "未入力";
+    }
+    case "Must": {
+      if (typeof statusMeta.status_bar === "string" && statusMeta.status_bar.trim()) {
+        return statusMeta.status_bar
+          .split(",")
+          .map((entry) => entry.split("/")[0])
+          .filter(Boolean)
+          .join("、");
+      }
+      const ids = [
+        ...(statusMeta.must_have_ids || []),
+        ...(statusMeta.ng_ids || []),
+        ...(statusMeta.pending_ids || []),
+      ];
+      const value = formatIds(ids);
+      return value || "未入力";
+    }
+    case "私はこんな人": {
+      return statusMeta.self_text ? "済" : "未入力";
+    }
+    case "AIの分析": {
+      const hasAnalysis =
+        Boolean(statusMeta.ai_analysis) ||
+        Boolean(statusMeta.doing_text) ||
+        Boolean(statusMeta.being_text);
+      return hasAnalysis ? "済" : "未出力";
+    }
+    default:
+      return "未入力";
+  }
 }
 
   function displayBadgeValue(_key, val) {
@@ -288,6 +344,7 @@ const data = raw ? JSON.parse(raw) : null;
 
         const next = data?.meta?.step ?? 0;
         setStatus(toBadges(data, next));
+        setStatusMeta(data?.status || {});
 
         setStep(next);
 
@@ -521,6 +578,7 @@ setChoices(isChoiceStep(next) ? uniqueByNormalized(inline) : []);
 
       // ステータス・ステップ更新（バッジを整形して適用）
       setStatus(toBadges(data));
+      setStatusMeta(data.status || {});
       setStep(nextStep);
 
       // STEP2〜6の時だけ選択肢抽出（STEP4はインライン固定ボタンも考慮）
@@ -651,15 +709,7 @@ setChoices(isChoiceStep(next) ? uniqueByNormalized(inline) : []);
               "私はこんな人",
               "AIの分析",
             ].map((k) => {
-              const value = displayBadgeValue(k, status[k]);
-              let displayValue = value;
-              if (k === "資格") {
-                // 資格はqualifications.jsonを使う
-                displayValue = convertIdsToLabels(value, true);
-              } else if (k === "Must") {
-                // Mustはtags.jsonを使う
-                displayValue = convertIdsToLabels(value, false);
-              }
+              const displayValue = getStatusRowDisplay(k, statusMeta);
               return (
                 <span key={k} className="badge">
                   {k}：{displayValue}
@@ -669,12 +719,14 @@ setChoices(isChoiceStep(next) ? uniqueByNormalized(inline) : []);
           </div>
 
           {/* ステータス進捗バー */}
-          <div className="status-progress">
-            <div
-              className="status-progress__inner"
-              style={{ width: `${progress}%` }}
-            />
-          </div>
+          {step < 6 && (
+            <div className="status-progress">
+              <div
+                className="status-progress__inner"
+                style={{ width: `${progress}%` }}
+              />
+            </div>
+          )}
         </>
       )}
 
