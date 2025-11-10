@@ -1,18 +1,8 @@
-import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
-
-const statusInit = {
-  資格: "未入力",
-  Can: "未入力",          // 60〜90字（将来的に複数でも表示は1本でOK）
-  Will: "未入力",         // 60〜90字
-  Must: "未入力",         // 既存IDロジックを流用
-  私はこんな人: "未入力", // 180〜280字
-  "AIの分析": "未入力",   // Doing & Being を統合した分析
-};
+import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 
 export default function Home() {
   // ← 最初は空配列でOK（ここは触らない）
   const [messages, setMessages] = useState([]);
-  const [status, setStatus] = useState(statusInit);
   const [statusMeta, setStatusMeta] = useState({});
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
@@ -25,8 +15,6 @@ export default function Home() {
   const [choices, setChoices] = useState([]);
   const [showSummary, setShowSummary] = useState(false);
   const [summaryData, setSummaryData] = useState(null);
-  const [tagsMap, setTagsMap] = useState(new Map());
-  const [qualificationsMap, setQualificationsMap] = useState(new Map());
 
   // STEP到達時に1度だけポーズを切り替えるためのフラグ
   const cheeredIdRef = useRef(false);   // STEP2
@@ -34,56 +22,6 @@ export default function Home() {
   const cheeredSelfRef = useRef(false); // STEP5
   const cheeredDoneRef = useRef(false); // STEP6
   const step6AutoStartedRef = useRef(false); // STEP6自動開始フラグ
-
-function toBadges(resp, _currStep) {
-  const st = resp?.status ?? {};
-
-  const joinIds = (arr) =>
-    Array.isArray(arr) && arr.length ? arr.map((id) => `ID:${id}`).join(",") : "";
-
-  const joinTxt = (arr) =>
-    Array.isArray(arr) && arr.length ? arr.join("／") : "";
-
-  return {
-    // 資格：qual_ids（ID）、なければrole_ids（ID）のみを表示
-    資格: joinIds(st?.qual_ids) || joinIds(st?.role_ids) || "未入力",
-    // Can / Will：配列でも単文でも受ける
-    Can: Array.isArray(st?.can_texts)
-      ? st.can_texts.join("／")
-      : st?.can_text
-        ? String(st.can_text)
-        : "未入力",
-
-    Will: Array.isArray(st?.will_texts)
-      ? st.will_texts.join("／")
-      : st?.will_text
-        ? String(st.will_text)
-        : "未入力",
-    // Must: status_barがあればそれを使用、なければIDまたはテキスト
-    Must:
-      st?.status_bar
-        ? st.status_bar
-        : joinIds(st?.must_have_ids) ||
-          joinIds(st?.ng_ids) ||
-          joinTxt(st?.memo?.must_have_raw) ||
-          "未入力",
-    // 私はこんな人：self_textを使用
-    私はこんな人: st?.self_text ? String(st.self_text) : "未入力",
-    "AIの分析":
-      st?.ai_analysis
-        ? String(st.ai_analysis)
-        : (() => {
-            const sections = [];
-            if (st?.doing_text) {
-              sections.push(`＜Doing（行動・実践）＞\n${st.doing_text}`);
-            }
-            if (st?.being_text) {
-              sections.push(`＜Being（価値観・関わり方）＞\n${st.being_text}`);
-            }
-            return sections.length ? sections.join("\n\n") : "未入力";
-          })(),
-  };
-}
 
 function getStatusRowDisplay(key, statusMeta = {}) {
   const formatIds = (ids) =>
@@ -123,7 +61,14 @@ function getStatusRowDisplay(key, statusMeta = {}) {
         ...(statusMeta.pending_ids || []),
       ];
       const value = formatIds(ids);
-      return value || "未入力";
+      if (value) return value;
+      const text = (statusMeta.must_text && String(statusMeta.must_text).trim()) || "";
+      if (text) return text;
+      const memoRaw = statusMeta.memo?.must_have_raw;
+      if (Array.isArray(memoRaw) && memoRaw.length > 0) {
+        return memoRaw.filter(Boolean).join("／");
+      }
+      return "未入力";
     }
     case "私はこんな人": {
       return statusMeta.self_text ? "済" : "未入力";
@@ -139,11 +84,6 @@ function getStatusRowDisplay(key, statusMeta = {}) {
       return "未入力";
   }
 }
-
-  function displayBadgeValue(_key, val) {
-    const s = String(val ?? "").trim();
-    return s && s !== "未入力" ? s : "";
-  }
 
   function isChoiceStep(n) {
    return n === 1 || n === 4;
@@ -171,23 +111,26 @@ function getStatusRowDisplay(key, statusMeta = {}) {
   }
 
   // 表記ゆれ正規化（() を全角に、空白を圧縮）
-  function normalizeChoiceKey(s) {
+  const normalizeChoiceKey = useCallback((s) => {
     return String(s || "")
       .replace(/\(/g, "（")
       .replace(/\)/g, "）")
       .replace(/\s+/g, " ")
       .trim();
-  }
+  }, []);
 
   // 正規化キーで一意化
-  function uniqueByNormalized(arr) {
-    const map = new Map();
-    for (const item of arr || []) {
-      const k = normalizeChoiceKey(item);
-      if (!map.has(k)) map.set(k, item); // 先勝ち
-    }
-    return Array.from(map.values());
-  }
+  const uniqueByNormalized = useCallback(
+    (arr) => {
+      const map = new Map();
+      for (const item of arr || []) {
+        const k = normalizeChoiceKey(item);
+        if (!map.has(k)) map.set(k, item); // 先勝ち
+      }
+      return Array.from(map.values());
+    },
+    [normalizeChoiceKey]
+  );
 
   // Step4 の特定質問タイミングでは固定ボタンを出す
   function getInlineChoices(step, responseText, _meta) {
@@ -228,79 +171,14 @@ function getStatusRowDisplay(key, statusMeta = {}) {
     }
   }, [step]);
 
-  // tags.jsonとqualifications.jsonを読み込んでIDからラベルに変換するマップを作成
-  useEffect(() => {
-    // tags.json（職場タグ用）
-    fetch('/tags.json')
-      .then(res => res.json())
-      .then(data => {
-        const map = new Map();
-        if (data.tags && Array.isArray(data.tags)) {
-          data.tags.forEach(tag => {
-            if (tag.id && tag.name) {
-              map.set(tag.id, tag.name);
-            }
-          });
-        }
-        setTagsMap(map);
-      })
-      .catch(err => console.error('Failed to load tags.json:', err));
-
-    // qualifications.json（資格用）
-    fetch('/qualifications.json')
-      .then(res => res.json())
-      .then(data => {
-        const map = new Map();
-        if (data.qualifications && Array.isArray(data.qualifications)) {
-          data.qualifications.forEach(qual => {
-            if (qual.id && qual.name) {
-              map.set(qual.id, qual.name);
-            }
-          });
-        }
-        setQualificationsMap(map);
-      })
-      .catch(err => console.error('Failed to load qualifications.json:', err));
-  }, []);
-
-  // ID文字列をラベルに変換する関数（資格用とタグ用で使い分け）
-  function convertIdsToLabels(idString, isQualification = false) {
-    if (!idString || typeof idString !== "string" || !idString.includes("ID")) {
-      return idString;
-    }
-    const map = isQualification ? qualificationsMap : tagsMap;
-
-    const parts = idString
-      .split(",")
-      .map((part) => part.trim())
-      .filter(Boolean);
-
-    const labelsWithIds = parts
-      .map((part) => {
-        const match = part.match(/^ID[:]?(\d+)(?:\/(\w+))?$/i);
-        if (!match) return null;
-        const id = Number(match[1]);
-        if (Number.isNaN(id)) return null;
-        const direction = match[2]?.toLowerCase();
-        const label = map.get(id);
-        if (!label) return `ID${id}`;
-        if (direction === "ng") return `ID${id}：${label}（なし）`;
-        if (direction === "pending") return `ID${id}：${label}（保留）`;
-        return `ID${id}：${label}`;
-      })
-      .filter(Boolean);
-
-    return labelsWithIds.length > 0 ? labelsWithIds.join("、") : idString;
-  }
-
-  function clearMessageTimers() {
+  const clearMessageTimers = useCallback(() => {
     if (Array.isArray(messageTimersRef.current)) {
       messageTimersRef.current.forEach((timerId) => clearTimeout(timerId));
     }
     messageTimersRef.current = [];
-  }
+  }, []);
 
-  function showAiSequence(parts) {
+  const showAiSequence = useCallback((parts) => {
     clearMessageTimers();
     if (!Array.isArray(parts) || parts.length === 0) {
       setAiText("");
@@ -318,7 +196,7 @@ function getStatusRowDisplay(key, statusMeta = {}) {
       }, 3000 * i);
       messageTimersRef.current.push(timerId);
     }
-  }
+  }, [clearMessageTimers]);
 
   // ★最初の挨拶をサーバーから1回だけ取得
   useEffect(() => {
@@ -343,19 +221,18 @@ const data = raw ? JSON.parse(raw) : null;
         }
 
         const next = data?.meta?.step ?? 0;
-        setStatus(toBadges(data, next));
         setStatusMeta(data?.status || {});
 
         setStep(next);
 
         const inline = extractChoices(data.response);
-setChoices(isChoiceStep(next) ? uniqueByNormalized(inline) : []);
+        setChoices(isChoiceStep(next) ? uniqueByNormalized(inline) : []);
       } catch (e) {
         setMessages([{ type: "ai", content: "初期メッセージの取得に失敗したよ🙏" }]);
       }
     })();
     return () => { aborted = true; };
-  }, [sessionId]);
+  }, [sessionId, showAiSequence, uniqueByNormalized]);
 
   // step変化でトリガー：ID取得後(2以上に到達)／完了(10)で一度だけバンザイ
   useEffect(() => {
@@ -576,8 +453,7 @@ setChoices(isChoiceStep(next) ? uniqueByNormalized(inline) : []);
       // 次ステップ
       const nextStep = data.meta && data.meta.step != null ? data.meta.step : step;
 
-      // ステータス・ステップ更新（バッジを整形して適用）
-      setStatus(toBadges(data));
+      // ステータス・ステップ更新
       setStatusMeta(data.status || {});
       setStep(nextStep);
 
@@ -818,197 +694,7 @@ setChoices(isChoiceStep(next) ? uniqueByNormalized(inline) : []);
               </h2>
             </div>
 
-            {/* ヒアリング内容 */}
-            <div style={{ marginBottom: "12px" }}>
-              <h3 style={{
-                margin: 0,
-                fontSize: "clamp(18px, 2.6vw, 24px)",
-                fontWeight: 700,
-                color: "#ec4899",
-                letterSpacing: "0.02em"
-              }}>
-                ヒアリング内容
-              </h3>
-              <p style={{
-                margin: "4px 0 0",
-                fontSize: "13px",
-                color: "#6b7280"
-              }}>
-                あなたが話してくれた言葉を、ほぼそのまま整理したメモです。
-              </p>
-            </div>
-
-            {/* 上段：資格・Can・Will・Must（4列） */}
-            <div style={{
-              display: "grid",
-              gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))",
-              gap: "12px",
-              marginBottom: "16px"
-            }}>
-              {[
-                { key: "資格", icon: "🎓", value: convertIdsToLabels(displayBadgeValue("資格", status["資格"]), true) },
-                { key: "Can", subtitle: "活かせる強み", icon: "💪", value: displayBadgeValue("Can", status["Can"]) },
-                { key: "Will", subtitle: "やりたいこと", icon: "✨", value: displayBadgeValue("Will", status["Will"]) },
-                { key: "Must", subtitle: "譲れない条件", icon: "🎯", value: convertIdsToLabels(displayBadgeValue("Must", status["Must"]), false) }
-              ].map((item) => (
-                <div key={item.key} style={{
-                  backgroundColor: "white",
-                  borderRadius: "16px",
-                  padding: "16px",
-                  boxShadow: "0 2px 8px rgba(236, 72, 153, 0.08), 0 1px 3px rgba(0, 0, 0, 0.05)",
-                  border: "1.5px solid rgba(236, 72, 153, 0.12)",
-                  transition: "all 0.2s ease",
-                  cursor: "default"
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.transform = "translateY(-2px)";
-                  e.currentTarget.style.boxShadow = "0 4px 16px rgba(236, 72, 153, 0.15), 0 2px 6px rgba(0, 0, 0, 0.08)";
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.transform = "translateY(0)";
-                  e.currentTarget.style.boxShadow = "0 2px 8px rgba(236, 72, 153, 0.08), 0 1px 3px rgba(0, 0, 0, 0.05)";
-                }}
-                >
-                  <div style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: "8px",
-                    marginBottom: "10px"
-                  }}>
-                    <span style={{ fontSize: "20px" }}>{item.icon}</span>
-                    <div style={{ flex: 1 }}>
-                      <h3 style={{
-                        margin: 0,
-                        fontSize: "15px",
-                        fontWeight: 700,
-                        color: "#ec4899",
-                        letterSpacing: "0.01em"
-                      }}>
-                        {item.key}
-                      </h3>
-                      {item.subtitle && (
-                        <p style={{
-                          margin: 0,
-                          fontSize: "11px",
-                          color: "#9ca3af",
-                          fontWeight: 500
-                        }}>
-                          {item.subtitle}
-                        </p>
-                      )}
-                    </div>
-                  </div>
-                  <div style={{
-                    fontSize: "13px",
-                    lineHeight: "1.6",
-                    whiteSpace: "pre-wrap",
-                    color: "#374151",
-                    fontWeight: 400
-                  }}>
-                    {item.value || "未入力"}
-                  </div>
-                </div>
-              ))}
-            </div>
-
-            {/* 分析 */}
-            <div style={{ margin: "28px 0 12px" }}>
-              <h3 style={{
-                margin: 0,
-                fontSize: "clamp(18px, 2.6vw, 24px)",
-                fontWeight: 700,
-                color: "#8b5cf6",
-                letterSpacing: "0.02em"
-              }}>
-                分析
-              </h3>
-              <p style={{
-                margin: "4px 0 0",
-                fontSize: "13px",
-                color: "#6b7280"
-              }}>
-                あなた自身の振り返りと、AIが客観的に整理した分析です。
-              </p>
-            </div>
-            {/* 下段：私はこんな人（自己分析）・AIの分析（Doing & Being）（2列） */}
-            <div style={{
-              display: "grid",
-              gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))",
-              gap: "16px"
-            }}>
-              {[
-                { key: "私はこんな人（自己分析）", icon: "🌱", value: displayBadgeValue("私はこんな人", status["私はこんな人"]), highlight: true },
-                { key: "AIの分析（Doing & Being）", icon: "🧠", value: displayBadgeValue("AIの分析", status["AIの分析"]), subtitle: "AI視点の総合分析" }
-              ].map((item) => (
-                <div key={item.key} style={{
-                  backgroundColor: item.highlight ? "linear-gradient(135deg, #fdf2f8, #f5f3ff)" : "white",
-                  background: item.highlight ? "linear-gradient(135deg, #fdf2f8, #f5f3ff)" : "white",
-                  borderRadius: "20px",
-                  padding: "24px",
-                  boxShadow: item.highlight 
-                    ? "0 4px 16px rgba(236, 72, 153, 0.15), 0 2px 8px rgba(0, 0, 0, 0.08)"
-                    : "0 2px 8px rgba(236, 72, 153, 0.08), 0 1px 3px rgba(0, 0, 0, 0.05)",
-                  border: item.highlight 
-                    ? "2px solid rgba(236, 72, 153, 0.25)"
-                    : "1.5px solid rgba(236, 72, 153, 0.12)",
-                  transition: "all 0.2s ease",
-                  cursor: "default"
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.transform = "translateY(-4px)";
-                  e.currentTarget.style.boxShadow = item.highlight
-                    ? "0 8px 24px rgba(236, 72, 153, 0.2), 0 4px 12px rgba(0, 0, 0, 0.1)"
-                    : "0 4px 16px rgba(236, 72, 153, 0.15), 0 2px 6px rgba(0, 0, 0, 0.08)";
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.transform = "translateY(0)";
-                  e.currentTarget.style.boxShadow = item.highlight
-                    ? "0 4px 16px rgba(236, 72, 153, 0.15), 0 2px 8px rgba(0, 0, 0, 0.08)"
-                    : "0 2px 8px rgba(236, 72, 153, 0.08), 0 1px 3px rgba(0, 0, 0, 0.05)";
-                }}
-                >
-                  <div style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: "10px",
-                    marginBottom: "14px"
-                  }}>
-                    <span style={{ fontSize: "24px" }}>{item.icon}</span>
-                    <div style={{ flex: 1 }}>
-                      <h3 style={{
-                        margin: 0,
-                        fontSize: "17px",
-                        fontWeight: 800,
-                        color: "#ec4899",
-                        letterSpacing: "0.01em"
-                      }}>
-                        {item.key}
-                      </h3>
-                      {item.subtitle && (
-                        <p style={{
-                          margin: 0,
-                          fontSize: "12px",
-                          color: "#9ca3af",
-                          fontWeight: 500,
-                          marginTop: "2px"
-                        }}>
-                          {item.subtitle}
-                        </p>
-                      )}
-                    </div>
-                  </div>
-                  <div style={{
-                    fontSize: "14px",
-                    lineHeight: "1.8",
-                    whiteSpace: "pre-wrap",
-                    color: "#1f2937",
-                    fontWeight: 400
-                  }}>
-                    {item.value || "未入力"}
-                  </div>
-                </div>
-              ))}
-            </div>
+            <div className="summary-html" dangerouslySetInnerHTML={{ __html: summaryData }} />
 
             {/* フッター */}
             <div style={{
