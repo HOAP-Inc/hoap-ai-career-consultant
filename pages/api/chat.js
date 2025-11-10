@@ -76,6 +76,7 @@ let QUALIFICATIONS = ensureArray(loadJson("qualifications.json"));
 let LICENSE_SOURCES = loadJson("licenses.json") || {};
 let TAGS_DATA = loadJson("tags.json") || {};
 const TAG_NAME_BY_ID = new Map();
+const TAG_BY_NORMALIZED_NAME = new Map();
 
 try {
   // eslint-disable-next-line global-require
@@ -104,6 +105,7 @@ if (Array.isArray(TAGS_DATA?.tags)) {
     const name = typeof tag?.name === "string" ? tag.name.trim() : "";
     if (Number.isInteger(id) && name) {
       TAG_NAME_BY_ID.set(id, name);
+      TAG_BY_NORMALIZED_NAME.set(normKey(name), tag);
     }
   }
 }
@@ -1197,6 +1199,24 @@ function formatMustSummary(session) {
   return summary || String(mustText || "");
 }
 
+function buildStep4BridgeMessage(empathyMessage, confirmMessage) {
+  const parts = [];
+  const trimmedEmpathy = empathyMessage && empathyMessage.trim();
+  const trimmedConfirm = confirmMessage && confirmMessage.trim();
+  if (trimmedEmpathy) parts.push(trimmedEmpathy);
+  if (trimmedConfirm) parts.push(trimmedConfirm);
+
+  const combined = [trimmedEmpathy, trimmedConfirm].filter(Boolean).join("");
+  const bridgeSegments = [];
+  if (!/ありがとう/.test(combined || "")) {
+    bridgeSegments.push("ありがとう！");
+  }
+  bridgeSegments.push("では最後の質問だよ！");
+  parts.push(bridgeSegments.join(" "));
+  parts.push(STEP_INTRO_QUESTIONS[5]);
+  return parts.filter(Boolean).join("\n\n");
+}
+
 function normalizeSelfText(text) {
   if (!text) return "";
   return String(text)
@@ -1293,6 +1313,25 @@ async function handleStep4(session, userText) {
     session.meta.step4_deepening_count = 0;
   }
 
+  // 選択肢待ちの場合（タグ候補からの選択）を先に処理
+  if (session.drill.awaitingChoice && session.drill.phase === "step4_tag_choice") {
+    const options = Array.isArray(session.drill.options) ? session.drill.options : [];
+    const normalized = normKey(userText || "");
+    const selectedLabel = options.find(opt => normKey(opt) === normalized || normalizePick(opt) === normalizePick(userText || ""));
+    if (!selectedLabel) {
+      return {
+        response: `候補から選んでね。『${formatOptions(options)}』`,
+        status: session.status,
+        meta: { step: 4, phase: "choice" },
+        drill: session.drill,
+      };
+    }
+    session.drill.awaitingChoice = false;
+    session.drill.phase = null;
+    session.drill.options = [];
+    userText = selectedLabel;
+  }
+
   // 【重要】STEP遷移時（userTextが空）は、LLMを呼ばずにintro質問を返す
   if (!userText || !userText.trim()) {
     // intro質問を既に表示済みの場合は空応答を返す（重複防止）
@@ -1321,7 +1360,18 @@ async function handleStep4(session, userText) {
   session.stage.turnIndex += 1;
 
   // 【超高速化】直接マッチングでID確定を試みる
-  const directMatches = findDirectIdMatches(userText, TAGS_DATA);
+  let preselectedTag = null;
+  const normalizedLabel = normKey(userText);
+  if (TAG_BY_NORMALIZED_NAME.has(normalizedLabel)) {
+    preselectedTag = TAG_BY_NORMALIZED_NAME.get(normalizedLabel);
+  }
+
+  let directMatches = [];
+  if (preselectedTag) {
+    directMatches = [preselectedTag];
+  } else {
+    directMatches = findDirectIdMatches(userText, TAGS_DATA);
+  }
   let autoConfirmedIds = [];
 
   if (directMatches.length === 1) {
@@ -1385,9 +1435,21 @@ async function handleStep4(session, userText) {
     }
     session.status.status_bar = existingBar.join(",");
   } else if (directMatches.length > 1) {
-    console.log(
-      `[STEP4 FAST] Multiple direct matches detected (${directMatches.length}). Deferring to LLM.`
-    );
+    const uniqueLabels = Array.from(new Set(directMatches.map(tag => tag.name))).slice(0, 6);
+    if (uniqueLabels.length > 1) {
+      session.drill.phase = "step4_tag_choice";
+      session.drill.awaitingChoice = true;
+      session.drill.options = uniqueLabels;
+      console.log(
+        `[STEP4 FAST] Presenting direct match options: ${uniqueLabels.join(", ")}`
+      );
+      return {
+        response: `どれが一番近い？『${formatOptions(uniqueLabels)}』`,
+        status: session.status,
+        meta: { step: 4, phase: "choice" },
+        drill: session.drill,
+      };
+    }
   }
 
   // 【高速化】ユーザー発話からタグを絞り込む（全2306行→数十行に削減）
@@ -1499,15 +1561,13 @@ async function handleStep4(session, userText) {
 
     const step5Response = await handleStep5(session, "");
     const step5Message = step5Response.response || "";
-    const bridgeParts = [];
-    if (!/^ありがとう/.test(step5Message)) {
-      bridgeParts.push("ありがとう！");
+    const bridgeSegments = [];
+    if (!/^ありがとう/.test(step5Message || "")) {
+      bridgeSegments.push("ありがとう！");
     }
-    bridgeParts.push("では最後の質問だよ！");
-    if (step5Message) {
-      bridgeParts.push(step5Message);
-    }
-    const bridgeMessage = bridgeParts.filter(Boolean).join("\n\n");
+    bridgeSegments.push("では最後の質問だよ！");
+    const bridgeLine = bridgeSegments.join(" ");
+    const bridgeMessage = [bridgeLine, step5Message].filter(Boolean).join("\n\n");
     // must_textは表示せず、STEP5の質問のみを返す（LLMの不要な発話を防ぐ）
     return {
       response: bridgeMessage,
@@ -1617,14 +1677,8 @@ async function handleStep4(session, userText) {
         }
 
         const empathyMessage = sanitizeStep4Empathy(userText, parsed.response || "");
-        // 共感 → 確認 → STEP5の質問を結合
-        const combinedResponse = [
-          empathyMessage,
-          confirmMessage,
-          STEP_INTRO_QUESTIONS[5],
-        ]
-          .filter(Boolean)
-          .join("\n\n");
+        // 共感 → 確認 → STEP5の質問を結合（重複「ありがとう」を防止）
+        const combinedResponse = buildStep4BridgeMessage(empathyMessage, confirmMessage);
         return {
           response: combinedResponse,
           status: session.status,
