@@ -91,19 +91,36 @@ body{
   font-size:12px; color:#6b7280;
 }
 .status-row{
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  margin: 8px 0 14px;
-  padding: 8px 0;
-  background: linear-gradient(180deg, var(--bg-via) 0%, transparent 100%);
-  border-radius: 12px;
+  display:flex;
+  flex-wrap:nowrap;
+  align-items:center;
+  gap:6px;
+  margin:8px 0 10px;
+  padding:6px 8px;
+  background:linear-gradient(180deg, var(--bg-via) 0%, transparent 100%);
+  border-radius:12px;
+  overflow-x:auto;
+  overflow-y:hidden;
+  -webkit-overflow-scrolling:touch;
+}
+
+.status-row::-webkit-scrollbar{
+  height:4px;
+}
+
+.status-row::-webkit-scrollbar-thumb{
+  background:rgba(148,163,184,0.4);
+  border-radius:999px;
 }
 
 .badge{
-  font-size:12px; padding:6px 10px; border-radius:999px;
-  background:#ffffffaa; border:1px solid var(--badge-ring);
-  backdrop-filter: saturate(180%) blur(4px);
+  font-size:11px;
+  padding:4px 8px;
+  border-radius:999px;
+  background:#ffffffaa;
+  border:1px solid var(--badge-ring);
+  backdrop-filter:saturate(180%) blur(4px);
+  white-space:nowrap;
 }
 
 .summary-html{
