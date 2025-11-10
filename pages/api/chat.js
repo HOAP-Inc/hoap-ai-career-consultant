@@ -24,6 +24,14 @@ const STEP_PROMPTS = {
 const COMMON_PROMPT = safeRead(path.join(PROMPTS_DIR, "common_instructions.txt"));
 const LLM_BRAKE_PROMPT = safeRead(path.join(PROMPTS_DIR, "llm_brake_system.txt"));
 
+// 各STEPの初回質問（プロンプトファイルから抽出）
+const STEP_INTRO_QUESTIONS = {
+  2: "教えてくれてありがとう！\n\n次は、仕事中に自然にやってることを教えて！患者さん（利用者さん）と接するとき、無意識にやってることでもOKだよ✨",
+  3: "ありがとう！\n\n次は、今の職場ではできないけど、やってみたいことを教えて！『これができたらいいな』って思うことでOKだよ✨",
+  4: "働く上で『ここだけは譲れないな』って思うこと、ある？職場の雰囲気でも働き方でもOKだよ✨",
+  5: "ありがとう！\n\n最後に、仕事以外の話を聞かせて！友達や家族に『あなたってこういう人だよね』って言われることって、ある？😊",
+};
+
 function loadJson(fileName) {
   const tried = [];
 
@@ -351,7 +359,7 @@ async function handleStep1(session, userText) {
     resetDrill(session);
     // 資格なしの場合は「ありがとう！」だけを表示してSTEP2へ強制移行
     return {
-      response: "ありがとう！\n\n次は、あなたが今までやってきたことでこれからも活かしていきたいこと、あなたの強みを教えて！",
+      response: STEP_INTRO_QUESTIONS[2],
       status: session.status,
       meta: { step: 2 },
       drill: session.drill,
@@ -425,7 +433,7 @@ async function handleStep1(session, userText) {
       session.stage.turnIndex = 0;
       resetDrill(session);
       return {
-        response: "ありがとう！\n\n次は、あなたが今までやってきたことでこれからも活かしていきたいこと、あなたの強みを教えて！",
+        response: STEP_INTRO_QUESTIONS[2],
         status: session.status,
         meta: { step: 2 },
         drill: session.drill,
@@ -593,14 +601,13 @@ async function handleStep2(session, userText) {
     // deepening_countをリセット
     if (session.meta) session.meta.step2_deepening_count = 0;
 
-    // STEP3の初回質問を取得して結合
-    const step3Response = await handleStep3(session, "");
-    const combinedResponse = ["ありがとう！", step3Response.response].filter(Boolean).join("\n\n");
+    // STEP3の初回質問を使用
+    resetDrill(session);
     return {
-      response: combinedResponse || step3Response.response,
+      response: STEP_INTRO_QUESTIONS[3],
       status: session.status,
       meta: { step: session.step },
-      drill: step3Response.drill,
+      drill: session.drill,
     };
   }
   
@@ -885,13 +892,14 @@ async function handleStep3(session, userText) {
       // deepening_countをリセット
       session.meta.step3_deepening_count = 0;
 
-      const step4Response = await handleStep4(session, "");
-      const combinedResponse = [empathy, "ありがとう！次の質問に移るね", step4Response.response].filter(Boolean).join("\n\n");
+      // STEP4の初回質問を使用
+      resetDrill(session);
+      const combinedResponse = [empathy, STEP_INTRO_QUESTIONS[4]].filter(Boolean).join("\n\n");
       return {
-        response: combinedResponse || step4Response.response,
+        response: combinedResponse,
         status: session.status,
         meta: { step: session.step },
-        drill: step4Response.drill,
+        drill: session.drill,
       };
     }
 
@@ -1465,13 +1473,13 @@ async function handleStep4(session, userText) {
 
     switch (nextStep) {
       case 5: {
-        // STEP5（Self）の初回質問を取得
-        const step5Response = await handleStep5(session, "");
-        
+        // STEP5（Self）の初回質問を使用
+        resetDrill(session);
+
         // ID化が成功した場合、確認メッセージを追加
         const hasMustIds = Array.isArray(session.status.must_have_ids) && session.status.must_have_ids.length > 0;
         const hasNgIds = Array.isArray(session.status.ng_ids) && session.status.ng_ids.length > 0;
-        
+
         let confirmMessage = "";
         if (hasMustIds || hasNgIds) {
           // ID化成功：確認メッセージ
@@ -1492,23 +1500,21 @@ async function handleStep4(session, userText) {
             confirmMessage = `「${idNames.join("、")}」について確認できたよ！`;
           }
         }
-        
+
         const empathyMessage = sanitizeStep4Empathy(userText, parsed.response || "");
-        // 共感 → 確認 → ブリッジ → STEP5の質問を結合
+        // 共感 → 確認 → STEP5の質問を結合
         const combinedResponse = [
           empathyMessage,
           confirmMessage,
-          "ありがとう！",
-          "では最後の質問だよ！",
-          step5Response.response,
+          STEP_INTRO_QUESTIONS[5],
         ]
           .filter(Boolean)
           .join("\n\n");
         return {
-          response: combinedResponse || step5Response.response,
+          response: combinedResponse,
           status: session.status,
           meta: { step: session.step, deepening_count: 0 },
-          drill: step5Response.drill,
+          drill: session.drill,
         };
       }
       case 6: {
