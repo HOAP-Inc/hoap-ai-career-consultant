@@ -1189,6 +1189,44 @@ function formatMustSummary(session) {
   return summary || String(mustText || "");
 }
 
+function normalizeSelfText(text) {
+  if (!text) return "";
+  return String(text)
+    .replace(/\s*\n\s*/g, " ")
+    .replace(/\s{2,}/g, " ")
+    .replace(/。{2,}/g, "。")
+    .trim();
+}
+
+function formatSelfTextFallback(texts) {
+  const sentences = (texts || [])
+    .map((t) => String(t || "").trim())
+    .filter(Boolean)
+    .map((t) => t.replace(/[。！!？?\s]+$/u, ""));
+
+  if (!sentences.length) {
+    return "あなたらしさについて伺いました。";
+  }
+
+  const unique = Array.from(new Set(sentences));
+  return unique
+    .map((s) => (/[。！!？?]$/.test(s) ? s : `${s}。`))
+    .join("")
+    .trim();
+}
+
+function smoothAnalysisText(text) {
+  if (!text) return "";
+  return String(text)
+    .replace(/この人は/g, "")
+    .replace(/のだ。/g, "。")
+    .replace(/なのだ。/g, "。")
+    .replace(/\s*\n\s*/g, "\n")
+    .replace(/\n{2,}/g, "\n\n")
+    .replace(/\s{2,}/g, " ")
+    .trim();
+}
+
 async function handleStep4(session, userText) {
   // サーバー側カウンター初期化（LLM呼び出し前に確実に初期化）
   if (!session.meta) session.meta = {};
@@ -1710,7 +1748,9 @@ async function handleStep5(session, userText) {
     if (!session.meta) session.meta = {};
     session.meta.step5_deepening_count = 0;
     return {
-      response: parsed.response || "あなた自身を一言で言うと、どんな人？周りからよく言われる「あなたらしさ」もあれば教えて😊",
+      response:
+        parsed.response ||
+        "最後に、仕事抜きであなた自身のことを教えて！友達や家族に『あなたってこういう人だよね』って言われることってある？😊",
       status: session.status,
       meta: { step: 5 },
       drill: session.drill,
@@ -1720,7 +1760,7 @@ async function handleStep5(session, userText) {
   // generation フェーズ（Self確定、STEP6へ移行）
   if (parsed?.status?.self_text && typeof parsed.status.self_text === "string") {
     console.log("[STEP5 GENERATION] self_text generated:", parsed.status.self_text);
-    session.status.self_text = parsed.status.self_text;
+    session.status.self_text = normalizeSelfText(parsed.status.self_text);
     // STEP5では meta.step は 6 のみが有効
     let nextStep = Number(parsed?.meta?.step) || 6;
     if (nextStep !== 6) {
@@ -1800,8 +1840,8 @@ async function handleStep5(session, userText) {
           session.status.self_text = genLLM.parsed.status.self_text;
           console.log("[STEP5 FAILSAFE] Using LLM generated self_text:", session.status.self_text);
         } else if (step5Texts.length > 0) {
-          // LLM失敗時：ユーザー発話をそのまま保存（複数行可）
-          session.status.self_text = step5Texts.join("\n\n");
+          // LLM失敗時：ユーザー発話を整形して保存
+          session.status.self_text = formatSelfTextFallback(step5Texts);
           console.log("[STEP5 FAILSAFE] Using fallback self_text:", session.status.self_text);
         } else {
           session.status.self_text = "あなたらしさについて伺いました。";
@@ -1883,15 +1923,15 @@ async function handleStep6(session, _userText) {
 
   if (llmResult.ok && llmResult.parsed?.status?.doing_text && llmResult.parsed?.status?.being_text) {
     // LLM生成成功
-    session.status.doing_text = llmResult.parsed.status.doing_text;
-    session.status.being_text = llmResult.parsed.status.being_text;
+    session.status.doing_text = smoothAnalysisText(llmResult.parsed.status.doing_text);
+    session.status.being_text = smoothAnalysisText(llmResult.parsed.status.being_text);
     console.log("[STEP6] LLM generated Doing:", session.status.doing_text);
     console.log("[STEP6] LLM generated Being:", session.status.being_text);
   } else {
     // LLM失敗時のフォールバック
     console.warn("[STEP6 WARNING] LLM generation failed. Using fallback.");
-    session.status.doing_text = session.status.can_text || "行動・実践について伺いました。";
-    session.status.being_text = session.status.self_text || "価値観・関わり方について伺いました。";
+    session.status.doing_text = smoothAnalysisText(session.status.can_text || "行動・実践について伺いました。");
+    session.status.being_text = smoothAnalysisText(session.status.self_text || "価値観・関わり方について伺いました。");
   }
 
   const analysisParts = [];
@@ -1915,7 +1955,6 @@ async function handleStep6(session, _userText) {
   }
 
   // STEP3（Will）: Will（やりたいこと）
-  // LLM生成のwill_textを優先的に使用
   if (Array.isArray(session.status.will_texts) && session.status.will_texts.length > 0) {
     analysisParts.push("【Will（やりたいこと）】\n" + session.status.will_texts.join("\n"));
   } else if (session.status.will_text) {
@@ -1923,7 +1962,6 @@ async function handleStep6(session, _userText) {
   }
 
   // STEP4（Must）: Must（譲れない条件）
-  // ID化された条件を優先的に使用
   const mustSummary = formatMustSummary(session);
   if (mustSummary) {
     analysisParts.push("【Must（譲れない条件）】\n" + mustSummary);
@@ -1936,19 +1974,27 @@ async function handleStep6(session, _userText) {
     analysisParts.push("【私はこんな人（自己分析）】\n" + session.status.self_text);
   }
 
-  // STEP6（Doing/Being）: LLM生成済み
+  // STEP6（AIの分析）
+  const aiAnalysisSections = [];
   if (session.status.doing_text) {
-    analysisParts.push("【Doing（あなたの行動・実践）】\n" + session.status.doing_text);
+    aiAnalysisSections.push("＜Doing（行動・実践）＞\n" + session.status.doing_text);
   }
   if (session.status.being_text) {
-    analysisParts.push("【Being（あなたの価値観・関わり方）】\n" + session.status.being_text);
+    aiAnalysisSections.push("＜Being（価値観・関わり方）＞\n" + session.status.being_text);
+  }
+  const aiAnalysis = aiAnalysisSections.join("\n\n").trim();
+  if (aiAnalysis) {
+    session.status.ai_analysis = aiAnalysis;
+    analysisParts.push("【AIの分析】\n" + aiAnalysis);
+  } else {
+    session.status.ai_analysis = "";
   }
 
   const summaryData = analysisParts.filter(Boolean).join("\n\n");
 
   // 最終メッセージと一覧データを分離
   // フロントエンド側で5秒後に一覧を表示する（吹き出しを読む時間を確保）
-  const finalMessage = "ここまでたくさんの話を聞かせてくれて、ありがとう！あなただけのオリジナルの「あなたらしさ」を表現してみたよ！このあと出力するから中身を確認してね。";
+  const finalMessage = "ここまでたくさん話してくれてありがとう！このあと、あなた自身の言葉とAIの分析をまとめたシートを届けるね。ゆっくり確認してみて！";
 
   return {
     response: finalMessage,

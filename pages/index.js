@@ -4,10 +4,9 @@ const statusInit = {
   資格: "未入力",
   Can: "未入力",          // 60〜90字（将来的に複数でも表示は1本でOK）
   Will: "未入力",         // 60〜90字
-  Must: "未入力",    // 既存IDロジックを流用
+  Must: "未入力",         // 既存IDロジックを流用
   私はこんな人: "未入力", // 180〜280字
-  Doing: "未入力",        // 生成（約300字）
-  Being: "未入力",        // 生成（約300字）
+  "AIの分析": "未入力",   // Doing & Being を統合した分析
 };
 
 export default function Home() {
@@ -69,8 +68,19 @@ function toBadges(resp, _currStep) {
           "未入力",
     // 私はこんな人：self_textを使用
     私はこんな人: st?.self_text ? String(st.self_text) : "未入力",
-    Doing: st?.doing_text ? String(st.doing_text) : "未入力",
-    Being: st?.being_text ? String(st.being_text) : "未入力",
+    "AIの分析":
+      st?.ai_analysis
+        ? String(st.ai_analysis)
+        : (() => {
+            const sections = [];
+            if (st?.doing_text) {
+              sections.push(`＜Doing（行動・実践）＞\n${st.doing_text}`);
+            }
+            if (st?.being_text) {
+              sections.push(`＜Being（価値観・関わり方）＞\n${st.being_text}`);
+            }
+            return sections.length ? sections.join("\n\n") : "未入力";
+          })(),
   };
 }
 
@@ -639,8 +649,7 @@ setChoices(isChoiceStep(next) ? uniqueByNormalized(inline) : []);
               "Will",
               "Must",
               "私はこんな人",
-              "Doing",
-              "Being",
+              "AIの分析",
             ].map((k) => {
               const value = displayBadgeValue(k, status[k]);
               let displayValue = value;
@@ -830,16 +839,15 @@ setChoices(isChoiceStep(next) ? uniqueByNormalized(inline) : []);
               ))}
             </div>
 
-            {/* 下段：私はこんな人（自己分析）・Doing・Being（3列） */}
+            {/* 下段：私はこんな人（自己分析）・AIの分析（Doing & Being）（2列） */}
             <div style={{
               display: "grid",
-              gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))",
+              gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))",
               gap: "16px"
             }}>
               {[
                 { key: "私はこんな人（自己分析）", icon: "🌱", value: displayBadgeValue("私はこんな人", status["私はこんな人"]), highlight: true },
-                { key: "Doing", subtitle: "行動・実践", icon: "🚀", value: displayBadgeValue("Doing", status["Doing"]) },
-                { key: "Being", subtitle: "価値観・関わり方", icon: "💫", value: displayBadgeValue("Being", status["Being"]) }
+                { key: "AIの分析（Doing & Being）", icon: "🧠", value: displayBadgeValue("AIの分析", status["AIの分析"]), subtitle: "AI視点の総合分析" }
               ].map((item) => (
                 <div key={item.key} style={{
                   backgroundColor: item.highlight ? "linear-gradient(135deg, #fdf2f8, #f5f3ff)" : "white",
