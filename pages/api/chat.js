@@ -2105,15 +2105,28 @@ async function handleStep6(session, _userText) {
   // GPT-4oを使用してDoing/Beingを生成
   const llmResult = await callLLM(6, payload, session, { model: "gpt-4o" });
 
-  if (llmResult.ok && llmResult.parsed?.status?.doing_text && llmResult.parsed?.status?.being_text) {
+  if (
+    llmResult.ok &&
+    llmResult.parsed?.status?.strength_text &&
+    llmResult.parsed?.status?.doing_text &&
+    llmResult.parsed?.status?.being_text
+  ) {
     // LLM生成成功
+    session.status.strength_text = smoothAnalysisText(llmResult.parsed.status.strength_text);
     session.status.doing_text = smoothAnalysisText(llmResult.parsed.status.doing_text);
     session.status.being_text = smoothAnalysisText(llmResult.parsed.status.being_text);
+    console.log("[STEP6] LLM generated Strength:", session.status.strength_text);
     console.log("[STEP6] LLM generated Doing:", session.status.doing_text);
     console.log("[STEP6] LLM generated Being:", session.status.being_text);
   } else {
     // LLM失敗時のフォールバック
     console.warn("[STEP6 WARNING] LLM generation failed. Using fallback.");
+    const fallbackStrength =
+      session.status.can_text ||
+      (Array.isArray(session.status.can_texts) && session.status.can_texts.length > 0
+        ? session.status.can_texts.join("／")
+        : "強みについて伺いました。");
+    session.status.strength_text = smoothAnalysisText(fallbackStrength);
     session.status.doing_text = smoothAnalysisText(session.status.can_text || "行動・実践について伺いました。");
     session.status.being_text = smoothAnalysisText(session.status.self_text || "価値観・関わり方について伺いました。");
   }
@@ -2154,14 +2167,23 @@ async function handleStep6(session, _userText) {
   const selfSummary = session.status.self_text || "";
 
   const aiAnalysisEntries = [];
+  if (session.status.strength_text) {
+    aiAnalysisEntries.push({
+      key: "strength",
+      title: "あなたの強み",
+      body: session.status.strength_text,
+    });
+  }
   if (session.status.doing_text) {
     aiAnalysisEntries.push({
+      key: "doing",
       title: "Doing（行動・実践）",
       body: session.status.doing_text,
     });
   }
   if (session.status.being_text) {
     aiAnalysisEntries.push({
+      key: "being",
       title: "Being（価値観・関わり方）",
       body: session.status.being_text,
     });
@@ -2169,83 +2191,110 @@ async function handleStep6(session, _userText) {
   const aiAnalysisTextCombined = aiAnalysisEntries.map((entry) => entry.body).join("\n\n").trim();
   session.status.ai_analysis = aiAnalysisTextCombined;
 
+  const heroHtml = `
+    <div class="summary-hero">
+      <div class="summary-hero__header">
+        <p class="summary-hero__label">CAREER SNAPSHOT</p>
+        <h2 class="summary-hero__title">無料キャリア診断レポート</h2>
+        <p class="summary-hero__lead">
+          あなたが話してくれた言葉をもとに、現在の強みと行動のスタイルをまとめました。
+        </p>
+      </div>
+      <div class="summary-hero__steps">
+        ${[
+          { step: "ステップ1", title: "ヒアリング完了", desc: "あなたの言葉でCan / Will / Mustを確認しました。" },
+          { step: "ステップ2", title: "自己整理", desc: "「私はこんな人」を一緒に言語化しました。" },
+          { step: "ステップ3", title: "AI分析", desc: "強み・行動・価値観を俯瞰して整理しました。" },
+        ]
+          .map(
+            (card) => `
+          <div class="summary-step-card">
+            <span class="summary-step-card__badge">${card.step}</span>
+            <h3>${card.title}</h3>
+            <p>${card.desc}</p>
+          </div>
+        `
+          )
+          .join("")}
+      </div>
+    </div>
+  `;
+
   const hearingHtml = `
     <section class="summary-section summary-section--hearing">
-      <div class="section-heading">
-        <h3>ヒアリング内容</h3>
-        <p class="note">あなたが話してくれた言葉を、そのままの温度感でまとめています。</p>
-      </div>
-      <div class="summary-cards summary-cards--compact">
+      <h3 class="summary-section__title">ヒアリングメモ</h3>
+      <p class="summary-section__note">これまで伺った情報をそのままの言葉で整理しています。</p>
+      <div class="summary-pill-grid">
         ${
           hearingCards.length
             ? hearingCards
                 .map(
                   (card) => `
-                    <article class="summary-card summary-card--compact">
-                      <h4>${escapeHtml(card.title)}</h4>
-                      <p>${escapeHtml(card.body).replace(/\n/g, "<br />")}</p>
-                    </article>
-                  `
+            <article class="summary-pill">
+              <span class="summary-pill__label">${escapeHtml(card.title)}</span>
+              <p>${escapeHtml(card.body).replace(/\n/g, "<br />")}</p>
+            </article>
+          `
                 )
                 .join("")
             : `
-              <article class="summary-card summary-card--compact summary-card--empty">
-                <h4>ヒアリング内容</h4>
-                <p>入力された内容がまだありません。</p>
-              </article>
-            `
+        <article class="summary-pill summary-pill--empty">
+          <span class="summary-pill__label">ヒアリング内容</span>
+          <p>入力された内容がまだありません。</p>
+        </article>
+      `
         }
       </div>
     </section>
   `;
 
-  const selfCardHtml = `
-    <article class="summary-card summary-card--self">
-      <h4>私はこんな人（自己分析）</h4>
-      <p>${selfSummary ? escapeHtml(selfSummary).replace(/\n/g, "<br />") : "未入力"}</p>
-    </article>
+  const selfHtml = `
+    <section class="summary-section summary-section--self">
+      <h3 class="summary-section__title">自己分析（あなたの言葉）</h3>
+      <article class="summary-card summary-card--self">
+        <p>${selfSummary ? escapeHtml(selfSummary).replace(/\n/g, "<br />") : "未入力"}</p>
+      </article>
+    </section>
   `;
 
-  const aiCardBody = aiAnalysisEntries.length
+  const aiAnalysisCardsHtml = aiAnalysisEntries.length
     ? aiAnalysisEntries
         .map(
           (entry) => `
-            <div class="ai-chip">
-              <h5>${escapeHtml(entry.title)}</h5>
-              <p>${escapeHtml(entry.body).replace(/\n/g, "<br />")}</p>
-            </div>
-          `
+        <article class="summary-card summary-card--ai summary-card--ai-${entry.key}">
+          <h4>${escapeHtml(entry.title)}</h4>
+          <p>${escapeHtml(entry.body).replace(/\n/g, "<br />")}</p>
+        </article>
+      `
         )
         .join("")
     : `
-      <div class="ai-chip ai-chip--empty">
-        <h5>AIコメント</h5>
+      <article class="summary-card summary-card--ai summary-card--empty">
+        <h4>AIの分析</h4>
         <p>今回のヒアリングではAI分析がまだ生成されていません。</p>
-      </div>
+      </article>
     `;
 
-  const analysisSectionHtml = `
+  const aiHtml = `
     <section class="summary-section summary-section--analysis">
-      <div class="section-heading">
-        <h3>分析</h3>
-        <p class="note">左があなた自身の振り返り、右がAI視点のアウトラインです。</p>
-      </div>
-      <div class="analysis-columns">
-        ${selfCardHtml}
-        <article class="summary-card summary-card--ai">
-          <h4>AIの分析</h4>
-          <div class="ai-chip-wrap">
-            ${aiCardBody}
-          </div>
-        </article>
+      <h3 class="summary-section__title">AI分析レポート</h3>
+      <p class="summary-section__note">AIが俯瞰した客観視点で、強み・行動・価値観をコンパクトに整理しました。</p>
+      <div class="summary-ai-grid">
+        ${aiAnalysisCardsHtml}
       </div>
     </section>
   `;
 
   const summaryData = `
-    <div class="summary-layout">
-      ${hearingHtml}
-      ${analysisSectionHtml}
+    <div class="summary-diagnostic">
+      ${heroHtml}
+      <div class="summary-diagnostic__body">
+        ${hearingHtml}
+        <div class="summary-columns">
+          ${selfHtml}
+          ${aiHtml}
+        </div>
+      </div>
     </div>
   `.trim();
 

@@ -76,6 +76,7 @@ function getStatusRowDisplay(key, statusMeta = {}) {
     case "AIの分析": {
       const hasAnalysis =
         Boolean(statusMeta.ai_analysis) ||
+        Boolean(statusMeta.strength_text) ||
         Boolean(statusMeta.doing_text) ||
         Boolean(statusMeta.being_text);
       return hasAnalysis ? "済" : "未出力";
