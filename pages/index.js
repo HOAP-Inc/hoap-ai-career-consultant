@@ -76,6 +76,7 @@ function getStatusRowDisplay(key, statusMeta = {}) {
     case "AIの分析": {
       const hasAnalysis =
         Boolean(statusMeta.ai_analysis) ||
+        Boolean(statusMeta.strength_text) ||
         Boolean(statusMeta.doing_text) ||
         Boolean(statusMeta.being_text);
       return hasAnalysis ? "済" : "未出力";
@@ -458,10 +459,18 @@ const data = raw ? JSON.parse(raw) : null;
       setStep(nextStep);
 
       // STEP2〜6の時だけ選択肢抽出（STEP4はインライン固定ボタンも考慮）
+      const serverOptions = Array.isArray(data.drill?.options) ? data.drill.options : [];
       const inline = getInlineChoices(nextStep, data.response, data.meta);
+      const extracted = extractChoices(data.response);
+      const choiceCandidates =
+        serverOptions.length > 0
+          ? serverOptions
+          : inline.length > 0
+            ? inline
+            : extracted;
       setChoices(
         isChoiceStep(nextStep)
-          ? uniqueByNormalized(inline.length ? inline : extractChoices(data.response))
+          ? uniqueByNormalized(choiceCandidates)
           : []
       );
     } catch (err) {
