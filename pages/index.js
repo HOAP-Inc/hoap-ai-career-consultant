@@ -233,7 +233,7 @@ const data = raw ? JSON.parse(raw) : null;
       }
     })();
     return () => { aborted = true; };
-  }, [sessionId, showAiSequence, uniqueByNormalized]);
+  }, [sessionId, showAiSequence, uniqueByNormalized, clearMessageTimers]);
 
   // step変化でトリガー：ID取得後(2以上に到達)／完了(10)で一度だけバンザイ
   useEffect(() => {
