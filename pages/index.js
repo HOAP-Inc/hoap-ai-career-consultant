@@ -878,7 +878,6 @@ setChoices(isChoiceStep(next) ? uniqueByNormalized(inline) : []);
                 あなた自身の振り返りと、AIが客観的に整理した分析です。
               </p>
             </div>
-
             {/* 下段：私はこんな人（自己分析）・AIの分析（Doing & Being）（2列） */}
             <div style={{
               display: "grid",
