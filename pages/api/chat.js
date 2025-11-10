@@ -1432,6 +1432,7 @@ async function handleStep4(session, userText) {
     directMatches = findDirectIdMatches(userText, TAGS_DATA);
   }
   let autoConfirmedIds = [];
+  const autoDirectionMap = {};
 
   if (directMatches.length === 1) {
     autoConfirmedIds = directMatches.map(tag => tag.id);
@@ -1484,6 +1485,7 @@ async function handleStep4(session, userText) {
       }
     }
     session.status.direction_map[String(id)] = direction;
+    autoDirectionMap[String(id)] = direction;
     const existingBar = (session.status.status_bar || "")
       .split(",")
       .map((s) => s.trim())
@@ -1597,6 +1599,7 @@ async function handleStep4(session, userText) {
       // LLM生成成功：statusを適用
       applyMustStatus(session, genLLM.parsed.status, genLLM.parsed.meta || {});
       ensureAutoConfirmedIds(session, autoConfirmedIds, autoDirectionMap);
+      ensureAutoConfirmedIds(session, autoConfirmedIds, autoDirectionMap);
     }
     
     // ID化できなかった場合でも、ユーザー発話をそのまま保存（内部用語は使わない）
@@ -1641,6 +1644,7 @@ async function handleStep4(session, userText) {
   if (parsed?.status && typeof parsed.status === "object") {
     // LLM から帰ってきた譲れない条件をセッションへ適用
     applyMustStatus(session, parsed.status, parsed.meta || {});
+    ensureAutoConfirmedIds(session, autoConfirmedIds, autoDirectionMap);
     ensureAutoConfirmedIds(session, autoConfirmedIds, autoDirectionMap);
     
     // ID化が行われていない場合、強制的にID化を試みる
@@ -1807,11 +1811,11 @@ async function handleStep4(session, userText) {
         if (isShortWord && serverCount === 0) {
           // 初回：方向性を確認（あってほしいのか、なしにしてほしいのか）
           if (userInput.includes("残業")) {
-            question = "『残業なし』がいい？それとも『多少の残業はOK』くらい？";
+            question = "残業については『残業なし』と『多少の残業はOK』のどちらが合うか教えてほしいな。";
           } else if (userInput.includes("休み") || userInput.includes("休日")) {
-            question = "休日はどのくらい欲しい？『完全週休2日』？それとも『月6日以上あればOK』？";
+            question = "休日面では『完全週休2日』と『月6日以上あればOK』のどちらが理想かな？";
           } else {
-            question = "それって『絶対あってほしい』こと？それとも『絶対なしにしてほしい』こと？";
+            question = "その条件は『絶対あってほしい』『絶対なしにしてほしい』のどちらかで教えてほしいな。";
           }
         } else {
           // 2回目以降：方向性（have/ng）を確認する質問を優先
@@ -1828,10 +1832,12 @@ async function handleStep4(session, userText) {
           } else {
             // 3回目以降：重要度や具体的な場面を確認
             const questions = [
-              "その条件、具体的にどんな場面で必要だと感じる？",
-              "それが叶わないと、どんなことが困る？"
+              "その条件について、どんな場面で必要だと感じるか共有してくれるとうれしいな。",
+              "もし叶わないとしたら、どんなところが困りそうか教えてほしいな。"
             ];
-            question = questions[Math.min(serverCount - 2, questions.length - 1)] || "その条件について、もう少し詳しく教えてくれる？";
+            question =
+              questions[Math.min(serverCount - 2, questions.length - 1)] ||
+              "その条件について、もう少し詳しく共有してくれるとうれしいな。";
           }
         }
       }
@@ -1861,7 +1867,7 @@ async function handleStep4(session, userText) {
 
       // カウンターに応じて具体的な質問を生成（ユーザーの発話内容に基づく）
       if (serverCount === 0) {
-        responseText = "例えば働き方で言うと、『リモートワークができる』『フレックスタイム』『残業なし』とか、どれが一番大事？";
+        responseText = "例えば働き方で言うと、『リモートワークができる』『フレックスタイム』『残業なし』などの中で、どれが一番大事か教えてほしいな。";
       } else if (serverCount === 1) {
         // 方向性を確認する質問
         if (combinedText.includes("残業")) {
