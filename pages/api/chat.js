@@ -1210,6 +1210,7 @@ function formatSelfTextFallback(texts) {
 function smoothAnalysisText(text) {
   if (!text) return "";
   return String(text)
+    .replace(/この人は/g, "")
     .replace(/のだ。/g, "。")
     .replace(/なのだ。/g, "。")
     .replace(/\s*\n\s*/g, "\n")
