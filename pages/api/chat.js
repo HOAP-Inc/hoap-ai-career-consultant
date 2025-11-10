@@ -1223,6 +1223,15 @@ function formatSelfTextFallback(texts) {
     .trim();
 }
 
+function escapeHtml(value) {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
 function collectUserStepTexts(session, step) {
   if (!session?.history) return [];
   return session.history
@@ -1320,6 +1329,61 @@ async function handleStep4(session, userText) {
     console.log(
       `[STEP4 FAST] Auto-confirmed ID: ${autoConfirmedIds[0]} (${directMatches[0].name})`
     );
+    // 方向性を判定（have/ng/pending を決める）
+    const normalized = userText.replace(/\s+/g, "");
+    let direction = "have";
+    const negPattern = /(絶対|まったく|全然|全く|完全)\s*(なし|避け|NG|いや|いやだ|無理|したくない)/;
+    const posPattern = /(絶対|必ず|どうしても)\s*(ほしい|欲しい|必要|あってほしい)/;
+    const neutralPattern = /(あれば|できれば|できたら|なくても|なくて)/;
+    if (negPattern.test(normalized) || /(なし|困る|避けたい|無理|いや|いやだ|遠慮|拒否)/.test(normalized)) {
+      direction = "ng";
+    } else if (posPattern.test(normalized)) {
+      direction = "have";
+    } else if (neutralPattern.test(normalized)) {
+      direction = "pending";
+    } else if (/(多少|ちょっと|少し|月\d+時間|20時間|二十時間)/.test(normalized)) {
+      direction = "pending";
+    }
+    if (!session.status.must_have_ids) session.status.must_have_ids = [];
+    if (!session.status.ng_ids) session.status.ng_ids = [];
+    if (!session.status.pending_ids) session.status.pending_ids = [];
+    if (!session.status.direction_map) session.status.direction_map = {};
+    const id = autoConfirmedIds[0];
+
+    // 他の配列から同一IDを除外
+    const removeId = (arr) => {
+      if (Array.isArray(arr)) {
+        const idx = arr.indexOf(id);
+        if (idx >= 0) arr.splice(idx, 1);
+      }
+    };
+    removeId(session.status.must_have_ids);
+    removeId(session.status.ng_ids);
+    removeId(session.status.pending_ids);
+
+    if (direction === "have") {
+      if (!session.status.must_have_ids.includes(id)) {
+        session.status.must_have_ids.push(id);
+      }
+    } else if (direction === "ng") {
+      if (!session.status.ng_ids.includes(id)) {
+        session.status.ng_ids.push(id);
+      }
+    } else {
+      if (!session.status.pending_ids.includes(id)) {
+        session.status.pending_ids.push(id);
+      }
+    }
+    session.status.direction_map[String(id)] = direction;
+    const existingBar = (session.status.status_bar || "")
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean);
+    const entry = `ID:${id}/${direction}`;
+    if (!existingBar.includes(entry)) {
+      existingBar.push(entry);
+    }
+    session.status.status_bar = existingBar.join(",");
   } else if (directMatches.length > 1) {
     console.log(
       `[STEP4 FAST] Multiple direct matches detected (${directMatches.length}). Deferring to LLM.`
@@ -1911,8 +1975,23 @@ async function handleStep5(session, userText) {
       session.meta.step5_deepening_count = 0;
 
       const step6Response = await handleStep6(session, "");
-      // 共感 → 中間メッセージ → STEP6の初回質問を結合
-      const combinedResponse = [empathy, "ありがとう！", step6Response.response].filter(Boolean).join("\n\n");
+      // 共感 → STEP6の初回メッセージを結合（重複「ありがとう」を避ける）
+      const step6Parts = [];
+      if (empathy && empathy.trim()) {
+        step6Parts.push(empathy);
+      }
+      const step6Msg = step6Response.response || "";
+      if (step6Msg.trim()) {
+        if (step6Msg.startsWith("ありがとう")) {
+          step6Parts.push(step6Msg);
+        } else {
+          step6Parts.push("ありがとう！");
+          step6Parts.push(step6Msg);
+        }
+      } else {
+        step6Parts.push("ありがとう！");
+      }
+      const combinedResponse = step6Parts.filter(Boolean).join("\n\n");
       return {
         response: combinedResponse || step6Response.response,
         status: session.status,
@@ -1985,67 +2064,133 @@ async function handleStep6(session, _userText) {
     session.status.being_text = smoothAnalysisText(session.status.self_text || "価値観・関わり方について伺いました。");
   }
 
-  const analysisParts = [];
+  const hearingCards = [];
 
-  // STEP1（資格）: IDをタグ名に変換
   if (Array.isArray(session.status.qual_ids) && session.status.qual_ids.length > 0) {
     const qualNames = session.status.qual_ids
       .map((id) => QUAL_NAME_BY_ID.get(Number(id)))
       .filter(Boolean)
       .join("、");
     if (qualNames) {
-      analysisParts.push("【資格】\n" + qualNames);
+      hearingCards.push({ title: "資格", body: qualNames });
     }
   }
 
-  // STEP2（Can）: Can（今できること）
-  if (Array.isArray(session.status.can_texts) && session.status.can_texts.length > 0) {
-    analysisParts.push("【Can（今できること）】\n" + session.status.can_texts.join("\n"));
-  } else if (session.status.can_text) {
-    analysisParts.push("【Can（今できること）】\n" + session.status.can_text);
+  const canSummary = Array.isArray(session.status.can_texts) && session.status.can_texts.length > 0
+    ? session.status.can_texts.join("／")
+    : session.status.can_text || "";
+  if (canSummary) {
+    hearingCards.push({ title: "Can（今できること）", body: canSummary });
   }
 
-  // STEP3（Will）: Will（やりたいこと）
-  if (Array.isArray(session.status.will_texts) && session.status.will_texts.length > 0) {
-    analysisParts.push("【Will（やりたいこと）】\n" + session.status.will_texts.join("\n"));
-  } else if (session.status.will_text) {
-    analysisParts.push("【Will（やりたいこと）】\n" + session.status.will_text);
+  const willSummary = Array.isArray(session.status.will_texts) && session.status.will_texts.length > 0
+    ? session.status.will_texts.join("／")
+    : session.status.will_text || "";
+  if (willSummary) {
+    hearingCards.push({ title: "Will（やりたいこと）", body: willSummary });
   }
 
-  // STEP4（Must）: Must（譲れない条件）
   const mustSummary = formatMustSummary(session);
   if (mustSummary) {
-    analysisParts.push("【Must（譲れない条件）】\n" + mustSummary);
+    hearingCards.push({ title: "Must（譲れない条件）", body: mustSummary });
   } else if (session.status.must_text) {
-    analysisParts.push("【Must（譲れない条件）】\n" + session.status.must_text);
+    hearingCards.push({ title: "Must（譲れない条件）", body: session.status.must_text });
   }
 
-  // STEP5（Self）: 私はこんな人（自己分析）
-  if (session.status.self_text) {
-    analysisParts.push("【私はこんな人（自己分析）】\n" + session.status.self_text);
-  }
+  const selfSummary = session.status.self_text || "";
 
-  // STEP6（AIの分析）
-  const aiAnalysisSections = [];
+  const aiAnalysisEntries = [];
   if (session.status.doing_text) {
-    aiAnalysisSections.push("＜Doing（行動・実践）＞\n" + session.status.doing_text);
+    aiAnalysisEntries.push({
+      title: "Doing（行動・実践）",
+      body: session.status.doing_text,
+    });
   }
   if (session.status.being_text) {
-    aiAnalysisSections.push("＜Being（価値観・関わり方）＞\n" + session.status.being_text);
+    aiAnalysisEntries.push({
+      title: "Being（価値観・関わり方）",
+      body: session.status.being_text,
+    });
   }
-  const aiAnalysis = aiAnalysisSections.join("\n\n").trim();
-  if (aiAnalysis) {
-    session.status.ai_analysis = aiAnalysis;
-    analysisParts.push("【AIの分析】\n" + aiAnalysis);
-  } else {
-    session.status.ai_analysis = "";
-  }
+  const aiAnalysisTextCombined = aiAnalysisEntries.map((entry) => entry.body).join("\n\n").trim();
+  session.status.ai_analysis = aiAnalysisTextCombined;
 
-  const summaryData = analysisParts.filter(Boolean).join("\n\n");
+  const hearingHtml = `
+    <section class="summary-section">
+      <h3>ヒアリング内容</h3>
+      <p class="note">あなたが話してくれた言葉をほぼそのまま整理しました。</p>
+      <div class="summary-cards">
+        ${
+          hearingCards.length
+            ? hearingCards
+                .map(
+                  (card) => `
+                    <article class="summary-card">
+                      <h4>${escapeHtml(card.title)}</h4>
+                      <p>${escapeHtml(card.body).replace(/\n/g, "<br />")}</p>
+                    </article>
+                  `
+                )
+                .join("")
+            : `
+              <article class="summary-card summary-card--empty">
+                <h4>ヒアリング内容</h4>
+                <p>入力された内容がまだありません。</p>
+              </article>
+            `
+        }
+      </div>
+    </section>
+  `;
 
-  // 最終メッセージと一覧データを分離
-  // フロントエンド側で5秒後に一覧を表示する（吹き出しを読む時間を確保）
-  const finalMessage = "ここまでたくさん話してくれてありがとう！このあと、あなた自身の言葉とAIの分析をまとめたシートを届けるね。ゆっくり確認してみて！";
+  const highlightHtml = `
+    <article class="summary-card summary-card--highlight">
+      <h4>私はこんな人（自己分析）</h4>
+      <p>${selfSummary ? escapeHtml(selfSummary).replace(/\n/g, "<br />") : "未入力"}</p>
+    </article>
+  `;
+
+  const aiAnalysisCardsHtml = aiAnalysisEntries.length
+    ? aiAnalysisEntries
+        .map((entry) => {
+          return `
+            <article class="summary-card summary-card--analysis">
+              <h4>${entry.title}</h4>
+              <p>${escapeHtml(entry.body).replace(/\n/g, "<br />")}</p>
+            </article>
+          `;
+        })
+        .join("")
+    : `
+      <article class="summary-card summary-card--analysis summary-card--empty">
+        <h4>AI分析</h4>
+        <p>今回のヒアリングではAI分析がまだ生成されていません。</p>
+      </article>
+    `;
+
+  const analysisSectionHtml = `
+    <section class="summary-section summary-section--analysis">
+      <h3>分析</h3>
+      <p class="note">あなた自身の振り返り（左）と、AIが客観的に整理したアウトライン（右）です。</p>
+      <div class="summary-cards summary-cards--analysis">
+        ${highlightHtml}
+        ${aiAnalysisCardsHtml}
+      </div>
+    </section>
+  `;
+
+  const summaryData = `
+    <div class="summary-layout">
+      ${hearingHtml}
+      ${analysisSectionHtml}
+    </div>
+  `.trim();
+
+  const finalMessage = [
+    "ここまでたくさん話してくれて本当にありがとう！",
+    "このあと『ヒアリング内容』と『分析』をまとめたシートを開くね。",
+    "まずはあなたの言葉を振り返ってみて、次にAIからの分析もチェックしてみて！"
+  ].join("\n\n");
 
   return {
     response: finalMessage,
