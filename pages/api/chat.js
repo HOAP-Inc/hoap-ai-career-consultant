@@ -1246,20 +1246,32 @@ function finalizeMustState(session) {
   const parts = [];
   if (Array.isArray(status.must_have_ids)) {
     status.must_have_ids.forEach((id) => {
-      const tagName = TAG_NAME_BY_ID.get(Number(id)) || `ID:${id}`;
-      parts.push(`have:${tagName}`);
+      const tagName = TAG_NAME_BY_ID.get(Number(id));
+      if (tagName) {
+        parts.push(`have:${tagName}(ID:${id})`);
+      } else {
+        parts.push(`have:ID:${id}`);
+      }
     });
   }
   if (Array.isArray(status.ng_ids)) {
     status.ng_ids.forEach((id) => {
-      const tagName = TAG_NAME_BY_ID.get(Number(id)) || `ID:${id}`;
-      parts.push(`ng:${tagName}`);
+      const tagName = TAG_NAME_BY_ID.get(Number(id));
+      if (tagName) {
+        parts.push(`ng:${tagName}(ID:${id})`);
+      } else {
+        parts.push(`ng:ID:${id}`);
+      }
     });
   }
   if (Array.isArray(status.pending_ids)) {
     status.pending_ids.forEach((id) => {
-      const tagName = TAG_NAME_BY_ID.get(Number(id)) || `ID:${id}`;
-      parts.push(`pending:${tagName}`);
+      const tagName = TAG_NAME_BY_ID.get(Number(id));
+      if (tagName) {
+        parts.push(`pending:${tagName}(ID:${id})`);
+      } else {
+        parts.push(`pending:ID:${id}`);
+      }
     });
   }
 
@@ -2089,14 +2101,21 @@ async function handleStep4(session, userText) {
       const combinedText = `${userInput} ${recentTexts}`;
 
       // ネガティブキーワードがある場合は質問をスキップ（既に方向性が明確）
-      const hasNegativeKeywords = /嫌|避けたい|したくない|なし|いらない|不要|NG/.test(combinedText);
-      const hasPositiveKeywords = /欲しい|いい|希望|理想|好き|したい|あってほしい/.test(combinedText);
+      const hasNegativeKeywords = /嫌|避けたい|したくない|なし|いらない|不要|NG|以外|じゃなくて|ではなく/.test(combinedText);
+      const hasPositiveKeywords = /欲しい|いい|希望|理想|好き|したい|あってほしい|挑戦|やりたい/.test(combinedText);
 
       let question;
 
-      // ネガティブキーワードがある場合は方向性確認をスキップし、次の条件を聞く
-      if (hasNegativeKeywords && !hasPositiveKeywords) {
-        // 「嫌だ」「避けたい」等が明確な場合は方向性確認不要、次の条件を聞く
+      // 方向性が既に明確な場合は質問をスキップ
+      const allDirectionsConfirmed = autoConfirmedIds.length > 0 && autoConfirmedIds.every((id) => {
+        const key = String(id);
+        const direction = autoDirectionMap[key] || session.status.direction_map?.[key];
+        return direction && direction !== "pending";
+      });
+
+      // ネガティブキーワードがある場合、またはポジティブキーワードがある場合は方向性確認不要
+      if ((hasNegativeKeywords || hasPositiveKeywords) && allDirectionsConfirmed) {
+        // 方向性が明確な場合は次の条件を聞く
         question = "他に『ここだけは譲れない』って思う条件があったら教えてほしいな✨";
       } else if (pendingDirectionTag) {
         // 方向性が不明なタグがある場合、方向性を確認する質問を出す
@@ -2622,10 +2641,8 @@ async function handleStep6(session, userText) {
 
   const ctaHtml = `
     <div style="text-align: center; margin-bottom: 24px;">
-      <div style="border: 2px solid transparent; background-image: linear-gradient(white, white), linear-gradient(135deg, #F09433 0%, #E6683C 25%, #DC2743 50%, #CC2366 75%, #BC1888 100%); background-origin: border-box; background-clip: padding-box, border-box; padding: 16px; border-radius: 12px;">
-        <p style="color: #000; font-weight: bold; margin: 0 0 12px 0; font-size: 14px;">自分の経歴書代わりに使えるキャリアシートを作成したい人はこちらのボタンから無料作成してね！これまでの経歴や希望条件を入れたり、キャリアエージェントに相談もできるよ。</p>
-        <button type="button" class="summary-floating-cta__button" style="background: linear-gradient(135deg, #F09433 0%, #E6683C 25%, #DC2743 50%, #CC2366 75%, #BC1888 100%); color: white; border: none; padding: 12px 24px; border-radius: 8px; font-weight: bold; cursor: pointer; width: 100%;">無料で作成する</button>
-      </div>
+      <p style="color: #000; font-weight: 600; margin: 0 0 16px 0; font-size: 14px;">自分の経歴書代わりに使えるキャリアシートを作成したい人はこちらのボタンから無料作成してね！これまでの経歴や希望条件を入れたり、キャリアエージェントに相談もできるよ。</p>
+      <button type="button" class="choice-btn" style="min-width: 200px; padding: 14px 28px; font-size: 16px;">無料で作成する</button>
     </div>
   `;
 
