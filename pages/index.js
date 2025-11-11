@@ -1,6 +1,18 @@
 import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 /* eslint-disable @next/next/no-img-element */
 
+// basic以外のアニメーション用画像（ランダムに使用）
+const HOAP_ANIMATION_IMAGES = [
+  "/hoap-up.png",
+  "/hoap-wide.png",
+  "/hoap-skip.png",
+  "/hoap-10.png",
+  "/hoap-11.png",
+  "/hoap-12.png",
+  "/hoap-13.png",
+  "/hoap-14.png"
+];
+
 export default function Home() {
   // ← 最初は空配列でOK（ここは触らない）
   const [messages, setMessages] = useState([]);
@@ -150,6 +162,9 @@ function getStatusRowDisplay(key, statusMeta = {}) {
   // ポーズを元に戻すタイマー保持
   const revertTimerRef = useRef(null);
 
+  // 定期アニメーションループ用タイマー
+  const animationLoopTimerRef = useRef(null);
+
   // 進捗バー（STEP1〜6の6段階）
   const MAX_STEP = 6;
   const progress = Math.min(100, Math.max(0, Math.round((Math.min(step, MAX_STEP) / MAX_STEP) * 100)));
@@ -282,6 +297,44 @@ setChoices(isChoiceStep(next) ? uniqueByNormalized(inline) : []);
       }, 2400);
     }
   }, [step]);
+
+  // 定期的なランダムアニメーションループ（適度な間隔で自然に動かす）
+  useEffect(() => {
+    const scheduleNextAnimation = () => {
+      // 8〜12秒のランダムな間隔で次のアニメーションをスケジュール
+      const nextDelay = 8000 + Math.random() * 4000;
+
+      animationLoopTimerRef.current = setTimeout(() => {
+        // イベント駆動のアニメーション中（revertTimerが動いている）場合はスキップ
+        if (revertTimerRef.current !== null) {
+          scheduleNextAnimation();
+          return;
+        }
+
+        // ランダムに画像を選択
+        const randomImage = HOAP_ANIMATION_IMAGES[Math.floor(Math.random() * HOAP_ANIMATION_IMAGES.length)];
+        setHoapSrc(randomImage);
+
+        // 2秒後にbasicに戻す
+        setTimeout(() => {
+          setHoapSrc("/hoap-basic.png");
+          // 次のアニメーションをスケジュール
+          scheduleNextAnimation();
+        }, 2000);
+      }, nextDelay);
+    };
+
+    // 初回スケジュール
+    scheduleNextAnimation();
+
+    // クリーンアップ
+    return () => {
+      if (animationLoopTimerRef.current) {
+        clearTimeout(animationLoopTimerRef.current);
+        animationLoopTimerRef.current = null;
+      }
+    };
+  }, []);
 
   // AI応答が更新されるたびに、ランダムで「手を広げる」を短時間表示
   useEffect(() => {
