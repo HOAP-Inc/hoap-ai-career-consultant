@@ -1413,35 +1413,83 @@ function ensurePoliteEnding(sentence) {
   base = base.replace(/[！!？?]+$/g, "").replace(/[。]+$/g, "");
   if (!base) return "";
 
-  const politePattern = /(です|ます|でした|でした|でした|でした|でした|でした|できます|できました|ません|たいです|でしょう|ください|てきました|っています|ています|ってます|っていました|ていました|てきた|てきます)$/;
+  // 既に敬体で終わっている場合はそのまま返す
+  const politePattern = /(です|ます|でした|ました|できます|できました|ません|たいです|でしょう|ください|てきました|っています|ています|ってます|っていました|ていました|いきます|られます|られました)$/;
   if (politePattern.test(base)) {
     return `${base}。`;
   }
+
+  // 「ている」系の変換
   if (/ている$/.test(base)) {
     return `${base.replace(/ている$/, "ています")}。`;
   }
   if (/っている$/.test(base)) {
     return `${base.replace(/っている$/, "っています")}。`;
   }
+  if (/でいる$/.test(base)) {
+    return `${base.replace(/でいる$/, "でいます")}。`;
+  }
+
+  // 「ていく」「ていきたい」系の変換
+  if (/ていきたい$/.test(base)) {
+    return `${base.replace(/ていきたい$/, "ていきたいです")}。`;
+  }
   if (/ていく$/.test(base)) {
     return `${base.replace(/ていく$/, "ていきます")}。`;
   }
+
+  // 「〜たい」系の変換
+  if (/たい$/.test(base)) {
+    return `${base.replace(/たい$/, "たいです")}。`;
+  }
+
+  // 動詞の終止形（五段動詞・上一段・下一段）の変換
+  // 五段動詞：う列で終わる → いますに変換
+  if (/[うくぐすつぬぶむゆる]$/.test(base)) {
+    const lastChar = base.slice(-1);
+    const stem = base.slice(0, -1);
+    const masu = {
+      'う': 'います', 'く': 'きます', 'ぐ': 'ぎます', 'す': 'します',
+      'つ': 'ちます', 'ぬ': 'にます', 'ぶ': 'びます', 'む': 'みます',
+      'る': 'ります'
+    };
+    if (masu[lastChar]) {
+      return `${stem}${masu[lastChar]}。`;
+    }
+  }
+
+  // 「する」系の変換
   if (/する$/.test(base)) {
     return `${base.replace(/する$/, "します")}。`;
   }
+
+  // 過去形の変換
   if (/した$/.test(base)) {
     return `${base.replace(/した$/, "しました")}。`;
   }
+  if (/[いきぎしちにびみり]た$/.test(base)) {
+    return `${base.replace(/た$/, "ました")}。`;
+  }
+  if (/[んだ]だ$/.test(base)) {
+    return `${base.replace(/だ$/, "でした")}。`;
+  }
+
+  // 「である」「だ」の変換
   if (/である$/.test(base)) {
     return `${base.replace(/である$/, "です")}。`;
   }
   if (/だ$/.test(base)) {
     return `${base.replace(/だ$/, "です")}。`;
   }
+
+  // 「ない」系の変換
   if (/ない$/.test(base)) {
-    return `${base.replace(/ない$/, "ありません")}。`;
+    return `${base.replace(/ない$/, "ません")}。`;
   }
-  return `${base}です。`;
+
+  // どのパターンにも当てはまらない場合は、そのまま句点を付ける
+  // （「です」を無理に付けない）
+  return `${base}。`;
 }
 
 function polishSummaryText(text, maxSentences = 3) {
@@ -2572,20 +2620,27 @@ async function handleStep6(session, userText) {
     </section>
   `;
 
-  const headerHtml = `
-    <header class="summary-header" style="text-align: center; margin-bottom: 32px;">
-      <p class="summary-header__badge" style="margin: 0; font-size: 13px; letter-spacing: 0.12em; font-weight: 600; color: #94a3b8; text-transform: uppercase;">Your Unique Career Profile</p>
-      <div style="border: 2px solid transparent; background-image: linear-gradient(white, white), linear-gradient(135deg, #F09433 0%, #E6683C 25%, #DC2743 50%, #CC2366 75%, #BC1888 100%); background-origin: border-box; background-clip: padding-box, border-box; padding: 16px; border-radius: 12px; margin-top: 16px;">
-        <p style="background: linear-gradient(135deg, #F09433 0%, #E6683C 25%, #DC2743 50%, #CC2366 75%, #BC1888 100%); -webkit-background-clip: text; background-clip: text; color: transparent; font-weight: bold; margin: 0 0 12px 0; font-size: 14px;">自分の経歴書代わりに使えるキャリアシートを作成したい人はこちらのボタンから無料作成してね！これまでの経歴や希望条件を入れたり、キャリアエージェントに相談もできるよ。</p>
+  const ctaHtml = `
+    <div style="text-align: center; margin-bottom: 24px;">
+      <div style="border: 2px solid transparent; background-image: linear-gradient(white, white), linear-gradient(135deg, #F09433 0%, #E6683C 25%, #DC2743 50%, #CC2366 75%, #BC1888 100%); background-origin: border-box; background-clip: padding-box, border-box; padding: 16px; border-radius: 12px;">
+        <p style="color: #000; font-weight: bold; margin: 0 0 12px 0; font-size: 14px;">自分の経歴書代わりに使えるキャリアシートを作成したい人はこちらのボタンから無料作成してね！これまでの経歴や希望条件を入れたり、キャリアエージェントに相談もできるよ。</p>
         <button type="button" class="summary-floating-cta__button" style="background: linear-gradient(135deg, #F09433 0%, #E6683C 25%, #DC2743 50%, #CC2366 75%, #BC1888 100%); color: white; border: none; padding: 12px 24px; border-radius: 8px; font-weight: bold; cursor: pointer; width: 100%;">無料で作成する</button>
       </div>
-      <h2 style="margin: 24px 0 8px; font-size: clamp(24px, 5vw, 36px); font-weight: 900;"><span>${escapeHtml(displayName)}さんの</span><span style="background: linear-gradient(135deg, #F09433 0%, #E6683C 25%, #DC2743 50%, #CC2366 75%, #BC1888 100%); -webkit-background-clip: text; background-clip: text; color: transparent; font-weight: 900;">キャリア分析シート</span></h2>
+    </div>
+  `;
+
+  const sheetHeaderHtml = `
+    <div style="text-align: center; margin-bottom: 24px;">
+      <h2 style="margin: 0 0 8px 0; font-size: clamp(24px, 5vw, 36px); font-weight: 900;">
+        <span>${escapeHtml(displayName)}さんの</span><span style="background: linear-gradient(135deg, #F09433 0%, #E6683C 25%, #DC2743 50%, #CC2366 75%, #BC1888 100%); -webkit-background-clip: text; background-clip: text; color: transparent; font-weight: 900;">キャリア分析シート</span>
+      </h2>
       <p style="margin: 0; font-size: 14px; color: #64748b;">あなたのキャリアにおける強みと価値観をAIが分析してまとめたよ。</p>
-    </header>
+    </div>
   `;
 
   const summaryReportHtml = `
     <div class="summary-report">
+      ${sheetHeaderHtml}
       <div class="summary-report__grid">
         ${hearingHtml}
         <div class="summary-report__analysis">
@@ -2597,7 +2652,7 @@ async function handleStep6(session, userText) {
   `.trim();
 
   const summaryData = `
-    ${headerHtml}
+    ${ctaHtml}
     ${summaryReportHtml}
   `.trim();
 
