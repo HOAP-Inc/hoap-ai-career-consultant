@@ -161,6 +161,9 @@ function getStatusRowDisplay(key, statusMeta = {}) {
   // ポーズを元に戻すタイマー保持
   const revertTimerRef = useRef(null);
 
+  // 前回のaiTextを保持（応答シーケンスの最初だけアニメーション再生するため）
+  const prevAiTextRef = useRef("");
+
   // 進捗バー（STEP1〜6の6段階）
   const MAX_STEP = 6;
   const progress = Math.min(100, Math.max(0, Math.round((Math.min(step, MAX_STEP) / MAX_STEP) * 100)));
@@ -339,9 +342,18 @@ setChoices(isChoiceStep(next) ? uniqueByNormalized(inline) : []);
     }, 300);
   }, []);
 
-  // AI応答が更新されるたびにアニメーション
+  // AI応答の最初のセリフ表示時のみアニメーション
   useEffect(() => {
-    if (!aiText) return;
+    if (!aiText) {
+      prevAiTextRef.current = "";
+      return;
+    }
+
+    // 前回が空で今回が非空 = 応答シーケンスの開始
+    const isNewResponse = prevAiTextRef.current === "" && aiText !== "";
+    prevAiTextRef.current = aiText;
+
+    if (!isNewResponse) return;
 
     // すでに「バンザイ」表示中なら邪魔しない（競合回避）
     if (hoapSrc === "/hoap-up.png") return;
@@ -360,7 +372,7 @@ setChoices(isChoiceStep(next) ? uniqueByNormalized(inline) : []);
       return;
     }
 
-    // AI応答時は必ずアニメーション再生
+    // AI応答の最初のセリフ時のみアニメーション再生
     playHoapAnimation();
   }, [aiText, hoapSrc, playHoapAnimation]);
 
