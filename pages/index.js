@@ -5,11 +5,11 @@ import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from
 // hoap-up.pngは「ありがとう！」専用のため除外
 const HOAP_ANIMATION_IMAGES = [
   "/hoap-skip.png",
-  "/hoap-10.png",
-  "/hoap-11.png",
-  "/hoap-12.png",
-  "/hoap-13.png",
-  "/hoap-14.png"
+  "/10.png",
+  "/11.png",
+  "/12.png",
+  "/13.png",
+  "/14.png"
 ];
 
 export default function Home() {
@@ -175,11 +175,11 @@ function getStatusRowDisplay(key, statusMeta = {}) {
       "/hoap-up.png",
       "/hoap-wide.png",
       "/hoap-skip.png",
-      "/hoap-10.png",
-      "/hoap-11.png",
-      "/hoap-12.png",
-      "/hoap-13.png",
-      "/hoap-14.png"
+      "/10.png",
+      "/11.png",
+      "/12.png",
+      "/13.png",
+      "/14.png"
     ];
 
     imagesToPreload.forEach((src) => {
