@@ -61,18 +61,11 @@ function getStatusRowDisplay(key, statusMeta = {}) {
         ...(statusMeta.pending_ids || []),
       ];
       const value = formatIds(ids);
-      if (value) return value;
-      const text = (statusMeta.must_text && String(statusMeta.must_text).trim()) || "";
-      if (text) return text;
-      const memoRaw = statusMeta.memo?.must_have_raw;
-      if (Array.isArray(memoRaw) && memoRaw.length > 0) {
-        return memoRaw.filter(Boolean).join("／");
-      }
-      return "未入力";
+      return value || "未入力";
     }
     case "私はこんな人": {
       return statusMeta.self_text ? "済" : "未入力";
-    }
+}
     case "AIの分析": {
       const hasAnalysis =
         Boolean(statusMeta.ai_analysis) ||
@@ -84,7 +77,7 @@ function getStatusRowDisplay(key, statusMeta = {}) {
     default:
       return "未入力";
   }
-}
+  }
 
   function isChoiceStep(n) {
    return n === 1 || n === 4;
@@ -123,12 +116,12 @@ function getStatusRowDisplay(key, statusMeta = {}) {
   // 正規化キーで一意化
   const uniqueByNormalized = useCallback(
     (arr) => {
-      const map = new Map();
-      for (const item of arr || []) {
-        const k = normalizeChoiceKey(item);
-        if (!map.has(k)) map.set(k, item); // 先勝ち
-      }
-      return Array.from(map.values());
+    const map = new Map();
+    for (const item of arr || []) {
+      const k = normalizeChoiceKey(item);
+      if (!map.has(k)) map.set(k, item); // 先勝ち
+    }
+    return Array.from(map.values());
     },
     [normalizeChoiceKey]
   );
@@ -174,7 +167,7 @@ function getStatusRowDisplay(key, statusMeta = {}) {
   const clearMessageTimers = useCallback(() => {
     if (Array.isArray(messageTimersRef.current)) {
       messageTimersRef.current.forEach((timerId) => clearTimeout(timerId));
-    }
+        }
     messageTimersRef.current = [];
   }, []);
 
@@ -230,7 +223,7 @@ const data = raw ? JSON.parse(raw) : null;
         setStep(next);
 
         const inline = extractChoices(data.response);
-        setChoices(isChoiceStep(next) ? uniqueByNormalized(inline) : []);
+setChoices(isChoiceStep(next) ? uniqueByNormalized(inline) : []);
       } catch (e) {
         setMessages([{ type: "ai", content: "初期メッセージの取得に失敗したよ🙏" }]);
       }
@@ -408,11 +401,11 @@ const data = raw ? JSON.parse(raw) : null;
       if (data.meta?.show_summary_after_delay && data.meta?.summary_data) {
         // 最終メッセージを\n\nで分割して表示
         const finalParts = (data.response || "").split("\n\n").filter(Boolean);
-
+        
         if (finalParts.length > 0) {
           showAiSequence(finalParts);
           setIsTyping(false);
-
+          
           let accumulatedDelay = 0;
           for (let i = 1; i < finalParts.length; i++) {
             const prev = finalParts[i - 1] || "";
@@ -557,7 +550,7 @@ const data = raw ? JSON.parse(raw) : null;
             ) : (
               <div className="duo-stage__bubble" aria-live="polite">
                 …
-              </div>
+                </div>
             )}
           </div>
         </div>
@@ -604,12 +597,12 @@ const data = raw ? JSON.parse(raw) : null;
 
           {/* ステータス進捗バー */}
           {step < 6 && (
-            <div className="status-progress">
-              <div
-                className="status-progress__inner"
-                style={{ width: `${progress}%` }}
-              />
-            </div>
+          <div className="status-progress">
+            <div
+              className="status-progress__inner"
+              style={{ width: `${progress}%` }}
+            />
+          </div>
           )}
         </>
       )}
