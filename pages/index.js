@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+/* eslint-disable @next/next/no-img-element */
 
 export default function Home() {
   // ← 最初は空配列でOK（ここは触らない）
@@ -21,7 +22,6 @@ export default function Home() {
   const cheeredMustRef = useRef(false); // STEP4
   const cheeredSelfRef = useRef(false); // STEP5
   const cheeredDoneRef = useRef(false); // STEP6
-  const step6AutoStartedRef = useRef(false); // STEP6自動開始フラグ
 
 function getStatusRowDisplay(key, statusMeta = {}) {
   const formatIds = (ids) =>
@@ -168,7 +168,6 @@ function getStatusRowDisplay(key, statusMeta = {}) {
       cheeredMustRef.current = false;
       cheeredSelfRef.current = false;
       cheeredDoneRef.current = false;
-      step6AutoStartedRef.current = false;
     }
   }, [step]);
 
@@ -187,14 +186,18 @@ function getStatusRowDisplay(key, statusMeta = {}) {
       return;
     }
 
-    // 最初の吹き出しを即座に表示
     setAiText(parts[0]);
     setIsTyping(false);
 
+    let delay = 0;
     for (let i = 1; i < parts.length; i++) {
+      const prev = parts[i - 1] || "";
+      const prevLength = prev.length || 0;
+      const segmentDelay = Math.min(8000, 2600 + prevLength * 45);
+      delay += segmentDelay;
       const timerId = setTimeout(() => {
         setAiText(parts[i]);
-      }, 3000 * i);
+      }, delay);
       messageTimersRef.current.push(timerId);
     }
   }, [clearMessageTimers]);
@@ -285,19 +288,6 @@ const data = raw ? JSON.parse(raw) : null;
         revertTimerRef.current = null;
       }, 2400);
     }
-  }, [step]);
-
-  // STEP6に到達したら自動的に空メッセージを送信（DoingBeing生成開始）
-  useEffect(() => {
-    if (step === 6 && !step6AutoStartedRef.current) {
-      step6AutoStartedRef.current = true;
-      // 3秒待ってから自動的にSTEP6の処理を開始
-      const timer = setTimeout(() => {
-        onSend("");
-      }, 3000);
-      return () => clearTimeout(timer);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [step]);
 
   // AI応答が更新されるたびに、ランダムで「手を広げる」を短時間表示
@@ -423,7 +413,16 @@ const data = raw ? JSON.parse(raw) : null;
           showAiSequence(finalParts);
           setIsTyping(false);
 
-          const sheetDelay = Math.max(3000, finalParts.length * 3000);
+          let accumulatedDelay = 0;
+          for (let i = 1; i < finalParts.length; i++) {
+            const prev = finalParts[i - 1] || "";
+            const prevLen = prev.length || 0;
+            const segmentDelay = Math.min(8000, 2600 + prevLen * 45);
+            accumulatedDelay += segmentDelay;
+          }
+          const lastPart = finalParts[finalParts.length - 1] || "";
+          const lastReadTime = Math.min(9000, 3200 + (lastPart.length || 0) * 45);
+          const sheetDelay = Math.max(5000, accumulatedDelay + lastReadTime);
           setTimeout(() => {
             setSummaryData(data.meta.summary_data);
             setShowSummary(true);
@@ -507,7 +506,7 @@ const data = raw ? JSON.parse(raw) : null;
     3: "Will",
     4: "Must",
     5: "私はこんな人",
-    6: "分析（Doing/Being）",
+    6: "AI分析",
   };
   return map[step] ?? "";
 }
@@ -521,7 +520,7 @@ const data = raw ? JSON.parse(raw) : null;
       }
       clearMessageTimers();
     };
-  }, []);
+  }, [clearMessageTimers]);
 
   const showChoices = isChoiceStep(step) && choices.length > 0 && !isTyping;
 
