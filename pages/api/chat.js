@@ -1239,13 +1239,22 @@ function finalizeMustState(session) {
 
   const parts = [];
   if (Array.isArray(status.must_have_ids)) {
-    status.must_have_ids.forEach((id) => parts.push(`ID:${id}/have`));
+    status.must_have_ids.forEach((id) => {
+      const tagName = TAG_NAME_BY_ID.get(Number(id)) || `ID:${id}`;
+      parts.push(`have:${tagName}`);
+    });
   }
   if (Array.isArray(status.ng_ids)) {
-    status.ng_ids.forEach((id) => parts.push(`ID:${id}/ng`));
+    status.ng_ids.forEach((id) => {
+      const tagName = TAG_NAME_BY_ID.get(Number(id)) || `ID:${id}`;
+      parts.push(`ng:${tagName}`);
+    });
   }
   if (Array.isArray(status.pending_ids)) {
-    status.pending_ids.forEach((id) => parts.push(`ID:${id}/pending`));
+    status.pending_ids.forEach((id) => {
+      const tagName = TAG_NAME_BY_ID.get(Number(id)) || `ID:${id}`;
+      parts.push(`pending:${tagName}`);
+    });
   }
 
   status.status_bar = parts.join(",");
@@ -1309,35 +1318,16 @@ function ensureAutoConfirmedIds(session, autoConfirmedIds, autoDirections) {
 function buildStep4BridgeMessage(empathyMessage, confirmMessage, nextMessage) {
   const parts = [];
   const trimmedEmpathy = empathyMessage && empathyMessage.trim();
-  let trimmedConfirm = confirmMessage && confirmMessage.trim();
-  if (trimmedConfirm && /次の質問に(移る|進む)/.test(trimmedConfirm)) {
-    trimmedConfirm = "";
-  }
-  if (trimmedConfirm && /^ありがとう/.test(trimmedConfirm)) {
-    trimmedConfirm = trimmedConfirm.replace(/^ありがとう[！!。]*/, "").trim();
-  }
+
+  // 共感メッセージがあれば追加
   if (trimmedEmpathy) {
     parts.push(trimmedEmpathy);
   }
 
-  let bridgeLine = trimmedConfirm || "最後の質問だよ！";
-  bridgeLine = bridgeLine.replace(/問題/g, "質問");
-  bridgeLine = bridgeLine.replace(/^[！!。]+/, "");
-  if (!bridgeLine.startsWith("ありがとう")) {
-    if (!/^では/.test(bridgeLine)) {
-      bridgeLine = `では${bridgeLine}`;
-    }
-    bridgeLine = `ありがとう！${bridgeLine}`;
-  }
-  const bridgeSegments = [];
-  if (trimmedConfirm) {
-    bridgeSegments.push(trimmedConfirm);
-  }
-  bridgeSegments.push(bridgeLine);
+  // STEP5のintro質問だけを返す（二重質問を回避）
   const step5Intro = (nextMessage && String(nextMessage).trim()) || STEP_INTRO_QUESTIONS[5];
-  const finalBlock = `${bridgeSegments.join(" ")}\n${step5Intro}`.trim();
+  parts.push(step5Intro);
 
-  parts.push(finalBlock);
   return parts.filter(Boolean).join("\n\n");
 }
 
@@ -2552,7 +2542,7 @@ async function handleStep6(session, userText) {
   const headerHtml = `
     <header class="summary-header">
       <p class="summary-header__badge">Your Unique Career Profile</p>
-      <h2><span>${escapeHtml(displayName)}さんの</span>キャリア分析シート</h2>
+      <h2><span>${escapeHtml(displayName)}さんの</span><span style="background: linear-gradient(135deg, #F09433 0%, #E6683C 25%, #DC2743 50%, #CC2366 75%, #BC1888 100%); -webkit-background-clip: text; background-clip: text; color: transparent; font-weight: 900;">キャリア分析シート</span></h2>
       <p>今のあなたの強みと大切にしたい価値観を、読みやすくまとめたよ。</p>
     </header>
   `;
@@ -2571,9 +2561,9 @@ async function handleStep6(session, userText) {
   `.trim();
 
   const floatingCtaHtml = `
-    <div class="summary-floating-cta">
-      <p>自分の経歴書代わりに使えるキャリアシートを作成したい人はこちらのボタンから無料作成してね！これまでの経歴や希望条件を入れたり、キャリアエージェントに相談もできるよ。</p>
-      <button type="button" class="summary-floating-cta__button">無料で作成する</button>
+    <div class="summary-floating-cta" style="border: 2px solid transparent; background-image: linear-gradient(white, white), linear-gradient(135deg, #F09433 0%, #E6683C 25%, #DC2743 50%, #CC2366 75%, #BC1888 100%); background-origin: border-box; background-clip: padding-box, border-box; padding: 20px; border-radius: 12px; margin-top: 24px;">
+      <p style="background: linear-gradient(135deg, #F09433 0%, #E6683C 25%, #DC2743 50%, #CC2366 75%, #BC1888 100%); -webkit-background-clip: text; background-clip: text; color: transparent; font-weight: bold; margin-bottom: 16px;">自分の経歴書代わりに使えるキャリアシートを作成したい人はこちらのボタンから無料作成してね！これまでの経歴や希望条件を入れたり、キャリアエージェントに相談もできるよ。</p>
+      <button type="button" class="summary-floating-cta__button" style="background: linear-gradient(135deg, #F09433 0%, #E6683C 25%, #DC2743 50%, #CC2366 75%, #BC1888 100%); color: white; border: none; padding: 12px 24px; border-radius: 8px; font-weight: bold; cursor: pointer; width: 100%;">無料で作成する</button>
     </div>
   `;
 
