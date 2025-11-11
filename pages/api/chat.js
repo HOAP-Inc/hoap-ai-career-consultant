@@ -603,13 +603,19 @@ async function handleStep2(session, userText) {
     // deepening_countをリセット
     if (session.meta) session.meta.step2_deepening_count = 0;
 
-    // STEP3の初回質問を使用
+    // STEP3の初回質問を取得
     resetDrill(session);
+    const step3Response = await handleStep3(session, "");
+
+    // 共感文を追加（LLMから取得、なければフォールバック）
+    const empathyMessage = parsed?.empathy || "ありがとう！";
+    const combinedResponse = [empathyMessage, step3Response.response].filter(Boolean).join("\n\n");
+
     return {
-      response: STEP_INTRO_QUESTIONS[3],
+      response: combinedResponse || step3Response.response,
       status: session.status,
       meta: { step: session.step },
-      drill: session.drill,
+      drill: step3Response.drill,
     };
   }
   
@@ -1714,15 +1720,9 @@ async function handleStep4(session, userText) {
     }
     session.status.direction_map[String(id)] = direction;
     autoDirectionMap[String(id)] = direction;
-    const existingBar = (session.status.status_bar || "")
-      .split(",")
-      .map((s) => s.trim())
-      .filter(Boolean);
-    const entry = `ID:${id}/${direction}`;
-    if (!existingBar.includes(entry)) {
-      existingBar.push(entry);
-    }
-    session.status.status_bar = existingBar.join(",");
+
+    // ステータスバーは後で finalizeMustState で生成するため、ここでは更新しない
+    // （LLMの共感文生成後に更新）
   } else if (directMatches.length > 1) {
     const uniqueLabels = Array.from(new Set(directMatches.map(tag => tag.name))).slice(0, 6);
     if (uniqueLabels.length > 1) {
@@ -2540,16 +2540,19 @@ async function handleStep6(session, userText) {
   `;
 
   const headerHtml = `
-    <header class="summary-header">
-      <p class="summary-header__badge">Your Unique Career Profile</p>
-      <h2><span>${escapeHtml(displayName)}さんの</span><span style="background: linear-gradient(135deg, #F09433 0%, #E6683C 25%, #DC2743 50%, #CC2366 75%, #BC1888 100%); -webkit-background-clip: text; background-clip: text; color: transparent; font-weight: 900;">キャリア分析シート</span></h2>
-      <p>今のあなたの強みと大切にしたい価値観を、読みやすくまとめたよ。</p>
+    <header class="summary-header" style="text-align: center; margin-bottom: 32px;">
+      <p class="summary-header__badge" style="margin: 0; font-size: 13px; letter-spacing: 0.12em; font-weight: 600; color: #94a3b8; text-transform: uppercase;">Your Unique Career Profile</p>
+      <div style="border: 2px solid transparent; background-image: linear-gradient(white, white), linear-gradient(135deg, #F09433 0%, #E6683C 25%, #DC2743 50%, #CC2366 75%, #BC1888 100%); background-origin: border-box; background-clip: padding-box, border-box; padding: 16px; border-radius: 12px; margin-top: 16px;">
+        <p style="background: linear-gradient(135deg, #F09433 0%, #E6683C 25%, #DC2743 50%, #CC2366 75%, #BC1888 100%); -webkit-background-clip: text; background-clip: text; color: transparent; font-weight: bold; margin: 0 0 12px 0; font-size: 14px;">自分の経歴書代わりに使えるキャリアシートを作成したい人はこちらのボタンから無料作成してね！これまでの経歴や希望条件を入れたり、キャリアエージェントに相談もできるよ。</p>
+        <button type="button" class="summary-floating-cta__button" style="background: linear-gradient(135deg, #F09433 0%, #E6683C 25%, #DC2743 50%, #CC2366 75%, #BC1888 100%); color: white; border: none; padding: 12px 24px; border-radius: 8px; font-weight: bold; cursor: pointer; width: 100%;">無料で作成する</button>
+      </div>
+      <h2 style="margin: 24px 0 8px; font-size: clamp(24px, 5vw, 36px); font-weight: 900;"><span>${escapeHtml(displayName)}さんの</span><span style="background: linear-gradient(135deg, #F09433 0%, #E6683C 25%, #DC2743 50%, #CC2366 75%, #BC1888 100%); -webkit-background-clip: text; background-clip: text; color: transparent; font-weight: 900;">キャリア分析シート</span></h2>
+      <p style="margin: 0; font-size: 14px; color: #64748b;">あなたのキャリアにおける強みと価値観をAIが分析してまとめたよ。</p>
     </header>
   `;
 
   const summaryReportHtml = `
     <div class="summary-report">
-      ${headerHtml}
       <div class="summary-report__grid">
         ${hearingHtml}
         <div class="summary-report__analysis">
@@ -2560,16 +2563,9 @@ async function handleStep6(session, userText) {
     </div>
   `.trim();
 
-  const floatingCtaHtml = `
-    <div class="summary-floating-cta" style="border: 2px solid transparent; background-image: linear-gradient(white, white), linear-gradient(135deg, #F09433 0%, #E6683C 25%, #DC2743 50%, #CC2366 75%, #BC1888 100%); background-origin: border-box; background-clip: padding-box, border-box; padding: 20px; border-radius: 12px; margin-top: 24px;">
-      <p style="background: linear-gradient(135deg, #F09433 0%, #E6683C 25%, #DC2743 50%, #CC2366 75%, #BC1888 100%); -webkit-background-clip: text; background-clip: text; color: transparent; font-weight: bold; margin-bottom: 16px;">自分の経歴書代わりに使えるキャリアシートを作成したい人はこちらのボタンから無料作成してね！これまでの経歴や希望条件を入れたり、キャリアエージェントに相談もできるよ。</p>
-      <button type="button" class="summary-floating-cta__button" style="background: linear-gradient(135deg, #F09433 0%, #E6683C 25%, #DC2743 50%, #CC2366 75%, #BC1888 100%); color: white; border: none; padding: 12px 24px; border-radius: 8px; font-weight: bold; cursor: pointer; width: 100%;">無料で作成する</button>
-    </div>
-  `;
-
   const summaryData = `
+    ${headerHtml}
     ${summaryReportHtml}
-    ${floatingCtaHtml}
   `.trim();
 
   session.status.ai_analysis = strengthParts.join("\n\n").trim();
@@ -2595,7 +2591,7 @@ async function handleStep6(session, userText) {
 
 function initialGreeting(session) {
   return {
-    response: "こんにちは！AIキャリアデザイナーのほーぷちゃんだよ✨\n今日はあなたのこれまでキャリアの説明書をあなたの言葉で作っていくね！\nそれじゃあ、まずは持っている資格を教えて欲しいな🌱\n複数ある場合は1つずつ教えてね。\n資格がない場合は「資格なし」でOKだよ◎",
+    response: "こんにちは！AIキャリアデザイナーのほーぷちゃんだよ✨\n今日はあなたのこれまでキャリアの説明書をあなたの言葉とAIの分析で作っていくね！\n\nそれじゃあ、まずは持っている資格を教えて欲しいな🌱\n複数ある場合は1つずつ教えてね。\n資格がない場合は「資格なし」でOKだよ！",
     status: session.status,
     meta: { step: session.step },
     drill: session.drill,

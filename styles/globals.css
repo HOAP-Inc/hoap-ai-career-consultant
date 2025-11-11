@@ -657,16 +657,16 @@ html, body, #__next { height: 100%; }
     position: sticky;
     top: 36px;
     z-index: 19;
-    display: grid;
-    grid-template-columns: 1fr;
-    gap: 8px;
-    margin: 8px 0 16px;
-    padding: 4px 0;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin: 8px 0 12px;
+    padding: 6px 8px;
     background: linear-gradient(180deg, var(--bg-via) 0%, transparent 100%);
-    max-height: calc(28px * 2 + 6px);
-    overflow-y: auto;
+    border-radius: 12px;
+    overflow-x: auto;
+    overflow-y: hidden;
     -webkit-overflow-scrolling: touch;
-    overscroll-behavior: contain;
   }
 
   .status-progress{
@@ -674,7 +674,7 @@ html, body, #__next { height: 100%; }
     top: 64px;
     z-index: 18;
     height: 4px;
-    margin: 4px 0 16px;
+    margin: 4px 0 24px;
   }
 
   .duo-stage{
