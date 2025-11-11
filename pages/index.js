@@ -615,7 +615,98 @@ setChoices(isChoiceStep(next) ? uniqueByNormalized(inline) : []);
       <section className="duo-stage">
         <div className="duo-stage__bg" />
         <div className="duo-stage__wrap">
-          <img className="duo-stage__hoap" src={hoapSrc} alt="ほーぷちゃん" key={hoapSrc} />
+          <div style={{ position: 'absolute', right: '6%', bottom: '-8%', width: 'min(380px, 38vw)', height: 'min(380px, 38vw)' }}>
+            <img
+              className="duo-stage__hoap"
+              src="/hoap-basic.png"
+              alt="ほーぷちゃん"
+              style={{
+                opacity: hoapSrc === '/hoap-basic.png' ? 1 : 0,
+                position: 'absolute',
+                transition: 'opacity 0.3s ease-in-out'
+              }}
+            />
+            <img
+              className="duo-stage__hoap"
+              src="/hoap-up.png"
+              alt="ほーぷちゃん"
+              style={{
+                opacity: hoapSrc === '/hoap-up.png' ? 1 : 0,
+                position: 'absolute',
+                transition: 'opacity 0.3s ease-in-out'
+              }}
+            />
+            <img
+              className="duo-stage__hoap"
+              src="/hoap-wide.png"
+              alt="ほーぷちゃん"
+              style={{
+                opacity: hoapSrc === '/hoap-wide.png' ? 1 : 0,
+                position: 'absolute',
+                transition: 'opacity 0.3s ease-in-out'
+              }}
+            />
+            <img
+              className="duo-stage__hoap"
+              src="/hoap-skip.png"
+              alt="ほーぷちゃん"
+              style={{
+                opacity: hoapSrc === '/hoap-skip.png' ? 1 : 0,
+                position: 'absolute',
+                transition: 'opacity 0.3s ease-in-out'
+              }}
+            />
+            <img
+              className="duo-stage__hoap"
+              src="/10.png"
+              alt="ほーぷちゃん"
+              style={{
+                opacity: hoapSrc === '/10.png' ? 1 : 0,
+                position: 'absolute',
+                transition: 'opacity 0.3s ease-in-out'
+              }}
+            />
+            <img
+              className="duo-stage__hoap"
+              src="/11.png"
+              alt="ほーぷちゃん"
+              style={{
+                opacity: hoapSrc === '/11.png' ? 1 : 0,
+                position: 'absolute',
+                transition: 'opacity 0.3s ease-in-out'
+              }}
+            />
+            <img
+              className="duo-stage__hoap"
+              src="/12.png"
+              alt="ほーぷちゃん"
+              style={{
+                opacity: hoapSrc === '/12.png' ? 1 : 0,
+                position: 'absolute',
+                transition: 'opacity 0.3s ease-in-out'
+              }}
+            />
+            <img
+              className="duo-stage__hoap"
+              src="/13.png"
+              alt="ほーぷちゃん"
+              style={{
+                opacity: hoapSrc === '/13.png' ? 1 : 0,
+                position: 'absolute',
+                transition: 'opacity 0.3s ease-in-out'
+              }}
+            />
+            <img
+              className="duo-stage__hoap"
+              src="/14.png"
+              alt="ほーぷちゃん"
+              style={{
+                opacity: hoapSrc === '/14.png' ? 1 : 0,
+                position: 'absolute',
+                transition: 'opacity 0.3s ease-in-out'
+              }}
+            />
+          </div>
           <div className="duo-stage__bubbles-container">
             {isTyping ? (
               <div className="duo-stage__bubble typing" aria-live="polite">
