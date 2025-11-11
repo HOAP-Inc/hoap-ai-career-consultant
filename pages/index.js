@@ -3,11 +3,11 @@ import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from
 
 // basic以外のアニメーション用画像（ランダムに使用）
 // hoap-up.pngは「ありがとう！」専用のため除外
+// 12.pngは使わない
 const HOAP_ANIMATION_IMAGES = [
   "/hoap-skip.png",
   "/10.png",
   "/11.png",
-  "/12.png",
   "/13.png",
   "/14.png"
 ];
@@ -177,7 +177,6 @@ function getStatusRowDisplay(key, statusMeta = {}) {
       "/hoap-skip.png",
       "/10.png",
       "/11.png",
-      "/12.png",
       "/13.png",
       "/14.png"
     ];
@@ -623,7 +622,7 @@ setChoices(isChoiceStep(next) ? uniqueByNormalized(inline) : []);
               style={{
                 opacity: hoapSrc === '/hoap-basic.png' ? 1 : 0,
                 position: 'absolute',
-                transition: 'opacity 0.3s ease-in-out'
+                transition: 'opacity 0.15s ease-in-out'
               }}
             />
             <img
@@ -633,7 +632,7 @@ setChoices(isChoiceStep(next) ? uniqueByNormalized(inline) : []);
               style={{
                 opacity: hoapSrc === '/hoap-up.png' ? 1 : 0,
                 position: 'absolute',
-                transition: 'opacity 0.3s ease-in-out'
+                transition: 'opacity 0.15s ease-in-out'
               }}
             />
             <img
@@ -643,7 +642,7 @@ setChoices(isChoiceStep(next) ? uniqueByNormalized(inline) : []);
               style={{
                 opacity: hoapSrc === '/hoap-wide.png' ? 1 : 0,
                 position: 'absolute',
-                transition: 'opacity 0.3s ease-in-out'
+                transition: 'opacity 0.15s ease-in-out'
               }}
             />
             <img
@@ -653,7 +652,7 @@ setChoices(isChoiceStep(next) ? uniqueByNormalized(inline) : []);
               style={{
                 opacity: hoapSrc === '/hoap-skip.png' ? 1 : 0,
                 position: 'absolute',
-                transition: 'opacity 0.3s ease-in-out'
+                transition: 'opacity 0.15s ease-in-out'
               }}
             />
             <img
@@ -663,7 +662,7 @@ setChoices(isChoiceStep(next) ? uniqueByNormalized(inline) : []);
               style={{
                 opacity: hoapSrc === '/10.png' ? 1 : 0,
                 position: 'absolute',
-                transition: 'opacity 0.3s ease-in-out'
+                transition: 'opacity 0.15s ease-in-out'
               }}
             />
             <img
@@ -673,17 +672,7 @@ setChoices(isChoiceStep(next) ? uniqueByNormalized(inline) : []);
               style={{
                 opacity: hoapSrc === '/11.png' ? 1 : 0,
                 position: 'absolute',
-                transition: 'opacity 0.3s ease-in-out'
-              }}
-            />
-            <img
-              className="duo-stage__hoap"
-              src="/12.png"
-              alt="ほーぷちゃん"
-              style={{
-                opacity: hoapSrc === '/12.png' ? 1 : 0,
-                position: 'absolute',
-                transition: 'opacity 0.3s ease-in-out'
+                transition: 'opacity 0.15s ease-in-out'
               }}
             />
             <img
@@ -693,7 +682,7 @@ setChoices(isChoiceStep(next) ? uniqueByNormalized(inline) : []);
               style={{
                 opacity: hoapSrc === '/13.png' ? 1 : 0,
                 position: 'absolute',
-                transition: 'opacity 0.3s ease-in-out'
+                transition: 'opacity 0.15s ease-in-out'
               }}
             />
             <img
@@ -703,7 +692,7 @@ setChoices(isChoiceStep(next) ? uniqueByNormalized(inline) : []);
               style={{
                 opacity: hoapSrc === '/14.png' ? 1 : 0,
                 position: 'absolute',
-                transition: 'opacity 0.3s ease-in-out'
+                transition: 'opacity 0.15s ease-in-out'
               }}
             />
           </div>
