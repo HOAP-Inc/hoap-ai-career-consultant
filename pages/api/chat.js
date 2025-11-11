@@ -1667,62 +1667,91 @@ async function handleStep4(session, userText) {
   }
   let autoConfirmedIds = [];
   const autoDirectionMap = {};
+  let pendingDirectionTag = null; // 方向性が不明なタグを保存
 
   if (directMatches.length === 1) {
-    autoConfirmedIds = directMatches.map(tag => tag.id);
+    const matchedTag = directMatches[0];
     console.log(
-      `[STEP4 FAST] Auto-confirmed ID: ${autoConfirmedIds[0]} (${directMatches[0].name})`
+      `[STEP4 FAST] Direct ID match found: ${matchedTag.id} (${matchedTag.name})`
     );
+
     // 方向性を判定（have/ng/pending を決める）
     const normalized = userText.replace(/\s+/g, "");
-    let direction = "have";
+    let direction = null; // デフォルトをnullに変更（不明な場合はLLMに委ねる）
+
+    // 否定パターン（明確にngと判断できる場合のみ）
     const negPattern = /(絶対|まったく|全然|全く|完全)\s*(なし|避け|NG|いや|いやだ|無理|したくない)/;
-    const posPattern = /(絶対|必ず|どうしても)\s*(ほしい|欲しい|必要|あってほしい)/;
-    const neutralPattern = /(あれば|できれば|できたら|なくても|なくて)/;
-    if (negPattern.test(normalized) || /(なし|困る|避けたい|無理|いや|いやだ|遠慮|拒否)/.test(normalized)) {
+    const negKeywords = /(なし|困る|避けたい|無理|いや|いやだ|遠慮|拒否|嫌|苦手)/;
+
+    // 肯定パターン（明確にhaveと判断できる場合のみ）
+    const posPattern = /(絶対|必ず|どうしても|ぜひ)\s*(ほしい|欲しい|必要|あってほしい|したい)/;
+    const posKeywords = /(ほしい|欲しい|必要|希望|理想|重視|大事|重要|働きたい|やりたい|興味|魅力)/;
+
+    // 保留パターン
+    const neutralPattern = /(あれば|できれば|できたら|なくても|なくて|どちらでも)/;
+    const flexiblePattern = /(多少|ちょっと|少し|月\d+時間|20時間|二十時間)/;
+
+    if (negPattern.test(normalized) || negKeywords.test(normalized)) {
       direction = "ng";
-    } else if (posPattern.test(normalized)) {
+    } else if (posPattern.test(normalized) || posKeywords.test(normalized)) {
       direction = "have";
-    } else if (neutralPattern.test(normalized)) {
-      direction = "pending";
-    } else if (/(多少|ちょっと|少し|月\d+時間|20時間|二十時間)/.test(normalized)) {
+    } else if (neutralPattern.test(normalized) || flexiblePattern.test(normalized)) {
       direction = "pending";
     }
-    if (!session.status.must_have_ids) session.status.must_have_ids = [];
-    if (!session.status.ng_ids) session.status.ng_ids = [];
-    if (!session.status.pending_ids) session.status.pending_ids = [];
-    if (!session.status.direction_map) session.status.direction_map = {};
-    const id = autoConfirmedIds[0];
 
-    // 他の配列から同一IDを除外
-    const removeId = (arr) => {
-      if (Array.isArray(arr)) {
-        const idx = arr.indexOf(id);
-        if (idx >= 0) arr.splice(idx, 1);
-      }
-    };
-    removeId(session.status.must_have_ids);
-    removeId(session.status.ng_ids);
-    removeId(session.status.pending_ids);
-
-    if (direction === "have") {
-      if (!session.status.must_have_ids.includes(id)) {
-        session.status.must_have_ids.push(id);
-      }
-    } else if (direction === "ng") {
-      if (!session.status.ng_ids.includes(id)) {
-        session.status.ng_ids.push(id);
-      }
+    // 方向性が確定した場合のみauto_confirmed_idsに含める
+    if (direction !== null) {
+      autoConfirmedIds = [matchedTag.id];
+      console.log(
+        `[STEP4 FAST] Auto-confirmed ID with direction: ${matchedTag.id} (${matchedTag.name}) → ${direction}`
+      );
     } else {
-      if (!session.status.pending_ids.includes(id)) {
-        session.status.pending_ids.push(id);
-      }
+      // 方向性が不明な場合はLLMに委ねる（auto_confirmed_idsに含めない）
+      console.log(
+        `[STEP4 FAST] Direction unclear for "${userText}". Deferring to LLM for direction_check.`
+      );
+      direction = null; // LLMに判断を委ねる
+      pendingDirectionTag = matchedTag; // 方向性確認が必要なタグを保存
     }
-    session.status.direction_map[String(id)] = direction;
-    autoDirectionMap[String(id)] = direction;
 
-    // ステータスバーは後で finalizeMustState で生成するため、ここでは更新しない
-    // （LLMの共感文生成後に更新）
+    // 方向性が確定した場合のみ、sessionのstatusを更新
+    if (direction !== null && autoConfirmedIds.length > 0) {
+      if (!session.status.must_have_ids) session.status.must_have_ids = [];
+      if (!session.status.ng_ids) session.status.ng_ids = [];
+      if (!session.status.pending_ids) session.status.pending_ids = [];
+      if (!session.status.direction_map) session.status.direction_map = {};
+      const id = autoConfirmedIds[0];
+
+      // 他の配列から同一IDを除外
+      const removeId = (arr) => {
+        if (Array.isArray(arr)) {
+          const idx = arr.indexOf(id);
+          if (idx >= 0) arr.splice(idx, 1);
+        }
+      };
+      removeId(session.status.must_have_ids);
+      removeId(session.status.ng_ids);
+      removeId(session.status.pending_ids);
+
+      if (direction === "have") {
+        if (!session.status.must_have_ids.includes(id)) {
+          session.status.must_have_ids.push(id);
+        }
+      } else if (direction === "ng") {
+        if (!session.status.ng_ids.includes(id)) {
+          session.status.ng_ids.push(id);
+        }
+      } else if (direction === "pending") {
+        if (!session.status.pending_ids.includes(id)) {
+          session.status.pending_ids.push(id);
+        }
+      }
+      session.status.direction_map[String(id)] = direction;
+      autoDirectionMap[String(id)] = direction;
+
+      // ステータスバーは後で finalizeMustState で生成するため、ここでは更新しない
+      // （LLMの共感文生成後に更新）
+    }
   } else if (directMatches.length > 1) {
     const uniqueLabels = Array.from(new Set(directMatches.map(tag => tag.name))).slice(0, 6);
     if (uniqueLabels.length > 1) {
@@ -2016,11 +2045,15 @@ async function handleStep4(session, userText) {
       const hasPositiveKeywords = /欲しい|いい|希望|理想|好き|したい|あってほしい/.test(combinedText);
 
       let question;
-      
+
       // ネガティブキーワードがある場合は方向性確認をスキップし、次の条件を聞く
       if (hasNegativeKeywords && !hasPositiveKeywords) {
         // 「嫌だ」「避けたい」等が明確な場合は方向性確認不要、次の条件を聞く
         question = "他に『ここだけは譲れない』って思う条件があったら教えてほしいな✨";
+      } else if (pendingDirectionTag) {
+        // 方向性が不明なタグがある場合、方向性を確認する質問を出す
+        const tagName = pendingDirectionTag.name || "それ";
+        question = `${tagName}は避けたい？それとも希望する条件かな？`;
       } else if (autoConfirmedIds.length > 0) {
         const needsDirection = autoConfirmedIds.some((id) => {
           const key = String(id);
