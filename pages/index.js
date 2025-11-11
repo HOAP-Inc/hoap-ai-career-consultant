@@ -12,6 +12,12 @@ const HOAP_ANIMATION_IMAGES = [
   "/14.png"
 ];
 
+// 考え中（・・・）専用の画像（スキップか11のどちらか）
+const HOAP_THINKING_IMAGES = [
+  "/hoap-skip.png",
+  "/11.png"
+];
+
 export default function Home() {
   // ← 最初は空配列でOK（ここは触らない）
   const [messages, setMessages] = useState([]);
@@ -317,29 +323,33 @@ setChoices(isChoiceStep(next) ? uniqueByNormalized(inline) : []);
   }, [step]);
 
   // アニメーション再生関数（メッセージ送受信時に呼び出す）
-  const playHoapAnimation = useCallback(() => {
+  // isThinking=true: 考え中（スキップか11）、false: 通常のランダム
+  const playHoapAnimation = useCallback((isThinking = false) => {
     // すでにアニメーション中なら多重実行を避ける
     if (revertTimerRef.current !== null) return;
+
+    // 画像配列の選択
+    const imageArray = isThinking ? HOAP_THINKING_IMAGES : HOAP_ANIMATION_IMAGES;
 
     // 1. basicからwideへ
     setHoapSrc("/hoap-wide.png");
 
-    // 2. 0.3秒後にランダム画像へ
+    // 2. 0.2秒後にランダム画像へ
     setTimeout(() => {
-      const randomImage = HOAP_ANIMATION_IMAGES[Math.floor(Math.random() * HOAP_ANIMATION_IMAGES.length)];
+      const randomImage = imageArray[Math.floor(Math.random() * imageArray.length)];
       setHoapSrc(randomImage);
 
-      // 3. 1.5秒後にwideへ
+      // 3. 2秒後にwideへ
       setTimeout(() => {
         setHoapSrc("/hoap-wide.png");
 
-        // 4. 0.3秒後にbasicに戻す
+        // 4. 0.2秒後にbasicに戻す（合計2400ms）
         revertTimerRef.current = setTimeout(() => {
           setHoapSrc("/hoap-basic.png");
           revertTimerRef.current = null;
-        }, 300);
-      }, 1500);
-    }, 300);
+        }, 200);
+      }, 2000);
+    }, 200);
   }, []);
 
   // AI応答の最初のセリフ表示時のみアニメーション
@@ -375,6 +385,13 @@ setChoices(isChoiceStep(next) ? uniqueByNormalized(inline) : []);
     // AI応答の最初のセリフ時のみアニメーション再生
     playHoapAnimation();
   }, [aiText, hoapSrc, playHoapAnimation]);
+
+  // 考え中（・・・）のアニメーション
+  useEffect(() => {
+    if (isTyping) {
+      playHoapAnimation(true); // 考え中用のアニメーション
+    }
+  }, [isTyping, playHoapAnimation]);
 
   // スマホのキーボード高さを CSS 変数 --kb に同期
   useEffect(() => {
@@ -416,15 +433,12 @@ setChoices(isChoiceStep(next) ? uniqueByNormalized(inline) : []);
 
     setSending(true);
 
-    // ユーザー送信時のアニメーション
-    playHoapAnimation();
-
     // ユーザー入力を即時反映
     const userText = text;
     setUserEcho(userText);
     if (forcedText == null) setInput('');
 
-    // タイピング開始
+    // タイピング開始（考え中アニメーションはuseEffectで発火）
     setIsTyping(true);
     clearMessageTimers();
     setAiText("");
@@ -601,7 +615,7 @@ setChoices(isChoiceStep(next) ? uniqueByNormalized(inline) : []);
               style={{
                 opacity: hoapSrc === '/hoap-basic.png' ? 1 : 0,
                 position: 'absolute',
-                transition: 'opacity 0.1s ease-in-out'
+                transition: 'opacity 0.05s linear'
               }}
             />
             <img
@@ -611,7 +625,7 @@ setChoices(isChoiceStep(next) ? uniqueByNormalized(inline) : []);
               style={{
                 opacity: hoapSrc === '/hoap-up.png' ? 1 : 0,
                 position: 'absolute',
-                transition: 'opacity 0.1s ease-in-out'
+                transition: 'opacity 0.05s linear'
               }}
             />
             <img
@@ -621,7 +635,7 @@ setChoices(isChoiceStep(next) ? uniqueByNormalized(inline) : []);
               style={{
                 opacity: hoapSrc === '/hoap-wide.png' ? 1 : 0,
                 position: 'absolute',
-                transition: 'opacity 0.1s ease-in-out'
+                transition: 'opacity 0.05s linear'
               }}
             />
             <img
@@ -631,7 +645,7 @@ setChoices(isChoiceStep(next) ? uniqueByNormalized(inline) : []);
               style={{
                 opacity: hoapSrc === '/hoap-skip.png' ? 1 : 0,
                 position: 'absolute',
-                transition: 'opacity 0.1s ease-in-out'
+                transition: 'opacity 0.05s linear'
               }}
             />
             <img
@@ -641,7 +655,7 @@ setChoices(isChoiceStep(next) ? uniqueByNormalized(inline) : []);
               style={{
                 opacity: hoapSrc === '/10.png' ? 1 : 0,
                 position: 'absolute',
-                transition: 'opacity 0.1s ease-in-out'
+                transition: 'opacity 0.05s linear'
               }}
             />
             <img
@@ -651,7 +665,7 @@ setChoices(isChoiceStep(next) ? uniqueByNormalized(inline) : []);
               style={{
                 opacity: hoapSrc === '/11.png' ? 1 : 0,
                 position: 'absolute',
-                transition: 'opacity 0.1s ease-in-out'
+                transition: 'opacity 0.05s linear'
               }}
             />
             <img
@@ -661,7 +675,7 @@ setChoices(isChoiceStep(next) ? uniqueByNormalized(inline) : []);
               style={{
                 opacity: hoapSrc === '/13.png' ? 1 : 0,
                 position: 'absolute',
-                transition: 'opacity 0.1s ease-in-out'
+                transition: 'opacity 0.05s linear'
               }}
             />
             <img
@@ -671,7 +685,7 @@ setChoices(isChoiceStep(next) ? uniqueByNormalized(inline) : []);
               style={{
                 opacity: hoapSrc === '/14.png' ? 1 : 0,
                 position: 'absolute',
-                transition: 'opacity 0.1s ease-in-out'
+                transition: 'opacity 0.05s linear'
               }}
             />
           </div>
