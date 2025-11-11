@@ -161,9 +161,6 @@ function getStatusRowDisplay(key, statusMeta = {}) {
   // ポーズを元に戻すタイマー保持
   const revertTimerRef = useRef(null);
 
-  // 定期アニメーションループ用タイマー
-  const animationLoopTimerRef = useRef(null);
-
   // 進捗バー（STEP1〜6の6段階）
   const MAX_STEP = 6;
   const progress = Math.min(100, Math.max(0, Math.round((Math.min(step, MAX_STEP) / MAX_STEP) * 100)));
@@ -316,55 +313,33 @@ setChoices(isChoiceStep(next) ? uniqueByNormalized(inline) : []);
     }
   }, [step]);
 
-  // 定期的なランダムアニメーションループ（適度な間隔で自然に動かす）
-  useEffect(() => {
-    const scheduleNextAnimation = () => {
-      // 8〜12秒のランダムな間隔で次のアニメーションをスケジュール
-      const nextDelay = 8000 + Math.random() * 4000;
+  // アニメーション再生関数（メッセージ送受信時に呼び出す）
+  const playHoapAnimation = useCallback(() => {
+    // すでにアニメーション中なら多重実行を避ける
+    if (revertTimerRef.current !== null) return;
 
-      animationLoopTimerRef.current = setTimeout(() => {
-        // イベント駆動のアニメーション中（revertTimerが動いている）場合はスキップ
-        if (revertTimerRef.current !== null) {
-          scheduleNextAnimation();
-          return;
-        }
+    // 1. basicからwideへ
+    setHoapSrc("/hoap-wide.png");
 
-        // 1. basicからwideへ
+    // 2. 0.3秒後にランダム画像へ
+    const timer1 = setTimeout(() => {
+      const randomImage = HOAP_ANIMATION_IMAGES[Math.floor(Math.random() * HOAP_ANIMATION_IMAGES.length)];
+      setHoapSrc(randomImage);
+
+      // 3. 1.5秒後にwideへ
+      const timer2 = setTimeout(() => {
         setHoapSrc("/hoap-wide.png");
 
-        // 2. 0.5秒後にランダム画像へ
-        setTimeout(() => {
-          const randomImage = HOAP_ANIMATION_IMAGES[Math.floor(Math.random() * HOAP_ANIMATION_IMAGES.length)];
-          setHoapSrc(randomImage);
-
-          // 3. 2秒後にwideへ
-          setTimeout(() => {
-            setHoapSrc("/hoap-wide.png");
-
-            // 4. 0.5秒後にbasicに戻す
-            setTimeout(() => {
-              setHoapSrc("/hoap-basic.png");
-              // 次のアニメーションをスケジュール
-              scheduleNextAnimation();
-            }, 500);
-          }, 2000);
-        }, 500);
-      }, nextDelay);
-    };
-
-    // 初回スケジュール
-    scheduleNextAnimation();
-
-    // クリーンアップ
-    return () => {
-      if (animationLoopTimerRef.current) {
-        clearTimeout(animationLoopTimerRef.current);
-        animationLoopTimerRef.current = null;
-      }
-    };
+        // 4. 0.3秒後にbasicに戻す
+        revertTimerRef.current = setTimeout(() => {
+          setHoapSrc("/hoap-basic.png");
+          revertTimerRef.current = null;
+        }, 300);
+      }, 1500);
+    }, 300);
   }, []);
 
-  // AI応答が更新されるたびに、ランダムで「手を広げる」を短時間表示
+  // AI応答が更新されるたびにアニメーション
   useEffect(() => {
     if (!aiText) return;
 
@@ -385,20 +360,9 @@ setChoices(isChoiceStep(next) ? uniqueByNormalized(inline) : []);
       return;
     }
 
-    // 33% くらいの確率で手を広げる
-    if (Math.random() < 0.33) {
-      if (revertTimerRef.current) {
-        clearTimeout(revertTimerRef.current);
-        revertTimerRef.current = null;
-      }
-      setHoapSrc("/hoap-wide.png");
-      revertTimerRef.current = setTimeout(() => {
-        // バンザイに上書きされていない場合のみ basic に戻す
-        setHoapSrc((cur) => (cur === "/hoap-up.png" ? cur : "/hoap-basic.png"));
-        revertTimerRef.current = null;
-      }, 1600);
-    }
-  }, [aiText, hoapSrc]);
+    // AI応答時は必ずアニメーション再生
+    playHoapAnimation();
+  }, [aiText, hoapSrc, playHoapAnimation]);
 
   // スマホのキーボード高さを CSS 変数 --kb に同期
   useEffect(() => {
@@ -439,6 +403,9 @@ setChoices(isChoiceStep(next) ? uniqueByNormalized(inline) : []);
     if (!text && step !== 6) return;
 
     setSending(true);
+
+    // ユーザー送信時のアニメーション
+    playHoapAnimation();
 
     // ユーザー入力を即時反映
     const userText = text;
@@ -622,7 +589,7 @@ setChoices(isChoiceStep(next) ? uniqueByNormalized(inline) : []);
               style={{
                 opacity: hoapSrc === '/hoap-basic.png' ? 1 : 0,
                 position: 'absolute',
-                transition: 'opacity 0.15s ease-in-out'
+                transition: 'opacity 0.1s ease-in-out'
               }}
             />
             <img
@@ -632,7 +599,7 @@ setChoices(isChoiceStep(next) ? uniqueByNormalized(inline) : []);
               style={{
                 opacity: hoapSrc === '/hoap-up.png' ? 1 : 0,
                 position: 'absolute',
-                transition: 'opacity 0.15s ease-in-out'
+                transition: 'opacity 0.1s ease-in-out'
               }}
             />
             <img
@@ -642,7 +609,7 @@ setChoices(isChoiceStep(next) ? uniqueByNormalized(inline) : []);
               style={{
                 opacity: hoapSrc === '/hoap-wide.png' ? 1 : 0,
                 position: 'absolute',
-                transition: 'opacity 0.15s ease-in-out'
+                transition: 'opacity 0.1s ease-in-out'
               }}
             />
             <img
@@ -652,7 +619,7 @@ setChoices(isChoiceStep(next) ? uniqueByNormalized(inline) : []);
               style={{
                 opacity: hoapSrc === '/hoap-skip.png' ? 1 : 0,
                 position: 'absolute',
-                transition: 'opacity 0.15s ease-in-out'
+                transition: 'opacity 0.1s ease-in-out'
               }}
             />
             <img
@@ -662,7 +629,7 @@ setChoices(isChoiceStep(next) ? uniqueByNormalized(inline) : []);
               style={{
                 opacity: hoapSrc === '/10.png' ? 1 : 0,
                 position: 'absolute',
-                transition: 'opacity 0.15s ease-in-out'
+                transition: 'opacity 0.1s ease-in-out'
               }}
             />
             <img
@@ -672,7 +639,7 @@ setChoices(isChoiceStep(next) ? uniqueByNormalized(inline) : []);
               style={{
                 opacity: hoapSrc === '/11.png' ? 1 : 0,
                 position: 'absolute',
-                transition: 'opacity 0.15s ease-in-out'
+                transition: 'opacity 0.1s ease-in-out'
               }}
             />
             <img
@@ -682,7 +649,7 @@ setChoices(isChoiceStep(next) ? uniqueByNormalized(inline) : []);
               style={{
                 opacity: hoapSrc === '/13.png' ? 1 : 0,
                 position: 'absolute',
-                transition: 'opacity 0.15s ease-in-out'
+                transition: 'opacity 0.1s ease-in-out'
               }}
             />
             <img
@@ -692,7 +659,7 @@ setChoices(isChoiceStep(next) ? uniqueByNormalized(inline) : []);
               style={{
                 opacity: hoapSrc === '/14.png' ? 1 : 0,
                 position: 'absolute',
-                transition: 'opacity 0.15s ease-in-out'
+                transition: 'opacity 0.1s ease-in-out'
               }}
             />
           </div>
