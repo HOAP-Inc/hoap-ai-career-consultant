@@ -51,7 +51,7 @@ function getStatusRowDisplay(key, statusMeta = {}) {
       if (typeof statusMeta.status_bar === "string" && statusMeta.status_bar.trim()) {
         return statusMeta.status_bar
           .split(",")
-          .map((entry) => entry.split("/")[0])
+          .map((entry) => entry.trim())
           .filter(Boolean)
           .join("、");
       }
@@ -576,36 +576,51 @@ setChoices(isChoiceStep(next) ? uniqueByNormalized(inline) : []);
 
       {/* ステータスバッジ（仮シート表示時は非表示） */}
       {!showSummary && (
-        <>
-          <div className="status-row">
-            {[
-              "資格",
-              "Can",
-              "Will",
-              "Must",
-              "私はこんな人",
-              "AIの分析",
-            ].map((k) => {
-              const displayValue = getStatusRowDisplay(k, statusMeta);
-              return (
-                <span key={k} className="badge">
-                  {k}：{displayValue}
-                </span>
-              );
-            })}
-          </div>
-
-          {/* ステータス進捗バー */}
-          {step <= 6 && (
-          <div className="status-progress">
-            <div
-              className="status-progress__inner"
-              style={{ width: `${progress}%` }}
-            />
-          </div>
-          )}
-        </>
+        <div className="status-row">
+          {[
+            "資格",
+            "Can",
+            "Will",
+            "Must",
+            "私はこんな人",
+            "AIの分析",
+          ].map((k) => {
+            const displayValue = getStatusRowDisplay(k, statusMeta);
+            return (
+              <span key={k} className="badge">
+                {k}：{displayValue}
+              </span>
+            );
+          })}
+        </div>
       )}
+
+      {/* ステータス進捗バー：STEP6で分析中の場合は専用表示 */}
+      {step === 6 && showSummary ? (
+        <div className="status-progress" style={{ position: 'relative' }}>
+          <div style={{
+            position: 'absolute',
+            top: '50%',
+            left: '50%',
+            transform: 'translate(-50%, -50%)',
+            fontSize: '14px',
+            fontWeight: 'bold',
+            color: '#ec4899',
+            zIndex: 1
+          }}>分析中...</div>
+          <div
+            className="status-progress__inner"
+            style={{ width: `${progress}%` }}
+          />
+        </div>
+      ) : step <= 6 ? (
+        <div className="status-progress">
+          <div
+            className="status-progress__inner"
+            style={{ width: `${progress}%` }}
+          />
+        </div>
+      ) : null}
 
       {/* キャリアの説明書（モーダル表示） - Instagram風 最高級UI */}
       {showSummary && summaryData && (
