@@ -596,7 +596,7 @@ setChoices(isChoiceStep(next) ? uniqueByNormalized(inline) : []);
           </div>
 
           {/* ステータス進捗バー */}
-          {step < 6 && (
+          {step <= 6 && (
           <div className="status-progress">
             <div
               className="status-progress__inner"
@@ -695,6 +695,15 @@ setChoices(isChoiceStep(next) ? uniqueByNormalized(inline) : []);
               </h2>
             </div>
 
+            <div className="summary-external-cta">
+              <p>
+                自分の経歴書代わりに使えるキャリアシートを作成したい人はこちらのボタンから無料作成してね！<br />
+                これまでの経歴や希望条件を入れたり、キャリアエージェントに相談もできるよ。
+              </p>
+              <button type="button" className="summary-external-cta__button">
+                無料でキャリアシートを作成する
+              </button>
+            </div>
             <div className="summary-html" dangerouslySetInnerHTML={{ __html: summaryData }} />
 
             {/* フッター */}

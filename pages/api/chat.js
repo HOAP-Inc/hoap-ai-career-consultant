@@ -1135,6 +1135,36 @@ function filterTagsByUserText(userText, tagsData) {
   return tagsData;
 }
 
+function rebuildStatusBar(session) {
+  if (!session?.status) return;
+  const {
+    direction_map: directionMap = {},
+    must_have_ids: mustIds = [],
+    ng_ids: ngIds = [],
+    pending_ids: pendingIds = [],
+  } = session.status;
+
+  const entries = new Map();
+
+  const register = (rawId, fallback) => {
+    if (rawId == null) return;
+    const key = String(rawId);
+    const direction = directionMap[key] || fallback || "pending";
+    entries.set(key, `ID:${key}/${direction}`);
+  };
+
+  mustIds.forEach((id) => register(id, "have"));
+  ngIds.forEach((id) => register(id, "ng"));
+  pendingIds.forEach((id) => register(id, "pending"));
+
+  Object.entries(directionMap || {}).forEach(([id, dir]) => {
+    if (!["have", "ng", "pending"].includes(dir)) return;
+    entries.set(String(id), `ID:${id}/${dir}`);
+  });
+
+  session.status.status_bar = Array.from(entries.values()).join(",");
+}
+
 function applyMustStatus(session, status, meta) {
   session.status.must_have_ids = Array.isArray(status?.must_ids) ? status.must_ids : [];
   session.status.ng_ids = Array.isArray(status?.ng_ids) ? status.ng_ids : [];
@@ -1148,6 +1178,7 @@ function applyMustStatus(session, status, meta) {
       session.meta.deepening_attempt_total = total;
     }
   }
+  rebuildStatusBar(session);
 }
 
 function sanitizeStep4Empathy(userText, responseText) {
@@ -1278,6 +1309,7 @@ function ensureAutoConfirmedIds(session, autoConfirmedIds, autoDirections) {
   }
 
   session.status.status_bar = Array.from(statusBarParts).join(",");
+  rebuildStatusBar(session);
 }
 
 function buildStep4BridgeMessage(empathyMessage, confirmMessage) {
@@ -1303,8 +1335,8 @@ function buildStep4BridgeMessage(empathyMessage, confirmMessage) {
     }
     bridgeLine = `ありがとう！${bridgeLine}`;
   }
-  parts.push(bridgeLine);
-  parts.push(STEP_INTRO_QUESTIONS[5]);
+  const combinedLine = `${bridgeLine}\n${STEP_INTRO_QUESTIONS[5]}`;
+  parts.push(combinedLine);
   return parts.filter(Boolean).join("\n\n");
 }
 
@@ -1790,7 +1822,6 @@ async function handleStep4(session, userText) {
     // LLM から帰ってきた譲れない条件をセッションへ適用
     applyMustStatus(session, parsed.status, parsed.meta || {});
     ensureAutoConfirmedIds(session, autoConfirmedIds, autoDirectionMap);
-    ensureAutoConfirmedIds(session, autoConfirmedIds, autoDirectionMap);
     
     // ID化が行われていない場合、強制的にID化を試みる
     const hasMustIds = Array.isArray(session.status.must_have_ids) && session.status.must_have_ids.length > 0;
@@ -1812,33 +1843,6 @@ async function handleStep4(session, userText) {
         session.status.ng_ids = [];
         session.status.pending_ids = [];
           session.status.status_bar = "";
-      }
-    }
-    
-    // status_barが空の場合、must_have_idsまたはng_idsから生成
-    if (!session.status.status_bar || session.status.status_bar.trim() === "") {
-      const statusBarParts = [];
-      if (Array.isArray(session.status.must_have_ids) && session.status.must_have_ids.length > 0) {
-        const directionMap = session.status.direction_map || {};
-        session.status.must_have_ids.forEach(id => {
-          const direction = directionMap[String(id)] || "have";
-          statusBarParts.push(`ID:${id}/${direction}`);
-        });
-      }
-      if (Array.isArray(session.status.ng_ids) && session.status.ng_ids.length > 0) {
-        const directionMap = session.status.direction_map || {};
-        session.status.ng_ids.forEach(id => {
-          const direction = directionMap[String(id)] || "ng";
-          statusBarParts.push(`ID:${id}/${direction}`);
-        });
-      }
-      if (Array.isArray(session.status.pending_ids) && session.status.pending_ids.length > 0) {
-        session.status.pending_ids.forEach(id => {
-          statusBarParts.push(`ID:${id}/pending`);
-        });
-      }
-      if (statusBarParts.length > 0) {
-        session.status.status_bar = statusBarParts.join(",");
       }
     }
     
@@ -1920,6 +1924,32 @@ async function handleStep4(session, userText) {
 
   // 通常の会話フェーズ（empathy, candidate_extraction, direction_check, deepening など）
   if (parsed?.control?.phase) {
+    if (parsed.control.phase === "empathy") {
+      const directionMap = session.status.direction_map || {};
+      const pendingDirectionIds = (session.status.pending_ids || []).filter((id) => {
+        const dir = directionMap[String(id)];
+        return !dir || dir === "pending";
+      });
+      if (pendingDirectionIds.length > 0) {
+        const labels = pendingDirectionIds
+          .map((id) => TAG_NAME_BY_ID.get(Number(id)) || `ID:${id}`)
+          .filter(Boolean);
+        const directionPrompt = labels.length
+          ? `「${labels.join("」「")}」については『絶対あってほしい』？それとも『なくてOK』？どちらか教えてほしいな。`
+          : "今の条件は『絶対あってほしい』か『なくてOK』か、どちらで考えているか教えてほしいな。";
+        return {
+          response: directionPrompt,
+          status: session.status,
+          meta: {
+            step: 4,
+            phase: "direction_check",
+            deepening_count: session.meta.step4_deepening_count || 0,
+          },
+          drill: session.drill,
+        };
+      }
+    }
+
     let responseText = sanitizeEmpathyOutput(parsed.response || "");
 
     // 【安全装置1】empathyフェーズの場合、共感だけでなく質問も追加
@@ -2408,7 +2438,17 @@ async function handleStep6(session, userText) {
     }
   }
 
-  const strengthBody = strengthParts
+  const uniqueStrengthParts = [];
+  const seenStrengthHashes = new Set();
+  for (const paragraph of strengthParts) {
+    if (!paragraph) continue;
+    const hash = paragraph.replace(/\s+/g, "");
+    if (seenStrengthHashes.has(hash)) continue;
+    seenStrengthHashes.add(hash);
+    uniqueStrengthParts.push(paragraph);
+  }
+
+  const strengthBody = uniqueStrengthParts
     .map((paragraph) => escapeHtml(paragraph).replace(/\n/g, "<br />"))
     .join("<br /><br />");
 
@@ -2460,10 +2500,6 @@ async function handleStep6(session, userText) {
     <header class="summary-header">
       <h2><span>${escapeHtml(displayName)}さんの</span>キャリア分析シート</h2>
       <p>今のあなたの強みと大切にしたい価値観を、読みやすくまとめたよ。</p>
-      <div class="summary-header__cta">
-        <p>履歴書代わりの本格シートを作りたい人は、ここから無料登録してみてね！</p>
-        <button type="button" class="choice-btn summary-header__button">無料で登録する</button>
-      </div>
     </header>
   `;
 
@@ -2480,7 +2516,7 @@ async function handleStep6(session, userText) {
     </div>
   `.trim();
 
-  session.status.ai_analysis = strengthParts.join("\n\n").trim();
+  session.status.ai_analysis = uniqueStrengthParts.join("\n\n").trim();
 
   const finalMessage = [
     `${displayName}さん、ここまでたくさん話してくれて本当にありがとう！`,
