@@ -1413,35 +1413,83 @@ function ensurePoliteEnding(sentence) {
   base = base.replace(/[！!？?]+$/g, "").replace(/[。]+$/g, "");
   if (!base) return "";
 
-  const politePattern = /(です|ます|でした|でした|でした|でした|でした|でした|できます|できました|ません|たいです|でしょう|ください|てきました|っています|ています|ってます|っていました|ていました|てきた|てきます)$/;
+  // 既に敬体で終わっている場合はそのまま返す
+  const politePattern = /(です|ます|でした|ました|できます|できました|ません|たいです|でしょう|ください|てきました|っています|ています|ってます|っていました|ていました|いきます|られます|られました)$/;
   if (politePattern.test(base)) {
     return `${base}。`;
   }
+
+  // 「ている」系の変換
   if (/ている$/.test(base)) {
     return `${base.replace(/ている$/, "ています")}。`;
   }
   if (/っている$/.test(base)) {
     return `${base.replace(/っている$/, "っています")}。`;
   }
+  if (/でいる$/.test(base)) {
+    return `${base.replace(/でいる$/, "でいます")}。`;
+  }
+
+  // 「ていく」「ていきたい」系の変換
+  if (/ていきたい$/.test(base)) {
+    return `${base.replace(/ていきたい$/, "ていきたいです")}。`;
+  }
   if (/ていく$/.test(base)) {
     return `${base.replace(/ていく$/, "ていきます")}。`;
   }
+
+  // 「〜たい」系の変換
+  if (/たい$/.test(base)) {
+    return `${base.replace(/たい$/, "たいです")}。`;
+  }
+
+  // 動詞の終止形（五段動詞・上一段・下一段）の変換
+  // 五段動詞：う列で終わる → いますに変換
+  if (/[うくぐすつぬぶむゆる]$/.test(base)) {
+    const lastChar = base.slice(-1);
+    const stem = base.slice(0, -1);
+    const masu = {
+      'う': 'います', 'く': 'きます', 'ぐ': 'ぎます', 'す': 'します',
+      'つ': 'ちます', 'ぬ': 'にます', 'ぶ': 'びます', 'む': 'みます',
+      'る': 'ります'
+    };
+    if (masu[lastChar]) {
+      return `${stem}${masu[lastChar]}。`;
+    }
+  }
+
+  // 「する」系の変換
   if (/する$/.test(base)) {
     return `${base.replace(/する$/, "します")}。`;
   }
+
+  // 過去形の変換
   if (/した$/.test(base)) {
     return `${base.replace(/した$/, "しました")}。`;
   }
+  if (/[いきぎしちにびみり]た$/.test(base)) {
+    return `${base.replace(/た$/, "ました")}。`;
+  }
+  if (/[んだ]だ$/.test(base)) {
+    return `${base.replace(/だ$/, "でした")}。`;
+  }
+
+  // 「である」「だ」の変換
   if (/である$/.test(base)) {
     return `${base.replace(/である$/, "です")}。`;
   }
   if (/だ$/.test(base)) {
     return `${base.replace(/だ$/, "です")}。`;
   }
+
+  // 「ない」系の変換
   if (/ない$/.test(base)) {
-    return `${base.replace(/ない$/, "ありません")}。`;
+    return `${base.replace(/ない$/, "ません")}。`;
   }
-  return `${base}です。`;
+
+  // どのパターンにも当てはまらない場合は、そのまま句点を付ける
+  // （「です」を無理に付けない）
+  return `${base}。`;
 }
 
 function polishSummaryText(text, maxSentences = 3) {
@@ -1667,62 +1715,91 @@ async function handleStep4(session, userText) {
   }
   let autoConfirmedIds = [];
   const autoDirectionMap = {};
+  let pendingDirectionTag = null; // 方向性が不明なタグを保存
 
   if (directMatches.length === 1) {
-    autoConfirmedIds = directMatches.map(tag => tag.id);
+    const matchedTag = directMatches[0];
     console.log(
-      `[STEP4 FAST] Auto-confirmed ID: ${autoConfirmedIds[0]} (${directMatches[0].name})`
+      `[STEP4 FAST] Direct ID match found: ${matchedTag.id} (${matchedTag.name})`
     );
+
     // 方向性を判定（have/ng/pending を決める）
     const normalized = userText.replace(/\s+/g, "");
-    let direction = "have";
+    let direction = null; // デフォルトをnullに変更（不明な場合はLLMに委ねる）
+
+    // 否定パターン（明確にngと判断できる場合のみ）
     const negPattern = /(絶対|まったく|全然|全く|完全)\s*(なし|避け|NG|いや|いやだ|無理|したくない)/;
-    const posPattern = /(絶対|必ず|どうしても)\s*(ほしい|欲しい|必要|あってほしい)/;
-    const neutralPattern = /(あれば|できれば|できたら|なくても|なくて)/;
-    if (negPattern.test(normalized) || /(なし|困る|避けたい|無理|いや|いやだ|遠慮|拒否)/.test(normalized)) {
+    const negKeywords = /(なし|困る|避けたい|無理|いや|いやだ|遠慮|拒否|嫌|苦手)/;
+
+    // 肯定パターン（明確にhaveと判断できる場合のみ）
+    const posPattern = /(絶対|必ず|どうしても|ぜひ)\s*(ほしい|欲しい|必要|あってほしい|したい)/;
+    const posKeywords = /(ほしい|欲しい|必要|希望|理想|重視|大事|重要|働きたい|やりたい|興味|魅力)/;
+
+    // 保留パターン
+    const neutralPattern = /(あれば|できれば|できたら|なくても|なくて|どちらでも)/;
+    const flexiblePattern = /(多少|ちょっと|少し|月\d+時間|20時間|二十時間)/;
+
+    if (negPattern.test(normalized) || negKeywords.test(normalized)) {
       direction = "ng";
-    } else if (posPattern.test(normalized)) {
+    } else if (posPattern.test(normalized) || posKeywords.test(normalized)) {
       direction = "have";
-    } else if (neutralPattern.test(normalized)) {
-      direction = "pending";
-    } else if (/(多少|ちょっと|少し|月\d+時間|20時間|二十時間)/.test(normalized)) {
+    } else if (neutralPattern.test(normalized) || flexiblePattern.test(normalized)) {
       direction = "pending";
     }
-    if (!session.status.must_have_ids) session.status.must_have_ids = [];
-    if (!session.status.ng_ids) session.status.ng_ids = [];
-    if (!session.status.pending_ids) session.status.pending_ids = [];
-    if (!session.status.direction_map) session.status.direction_map = {};
-    const id = autoConfirmedIds[0];
 
-    // 他の配列から同一IDを除外
-    const removeId = (arr) => {
-      if (Array.isArray(arr)) {
-        const idx = arr.indexOf(id);
-        if (idx >= 0) arr.splice(idx, 1);
-      }
-    };
-    removeId(session.status.must_have_ids);
-    removeId(session.status.ng_ids);
-    removeId(session.status.pending_ids);
-
-    if (direction === "have") {
-      if (!session.status.must_have_ids.includes(id)) {
-        session.status.must_have_ids.push(id);
-      }
-    } else if (direction === "ng") {
-      if (!session.status.ng_ids.includes(id)) {
-        session.status.ng_ids.push(id);
-      }
+    // 方向性が確定した場合のみauto_confirmed_idsに含める
+    if (direction !== null) {
+      autoConfirmedIds = [matchedTag.id];
+      console.log(
+        `[STEP4 FAST] Auto-confirmed ID with direction: ${matchedTag.id} (${matchedTag.name}) → ${direction}`
+      );
     } else {
-      if (!session.status.pending_ids.includes(id)) {
-        session.status.pending_ids.push(id);
-      }
+      // 方向性が不明な場合はLLMに委ねる（auto_confirmed_idsに含めない）
+      console.log(
+        `[STEP4 FAST] Direction unclear for "${userText}". Deferring to LLM for direction_check.`
+      );
+      direction = null; // LLMに判断を委ねる
+      pendingDirectionTag = matchedTag; // 方向性確認が必要なタグを保存
     }
-    session.status.direction_map[String(id)] = direction;
-    autoDirectionMap[String(id)] = direction;
 
-    // ステータスバーは後で finalizeMustState で生成するため、ここでは更新しない
-    // （LLMの共感文生成後に更新）
+    // 方向性が確定した場合のみ、sessionのstatusを更新
+    if (direction !== null && autoConfirmedIds.length > 0) {
+      if (!session.status.must_have_ids) session.status.must_have_ids = [];
+      if (!session.status.ng_ids) session.status.ng_ids = [];
+      if (!session.status.pending_ids) session.status.pending_ids = [];
+      if (!session.status.direction_map) session.status.direction_map = {};
+      const id = autoConfirmedIds[0];
+
+      // 他の配列から同一IDを除外
+      const removeId = (arr) => {
+        if (Array.isArray(arr)) {
+          const idx = arr.indexOf(id);
+          if (idx >= 0) arr.splice(idx, 1);
+        }
+      };
+      removeId(session.status.must_have_ids);
+      removeId(session.status.ng_ids);
+      removeId(session.status.pending_ids);
+
+      if (direction === "have") {
+        if (!session.status.must_have_ids.includes(id)) {
+          session.status.must_have_ids.push(id);
+        }
+      } else if (direction === "ng") {
+        if (!session.status.ng_ids.includes(id)) {
+          session.status.ng_ids.push(id);
+        }
+      } else if (direction === "pending") {
+        if (!session.status.pending_ids.includes(id)) {
+          session.status.pending_ids.push(id);
+        }
+      }
+      session.status.direction_map[String(id)] = direction;
+      autoDirectionMap[String(id)] = direction;
+
+      // ステータスバーは後で finalizeMustState で生成するため、ここでは更新しない
+      // （LLMの共感文生成後に更新）
+    }
   } else if (directMatches.length > 1) {
     const uniqueLabels = Array.from(new Set(directMatches.map(tag => tag.name))).slice(0, 6);
     if (uniqueLabels.length > 1) {
@@ -2016,11 +2093,15 @@ async function handleStep4(session, userText) {
       const hasPositiveKeywords = /欲しい|いい|希望|理想|好き|したい|あってほしい/.test(combinedText);
 
       let question;
-      
+
       // ネガティブキーワードがある場合は方向性確認をスキップし、次の条件を聞く
       if (hasNegativeKeywords && !hasPositiveKeywords) {
         // 「嫌だ」「避けたい」等が明確な場合は方向性確認不要、次の条件を聞く
         question = "他に『ここだけは譲れない』って思う条件があったら教えてほしいな✨";
+      } else if (pendingDirectionTag) {
+        // 方向性が不明なタグがある場合、方向性を確認する質問を出す
+        const tagName = pendingDirectionTag.name || "それ";
+        question = `${tagName}は避けたい？それとも希望する条件かな？`;
       } else if (autoConfirmedIds.length > 0) {
         const needsDirection = autoConfirmedIds.some((id) => {
           const key = String(id);
@@ -2539,20 +2620,27 @@ async function handleStep6(session, userText) {
     </section>
   `;
 
-  const headerHtml = `
-    <header class="summary-header" style="text-align: center; margin-bottom: 32px;">
-      <p class="summary-header__badge" style="margin: 0; font-size: 13px; letter-spacing: 0.12em; font-weight: 600; color: #94a3b8; text-transform: uppercase;">Your Unique Career Profile</p>
-      <div style="border: 2px solid transparent; background-image: linear-gradient(white, white), linear-gradient(135deg, #F09433 0%, #E6683C 25%, #DC2743 50%, #CC2366 75%, #BC1888 100%); background-origin: border-box; background-clip: padding-box, border-box; padding: 16px; border-radius: 12px; margin-top: 16px;">
-        <p style="background: linear-gradient(135deg, #F09433 0%, #E6683C 25%, #DC2743 50%, #CC2366 75%, #BC1888 100%); -webkit-background-clip: text; background-clip: text; color: transparent; font-weight: bold; margin: 0 0 12px 0; font-size: 14px;">自分の経歴書代わりに使えるキャリアシートを作成したい人はこちらのボタンから無料作成してね！これまでの経歴や希望条件を入れたり、キャリアエージェントに相談もできるよ。</p>
+  const ctaHtml = `
+    <div style="text-align: center; margin-bottom: 24px;">
+      <div style="border: 2px solid transparent; background-image: linear-gradient(white, white), linear-gradient(135deg, #F09433 0%, #E6683C 25%, #DC2743 50%, #CC2366 75%, #BC1888 100%); background-origin: border-box; background-clip: padding-box, border-box; padding: 16px; border-radius: 12px;">
+        <p style="color: #000; font-weight: bold; margin: 0 0 12px 0; font-size: 14px;">自分の経歴書代わりに使えるキャリアシートを作成したい人はこちらのボタンから無料作成してね！これまでの経歴や希望条件を入れたり、キャリアエージェントに相談もできるよ。</p>
         <button type="button" class="summary-floating-cta__button" style="background: linear-gradient(135deg, #F09433 0%, #E6683C 25%, #DC2743 50%, #CC2366 75%, #BC1888 100%); color: white; border: none; padding: 12px 24px; border-radius: 8px; font-weight: bold; cursor: pointer; width: 100%;">無料で作成する</button>
       </div>
-      <h2 style="margin: 24px 0 8px; font-size: clamp(24px, 5vw, 36px); font-weight: 900;"><span>${escapeHtml(displayName)}さんの</span><span style="background: linear-gradient(135deg, #F09433 0%, #E6683C 25%, #DC2743 50%, #CC2366 75%, #BC1888 100%); -webkit-background-clip: text; background-clip: text; color: transparent; font-weight: 900;">キャリア分析シート</span></h2>
+    </div>
+  `;
+
+  const sheetHeaderHtml = `
+    <div style="text-align: center; margin-bottom: 24px;">
+      <h2 style="margin: 0 0 8px 0; font-size: clamp(24px, 5vw, 36px); font-weight: 900;">
+        <span>${escapeHtml(displayName)}さんの</span><span style="background: linear-gradient(135deg, #F09433 0%, #E6683C 25%, #DC2743 50%, #CC2366 75%, #BC1888 100%); -webkit-background-clip: text; background-clip: text; color: transparent; font-weight: 900;">キャリア分析シート</span>
+      </h2>
       <p style="margin: 0; font-size: 14px; color: #64748b;">あなたのキャリアにおける強みと価値観をAIが分析してまとめたよ。</p>
-    </header>
+    </div>
   `;
 
   const summaryReportHtml = `
     <div class="summary-report">
+      ${sheetHeaderHtml}
       <div class="summary-report__grid">
         ${hearingHtml}
         <div class="summary-report__analysis">
@@ -2564,7 +2652,7 @@ async function handleStep6(session, userText) {
   `.trim();
 
   const summaryData = `
-    ${headerHtml}
+    ${ctaHtml}
     ${summaryReportHtml}
   `.trim();
 
