@@ -1218,6 +1218,39 @@ function sanitizeEmpathyOutput(text) {
   return sanitized;
 }
 
+function finalizeMustState(session) {
+  if (!session || !session.status) return;
+  const status = session.status;
+  if (!status.direction_map || typeof status.direction_map !== "object") {
+    status.direction_map = {};
+  }
+  const dir = status.direction_map;
+
+  const register = (ids, direction) => {
+    if (!Array.isArray(ids)) return;
+    ids.forEach((id) => {
+      dir[String(id)] = direction;
+    });
+  };
+
+  register(status.must_have_ids, "have");
+  register(status.ng_ids, "ng");
+  register(status.pending_ids, "pending");
+
+  const parts = [];
+  if (Array.isArray(status.must_have_ids)) {
+    status.must_have_ids.forEach((id) => parts.push(`ID:${id}/have`));
+  }
+  if (Array.isArray(status.ng_ids)) {
+    status.ng_ids.forEach((id) => parts.push(`ID:${id}/ng`));
+  }
+  if (Array.isArray(status.pending_ids)) {
+    status.pending_ids.forEach((id) => parts.push(`ID:${id}/pending`));
+  }
+
+  status.status_bar = parts.join(",");
+}
+
 function stripQuestionSentences(text) {
   if (!text) return "";
   const raw = String(text);
@@ -1252,12 +1285,6 @@ function ensureAutoConfirmedIds(session, autoConfirmedIds, autoDirections) {
     session.status.direction_map = {};
   }
 
-  const statusBarParts = new Set(
-    typeof session.status.status_bar === "string" && session.status.status_bar.trim()
-      ? session.status.status_bar.split(",").map((s) => s.trim()).filter(Boolean)
-      : []
-  );
-
   for (const id of autoConfirmedIds) {
     const direction = autoDirections[String(id)] || "have";
     if (direction === "have") {
@@ -1274,13 +1301,12 @@ function ensureAutoConfirmedIds(session, autoConfirmedIds, autoDirections) {
       session.status.ng_ids = session.status.ng_ids.filter((value) => value !== id);
     }
     session.status.direction_map[String(id)] = direction;
-    statusBarParts.add(`ID:${id}/${direction}`);
   }
 
-  session.status.status_bar = Array.from(statusBarParts).join(",");
+  finalizeMustState(session);
 }
 
-function buildStep4BridgeMessage(empathyMessage, confirmMessage) {
+function buildStep4BridgeMessage(empathyMessage, confirmMessage, nextMessage) {
   const parts = [];
   const trimmedEmpathy = empathyMessage && empathyMessage.trim();
   let trimmedConfirm = confirmMessage && confirmMessage.trim();
@@ -1303,8 +1329,15 @@ function buildStep4BridgeMessage(empathyMessage, confirmMessage) {
     }
     bridgeLine = `ありがとう！${bridgeLine}`;
   }
-  parts.push(bridgeLine);
-  parts.push(STEP_INTRO_QUESTIONS[5]);
+  const bridgeSegments = [];
+  if (trimmedConfirm) {
+    bridgeSegments.push(trimmedConfirm);
+  }
+  bridgeSegments.push(bridgeLine);
+  const step5Intro = (nextMessage && String(nextMessage).trim()) || STEP_INTRO_QUESTIONS[5];
+  const finalBlock = `${bridgeSegments.join(" ")}\n${step5Intro}`.trim();
+
+  parts.push(finalBlock);
   return parts.filter(Boolean).join("\n\n");
 }
 
@@ -1508,6 +1541,66 @@ function smoothAnalysisText(text) {
   // 先頭が句読点で始まる場合は削除
   result = result.replace(/^[、。．．]/, "");
   return enforcePoliteTone(result.trim());
+}
+
+function getLatestUserText(session, step) {
+  if (!session?.history) return "";
+  for (let i = session.history.length - 1; i >= 0; i -= 1) {
+    const item = session.history[i];
+    if (item && item.role === "user" && item.step === step && item.text) {
+      return String(item.text);
+    }
+  }
+  return "";
+}
+
+function deriveAnchorText(rawText) {
+  if (!rawText) return "";
+  const normalized = String(rawText)
+    .replace(/\s+/g, " ")
+    .replace(/[、]+$/g, "")
+    .trim();
+  if (!normalized) return "";
+
+  const sentences = normalized
+    .split(/(?<=[。！？!?\n])/)
+    .map((s) => s.replace(/[。！？!?\n]/g, "").trim())
+    .filter((s) => s.length >= 4);
+
+  const candidate = sentences.length ? sentences[sentences.length - 1] : normalized;
+  const cleanCandidate = candidate.replace(/[。！？!?\n]+$/g, "").trim();
+  if (!cleanCandidate) return "";
+  if (cleanCandidate.length <= 26) return cleanCandidate;
+  return cleanCandidate.slice(-26);
+}
+
+function refineStep5Question(session, question) {
+  let result = String(question || "").trim();
+  if (!result) return result;
+
+  const hasQuestionMark = /[？?]$/.test(result);
+  const lastUserText = getLatestUserText(session, 5);
+  const anchor = deriveAnchorText(lastUserText);
+
+  const ambiguousPatterns = [
+    /いつも/,
+    /どんな場面/,
+    /どんな感じ/,
+    /どう感じる/,
+    /何かある/,
+    /どんなとき/,
+    /^それって/,
+  ];
+
+  if (anchor && ambiguousPatterns.some((p) => p.test(result))) {
+    result = `${anchor}と感じたとき、具体的にどんな状況だった？`;
+  }
+
+  if (!hasQuestionMark) {
+    result = result.replace(/[。]+$/g, "").trim();
+    result = `${result}？`;
+  }
+  return result;
 }
 
 async function handleStep4(session, userText) {
@@ -1745,6 +1838,7 @@ async function handleStep4(session, userText) {
       applyMustStatus(session, genLLM.parsed.status, genLLM.parsed.meta || {});
       ensureAutoConfirmedIds(session, autoConfirmedIds, autoDirectionMap);
       ensureAutoConfirmedIds(session, autoConfirmedIds, autoDirectionMap);
+      finalizeMustState(session);
     }
     
     // ID化できなかった場合でも、ユーザー発話をそのまま保存（内部用語は使わない）
@@ -1763,19 +1857,15 @@ async function handleStep4(session, userText) {
       session.status.must_have_ids = [];
     }
 
+    finalizeMustState(session);
+
     session.step = 5;
     session.stage.turnIndex = 0;
     session.meta.step4_deepening_count = 0;
 
     const step5Response = await handleStep5(session, "");
-    const step5Message = step5Response.response || "";
-    const bridgeSegments = [];
-    if (!/^ありがとう/.test(step5Message || "")) {
-      bridgeSegments.push("ありがとう！");
-    }
-    bridgeSegments.push("では最後の質問だよ！");
-    const bridgeLine = bridgeSegments.join(" ");
-    const bridgeMessage = [bridgeLine, step5Message].filter(Boolean).join("\n\n");
+    const step5Message = step5Response.response || STEP_INTRO_QUESTIONS[5];
+    const bridgeMessage = buildStep4BridgeMessage("", "", step5Message);
     // must_textは表示せず、STEP5の質問のみを返す（LLMの不要な発話を防ぐ）
     return {
       response: bridgeMessage,
@@ -1791,6 +1881,7 @@ async function handleStep4(session, userText) {
     applyMustStatus(session, parsed.status, parsed.meta || {});
     ensureAutoConfirmedIds(session, autoConfirmedIds, autoDirectionMap);
     ensureAutoConfirmedIds(session, autoConfirmedIds, autoDirectionMap);
+    finalizeMustState(session);
     
     // ID化が行われていない場合、強制的にID化を試みる
     const hasMustIds = Array.isArray(session.status.must_have_ids) && session.status.must_have_ids.length > 0;
@@ -1811,7 +1902,7 @@ async function handleStep4(session, userText) {
         session.status.must_have_ids = [];
         session.status.ng_ids = [];
         session.status.pending_ids = [];
-          session.status.status_bar = "";
+        finalizeMustState(session);
       }
     }
     
@@ -1841,6 +1932,7 @@ async function handleStep4(session, userText) {
         session.status.status_bar = statusBarParts.join(",");
       }
     }
+    finalizeMustState(session);
     
     // 次のステップは LLM の meta から決定（デフォルトは 5）
     // STEP4では meta.step は 5 または 6 のみが有効
@@ -1888,7 +1980,7 @@ async function handleStep4(session, userText) {
 
         const empathyMessage = sanitizeStep4Empathy(userText, parsed.response || "");
         // 共感 → 確認 → STEP5の質問を結合（重複「ありがとう」を防止）
-        const combinedResponse = buildStep4BridgeMessage(empathyMessage, confirmMessage);
+        const combinedResponse = buildStep4BridgeMessage(empathyMessage, confirmMessage, STEP_INTRO_QUESTIONS[5]);
         return {
           response: combinedResponse,
           status: session.status,
@@ -2232,6 +2324,7 @@ async function handleStep5(session, userText) {
     }
 
     const cleanEmpathy = sanitizeEmpathyOutput(stripQuestionSentences(empathy || ""));
+    const refinedAsk = refineStep5Question(session, ask_next);
 
     if (nextStep !== session.step) {
       // STEP6へ移行
@@ -2260,7 +2353,7 @@ async function handleStep5(session, userText) {
     }
 
     // 通常の会話フェーズ（empathy と ask_next を \n\n で結合）
-    const message = [cleanEmpathy, ask_next].filter(Boolean).join("\n\n") || cleanEmpathy || "ありがとう。もう少し教えて。";
+    const message = [cleanEmpathy, refinedAsk].filter(Boolean).join("\n\n") || cleanEmpathy || "ありがとう。もう少し教えて。";
     return {
       response: message,
       status: session.status,
@@ -2458,16 +2551,13 @@ async function handleStep6(session, userText) {
 
   const headerHtml = `
     <header class="summary-header">
+      <p class="summary-header__badge">Your Unique Career Profile</p>
       <h2><span>${escapeHtml(displayName)}さんの</span>キャリア分析シート</h2>
       <p>今のあなたの強みと大切にしたい価値観を、読みやすくまとめたよ。</p>
-      <div class="summary-header__cta">
-        <p>履歴書代わりの本格シートを作りたい人は、ここから無料登録してみてね！</p>
-        <button type="button" class="choice-btn summary-header__button">無料で登録する</button>
-      </div>
     </header>
   `;
 
-  const summaryData = `
+  const summaryReportHtml = `
     <div class="summary-report">
       ${headerHtml}
       <div class="summary-report__grid">
@@ -2478,6 +2568,18 @@ async function handleStep6(session, userText) {
         </div>
       </div>
     </div>
+  `.trim();
+
+  const floatingCtaHtml = `
+    <div class="summary-floating-cta">
+      <p>自分の経歴書代わりに使えるキャリアシートを作成したい人はこちらのボタンから無料作成してね！これまでの経歴や希望条件を入れたり、キャリアエージェントに相談もできるよ。</p>
+      <button type="button" class="summary-floating-cta__button">無料で作成する</button>
+    </div>
+  `;
+
+  const summaryData = `
+    ${summaryReportHtml}
+    ${floatingCtaHtml}
   `.trim();
 
   session.status.ai_analysis = strengthParts.join("\n\n").trim();

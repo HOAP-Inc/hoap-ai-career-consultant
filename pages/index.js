@@ -596,7 +596,7 @@ setChoices(isChoiceStep(next) ? uniqueByNormalized(inline) : []);
           </div>
 
           {/* ステータス進捗バー */}
-          {step < 6 && (
+          {step <= 6 && (
           <div className="status-progress">
             <div
               className="status-progress__inner"
