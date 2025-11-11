@@ -3,8 +3,10 @@ import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from
 
 // basic以外のアニメーション用画像（ランダムに使用）
 // hoap-up.pngは「ありがとう！」専用のため除外
+// hoap-wide.pngもランダム選択に含める
 const HOAP_ANIMATION_IMAGES = [
   "/hoap-skip.png",
+  "/hoap-wide.png",
   "/10.png",
   "/11.png",
   "/12.png",
@@ -330,20 +332,15 @@ setChoices(isChoiceStep(next) ? uniqueByNormalized(inline) : []);
           return;
         }
 
-        // ランダムに画像を選択
+        // ランダムに画像を選択（wideも含まれる）
         const randomImage = HOAP_ANIMATION_IMAGES[Math.floor(Math.random() * HOAP_ANIMATION_IMAGES.length)];
         setHoapSrc(randomImage);
 
-        // 2秒後にwideを表示
+        // 2秒後にbasicに戻す（wideクッションを削除）
         setTimeout(() => {
-          setHoapSrc("/hoap-wide.png");
-
-          // 0.5秒後にbasicに戻す
-          setTimeout(() => {
-            setHoapSrc("/hoap-basic.png");
-            // 次のアニメーションをスケジュール
-            scheduleNextAnimation();
-          }, 500);
+          setHoapSrc("/hoap-basic.png");
+          // 次のアニメーションをスケジュール
+          scheduleNextAnimation();
         }, 2000);
       }, nextDelay);
     };
@@ -360,7 +357,7 @@ setChoices(isChoiceStep(next) ? uniqueByNormalized(inline) : []);
     };
   }, []);
 
-  // AI応答が更新されるたびに、ランダムで「手を広げる」を短時間表示
+  // AI応答が更新されるたびに、ランダムでアニメーション表示
   useEffect(() => {
     if (!aiText) return;
 
@@ -381,13 +378,15 @@ setChoices(isChoiceStep(next) ? uniqueByNormalized(inline) : []);
       return;
     }
 
-    // 33% くらいの確率で手を広げる
+    // 33% くらいの確率でランダム画像を表示（wideも含む）
     if (Math.random() < 0.33) {
       if (revertTimerRef.current) {
         clearTimeout(revertTimerRef.current);
         revertTimerRef.current = null;
       }
-      setHoapSrc("/hoap-wide.png");
+      // ランダムに画像を選択（wideも含まれる）
+      const randomImage = HOAP_ANIMATION_IMAGES[Math.floor(Math.random() * HOAP_ANIMATION_IMAGES.length)];
+      setHoapSrc(randomImage);
       revertTimerRef.current = setTimeout(() => {
         // バンザイに上書きされていない場合のみ basic に戻す
         setHoapSrc((cur) => (cur === "/hoap-up.png" ? cur : "/hoap-basic.png"));

@@ -1244,34 +1244,20 @@ function finalizeMustState(session) {
   register(status.pending_ids, "pending");
 
   const parts = [];
+  // ステータスバーはIDと方向性のみを表示（タグ名は表示しない）
   if (Array.isArray(status.must_have_ids)) {
     status.must_have_ids.forEach((id) => {
-      const tagName = TAG_NAME_BY_ID.get(Number(id));
-      if (tagName) {
-        parts.push(`have:${tagName}(ID:${id})`);
-      } else {
-        parts.push(`have:ID:${id}`);
-      }
+      parts.push(`have:${id}`);
     });
   }
   if (Array.isArray(status.ng_ids)) {
     status.ng_ids.forEach((id) => {
-      const tagName = TAG_NAME_BY_ID.get(Number(id));
-      if (tagName) {
-        parts.push(`ng:${tagName}(ID:${id})`);
-      } else {
-        parts.push(`ng:ID:${id}`);
-      }
+      parts.push(`ng:${id}`);
     });
   }
   if (Array.isArray(status.pending_ids)) {
     status.pending_ids.forEach((id) => {
-      const tagName = TAG_NAME_BY_ID.get(Number(id));
-      if (tagName) {
-        parts.push(`pending:${tagName}(ID:${id})`);
-      } else {
-        parts.push(`pending:ID:${id}`);
-      }
+      parts.push(`pending:${id}`);
     });
   }
 
@@ -1813,20 +1799,85 @@ async function handleStep4(session, userText) {
       // （LLMの共感文生成後に更新）
     }
   } else if (directMatches.length > 1) {
-    const uniqueLabels = Array.from(new Set(directMatches.map(tag => tag.name))).slice(0, 6);
-    if (uniqueLabels.length > 1) {
-      session.drill.phase = "step4_tag_choice";
-      session.drill.awaitingChoice = true;
-      session.drill.options = uniqueLabels;
-      console.log(
-        `[STEP4 FAST] Presenting direct match options: ${uniqueLabels.join(", ")}`
-      );
-      return {
-        response: `どれが一番近い？『${formatOptions(uniqueLabels)}』`,
-        status: session.status,
-        meta: { step: 4, phase: "choice" },
-        drill: session.drill,
-      };
+    // 複数のタグがマッチした場合、全て方向性が判定できるかチェック
+    const normalized = userText.replace(/\s+/g, "");
+
+    // 否定パターン（明確にngと判断できる場合のみ）
+    const negPattern = /(絶対|まったく|全然|全く|完全)\s*(なし|避け|NG|いや|いやだ|無理|したくない)/;
+    const negKeywords = /(なし|困る|避けたい|無理|いや|いやだ|遠慮|拒否|嫌|苦手)/;
+
+    // 肯定パターン（明確にhaveと判断できる場合のみ）
+    const posPattern = /(絶対|必ず|どうしても|ぜひ)\s*(ほしい|欲しい|必要|あってほしい|したい)/;
+    const posKeywords = /(ほしい|欲しい|必要|希望|理想|重視|大事|重要|働きたい|やりたい|興味|魅力)/;
+
+    let commonDirection = null;
+    if (negPattern.test(normalized) || negKeywords.test(normalized)) {
+      commonDirection = "ng";
+    } else if (posPattern.test(normalized) || posKeywords.test(normalized)) {
+      commonDirection = "have";
+    }
+
+    // 全て同じ方向性で判定できる場合は、選択肢を出さずに全て登録
+    if (commonDirection !== null) {
+      console.log(`[STEP4 FAST] Multiple matches with clear direction: ${directMatches.map(t => t.name).join(", ")} → ${commonDirection}`);
+
+      // 全てのマッチを登録
+      if (!session.status.must_have_ids) session.status.must_have_ids = [];
+      if (!session.status.ng_ids) session.status.ng_ids = [];
+      if (!session.status.pending_ids) session.status.pending_ids = [];
+      if (!session.status.direction_map) session.status.direction_map = {};
+
+      const registeredIds = [];
+      for (const tag of directMatches) {
+        const id = tag.id;
+
+        // 他の配列から同一IDを除外
+        const removeId = (arr) => {
+          if (Array.isArray(arr)) {
+            const idx = arr.indexOf(id);
+            if (idx >= 0) arr.splice(idx, 1);
+          }
+        };
+        removeId(session.status.must_have_ids);
+        removeId(session.status.ng_ids);
+        removeId(session.status.pending_ids);
+
+        if (commonDirection === "have") {
+          if (!session.status.must_have_ids.includes(id)) {
+            session.status.must_have_ids.push(id);
+          }
+        } else if (commonDirection === "ng") {
+          if (!session.status.ng_ids.includes(id)) {
+            session.status.ng_ids.push(id);
+          }
+        }
+        session.status.direction_map[String(id)] = commonDirection;
+        registeredIds.push(id);
+      }
+
+      autoConfirmedIds = registeredIds;
+      for (const id of registeredIds) {
+        autoDirectionMap[String(id)] = commonDirection;
+      }
+
+      // LLMで共感文を生成（選択肢は出さない）
+    } else {
+      // 方向性が不明な場合のみ選択肢を表示
+      const uniqueLabels = Array.from(new Set(directMatches.map(tag => tag.name))).slice(0, 6);
+      if (uniqueLabels.length > 1) {
+        session.drill.phase = "step4_tag_choice";
+        session.drill.awaitingChoice = true;
+        session.drill.options = uniqueLabels;
+        console.log(
+          `[STEP4 FAST] Presenting direct match options: ${uniqueLabels.join(", ")}`
+        );
+        return {
+          response: `どれが一番近い？『${formatOptions(uniqueLabels)}』`,
+          status: session.status,
+          meta: { step: 4, phase: "choice" },
+          drill: session.drill,
+        };
+      }
     }
   }
 
@@ -2567,7 +2618,7 @@ async function handleStep6(session, userText) {
     ? session.status.will_texts.join("／")
     : session.status.will_text || "";
   if (willSummary) {
-    hearingCards.push({ title: "Will（やりたいこと）", body: willSummary });
+    hearingCards.push({ title: "Will（これからやりたいこと）", body: willSummary });
     }
 
   const mustSummary = formatMustSummary(session);
