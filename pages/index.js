@@ -322,12 +322,12 @@ setChoices(isChoiceStep(next) ? uniqueByNormalized(inline) : []);
     setHoapSrc("/hoap-wide.png");
 
     // 2. 0.3秒後にランダム画像へ
-    const timer1 = setTimeout(() => {
+    setTimeout(() => {
       const randomImage = HOAP_ANIMATION_IMAGES[Math.floor(Math.random() * HOAP_ANIMATION_IMAGES.length)];
       setHoapSrc(randomImage);
 
       // 3. 1.5秒後にwideへ
-      const timer2 = setTimeout(() => {
+      setTimeout(() => {
         setHoapSrc("/hoap-wide.png");
 
         // 4. 0.3秒後にbasicに戻す
