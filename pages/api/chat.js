@@ -790,6 +790,8 @@ async function handleStep2(session, userText) {
 
 
 async function handleStep3(session, userText) {
+  console.log(`[STEP3] Entered handleStep3. session.step=${session.step}, userText="${userText?.slice(0, 50)}"`);
+
   // userTextがある場合のみturnIndexをインクリメント（STEP遷移時はインクリメントしない）
   if (userText && userText.trim()) {
     session.stage.turnIndex += 1;
@@ -797,15 +799,18 @@ async function handleStep3(session, userText) {
   const payload = buildStepPayload(session, userText, 5);
   const llm = await callLLM(3, payload, session, { model: "gpt-4o" });
   if (!llm.ok) {
+    console.error(`[STEP3 ERROR] LLM call failed: ${llm.error}`);
     return buildSchemaError(3, session, "あなたの「これから挑戦したいこと」の生成でエラーが発生したよ。少し時間を置いてみてね。", llm.error);
   }
   const parsed = llm.parsed || {};
+  console.log(`[STEP3] LLM response parsed. phase=${parsed?.control?.phase}, meta.step=${parsed?.meta?.step}`);
 
   // intro フェーズ（初回質問）
   if (parsed?.control?.phase === "intro") {
     // deepening_countをリセット
     if (!session.meta) session.meta = {};
     session.meta.step3_deepening_count = 0;
+    console.log(`[STEP3] Returning intro phase response, step=3`);
     return {
       response: parsed.response || "これから挑戦してみたいことや、やってみたい仕事を教えて！まったくやったことがないものでも大丈夫。ちょっと気になってることでもOKだよ✨",
       status: session.status,
@@ -939,6 +944,7 @@ async function handleStep3(session, userText) {
     };
   }
 
+  console.log(`[STEP3] Fallback: No matching phase found, returning default prompt with step=3`);
   return {
     response: "これから挑戦したいことについて、もう少し具体的に教えてほしい。短くで良いから、やってみたいことの概要を教えて。",
     status: session.status,
@@ -2833,6 +2839,8 @@ async function handler(req, res) {
       if (proposedStep < beforeStep) {
         console.error(`[HANDLER ERROR] Attempted to go backwards: ${beforeStep} -> ${proposedStep}. REJECTING step change.`);
         // ステップ変更を拒否して現在のステップを維持
+        // 【重要】result.meta.stepも現在のステップに修正してフロントエンドとの同期を保つ
+        result.meta.step = beforeStep;
       } else {
         session.step = proposedStep;
         if (beforeStep !== session.step) {
