@@ -26,10 +26,10 @@ const LLM_BRAKE_PROMPT = safeRead(path.join(PROMPTS_DIR, "llm_brake_system.txt")
 
 // 各STEPの初回質問（プロンプトファイルから抽出）
 const STEP_INTRO_QUESTIONS = {
-  2: "次は、仕事中に自然にやってることを教えて！患者さん（利用者さん）と接するとき、無意識にやってることでもOKだよ✨",
+  2: "これまでどんな職場でどんなことをしてきた？これまで経験してきたあなたの得意なことやこれからも活かしたいことも一緒に教えてね！",
   3: "次は、今の職場ではできないけど、やってみたいことを教えて！『これができたらいいな』って思うことでOKだよ✨",
   4: "次は、働きたい事業形態や労働条件を教えて！たとえば『クリニックがいい』『夜勤は避けたい』みたいな感じでOKだよ✨",
-  5: "最後に、仕事以外の話を聞かせて！友達や家族に『あなたってこういう人だよね』って言われることって、ある？😊",
+  5: "自分で自分ってどんなタイプの人間だと思う？周りからこんな人って言われる、っていうのでもいいよ！",
 };
 
 function loadJson(fileName) {
@@ -2642,14 +2642,14 @@ async function handleStep6(session, userText) {
   const ctaHtml = `
     <div style="text-align: center; margin-bottom: 24px;">
       <p style="color: #000; font-weight: 600; margin: 0 0 16px 0; font-size: 14px;">自分の経歴書代わりに使えるキャリアシートを作成したい人はこちらのボタンから無料作成してね！これまでの経歴や希望条件を入れたり、キャリアエージェントに相談もできるよ。</p>
-      <button type="button" class="choice-btn" style="min-width: 200px; padding: 14px 28px; font-size: 16px;">無料で作成する</button>
+      <button type="button" class="choice-btn" style="width: auto; padding: 14px 28px; font-size: 16px;">無料で作成する</button>
     </div>
   `;
 
   const sheetHeaderHtml = `
     <div style="text-align: center; margin-bottom: 24px;">
-      <h2 style="margin: 0 0 8px 0; font-size: clamp(24px, 5vw, 36px); font-weight: 900;">
-        <span>${escapeHtml(displayName)}さんの</span><span style="background: linear-gradient(135deg, #F09433 0%, #E6683C 25%, #DC2743 50%, #CC2366 75%, #BC1888 100%); -webkit-background-clip: text; background-clip: text; color: transparent; font-weight: 900;">キャリア分析シート</span>
+      <h2 style="margin: 0 0 8px 0; font-size: clamp(24px, 5vw, 36px); font-weight: 900; background: linear-gradient(135deg, #F09433 0%, #E6683C 25%, #DC2743 50%, #CC2366 75%, #BC1888 100%); -webkit-background-clip: text; background-clip: text; color: transparent;">
+        ${escapeHtml(displayName)}さんのキャリア分析シート
       </h2>
       <p style="margin: 0; font-size: 14px; color: #64748b;">あなたのキャリアにおける強みと価値観をAIが分析してまとめたよ。</p>
     </div>
