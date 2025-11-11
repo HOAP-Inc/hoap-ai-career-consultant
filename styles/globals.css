@@ -538,6 +538,7 @@ html, body, #__next { height: 100%; }
   filter: drop-shadow(0 6px 18px rgba(0,0,0,.28));
   transform-origin: 50% 85%;
   animation: hoapSway 3.8s ease-in-out infinite;
+  transition: opacity 0.2s ease-in-out;
 }
 @keyframes hoapSway{
   0%,100%{ transform: rotate(0deg) translateY(0px) }

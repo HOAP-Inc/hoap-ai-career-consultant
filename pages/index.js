@@ -330,21 +330,26 @@ setChoices(isChoiceStep(next) ? uniqueByNormalized(inline) : []);
           return;
         }
 
-        // ランダムに画像を選択
-        const randomImage = HOAP_ANIMATION_IMAGES[Math.floor(Math.random() * HOAP_ANIMATION_IMAGES.length)];
-        setHoapSrc(randomImage);
+        // 1. basicからwideへ
+        setHoapSrc("/hoap-wide.png");
 
-        // 2秒後にwideを表示
+        // 2. 0.5秒後にランダム画像へ
         setTimeout(() => {
-          setHoapSrc("/hoap-wide.png");
+          const randomImage = HOAP_ANIMATION_IMAGES[Math.floor(Math.random() * HOAP_ANIMATION_IMAGES.length)];
+          setHoapSrc(randomImage);
 
-          // 0.5秒後にbasicに戻す
+          // 3. 2秒後にwideへ
           setTimeout(() => {
-            setHoapSrc("/hoap-basic.png");
-            // 次のアニメーションをスケジュール
-            scheduleNextAnimation();
-          }, 500);
-        }, 2000);
+            setHoapSrc("/hoap-wide.png");
+
+            // 4. 0.5秒後にbasicに戻す
+            setTimeout(() => {
+              setHoapSrc("/hoap-basic.png");
+              // 次のアニメーションをスケジュール
+              scheduleNextAnimation();
+            }, 500);
+          }, 2000);
+        }, 500);
       }, nextDelay);
     };
 
