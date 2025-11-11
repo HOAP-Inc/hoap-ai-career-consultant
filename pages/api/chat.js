@@ -2310,7 +2310,7 @@ async function handleStep5(session, userText) {
     return {
       response:
         parsed.response ||
-        "最後に、仕事抜きであなた自身のことを教えて！友達や家族に『あなたってこういう人だよね』って言われることってある？😊",
+        "自分で自分ってどんなタイプの人間だと思う？周りからこんな人って言われる、っていうのでもいいよ！",
       status: session.status,
       meta: { step: 5 },
       drill: session.drill,
