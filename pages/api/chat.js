@@ -1262,16 +1262,20 @@ function buildStep4BridgeMessage(empathyMessage, confirmMessage) {
   if (trimmedConfirm && /^ありがとう/.test(trimmedConfirm)) {
     trimmedConfirm = trimmedConfirm.replace(/^ありがとう[！!。]*/, "").trim();
   }
-  if (trimmedEmpathy) parts.push(trimmedEmpathy);
-  if (trimmedConfirm) parts.push(trimmedConfirm);
-
-  const combined = [trimmedEmpathy, trimmedConfirm].filter(Boolean).join("");
-  const bridgeSegments = [];
-  if (!/ありがとう/.test(combined || "")) {
-    bridgeSegments.push("ありがとう！");
+  if (trimmedEmpathy) {
+    parts.push(trimmedEmpathy);
   }
-  bridgeSegments.push("では最後の質問だよ！");
-  parts.push(bridgeSegments.join(" "));
+
+  let bridgeLine = trimmedConfirm || "最後の質問だよ！";
+  bridgeLine = bridgeLine.replace(/問題/g, "質問");
+  bridgeLine = bridgeLine.replace(/^[！!。]+/, "");
+  if (!bridgeLine.startsWith("ありがとう")) {
+    if (!/^では/.test(bridgeLine)) {
+      bridgeLine = `では${bridgeLine}`;
+    }
+    bridgeLine = `ありがとう！${bridgeLine}`;
+  }
+  parts.push(bridgeLine);
   parts.push(STEP_INTRO_QUESTIONS[5]);
   return parts.filter(Boolean).join("\n\n");
 }
@@ -1408,7 +1412,7 @@ async function handleStep4(session, userText) {
     session.meta.step4_intro_shown = true;
     console.log("[STEP4] Showing intro question for the first time.");
     return {
-      response: "働く上で『ここだけは譲れないな』って思うこと、ある？職場の雰囲気でも働き方でもOKだよ✨",
+      response: "働きたい事業形態や労働条件を教えて！たとえば『クリニックで働きたい』『夜勤は避けたい』みたいな感じでOKだよ✨",
       status: session.status,
       meta: { step: 4, phase: "intro", deepening_count: 0 },
       drill: session.drill,
@@ -2100,18 +2104,11 @@ async function handleStep5(session, userText) {
       }
       const step6Msg = step6Response.response || "";
       if (step6Msg.trim()) {
-        if (step6Msg.startsWith("ありがとう")) {
-          step6Parts.push(step6Msg);
-        } else {
-          step6Parts.push("ありがとう！");
-          step6Parts.push(step6Msg);
-        }
-      } else {
-        step6Parts.push("ありがとう！");
+        step6Parts.push(step6Msg);
       }
       const combinedResponse = step6Parts.filter(Boolean).join("\n\n");
       return {
-        response: combinedResponse || step6Response.response,
+        response: combinedResponse || step6Response.response || "ありがとう！",
         status: session.status,
         meta: step6Response.meta || { step: session.step },
         drill: step6Response.drill,
@@ -2136,22 +2133,44 @@ async function handleStep5(session, userText) {
   };
 }
 
-async function handleStep6(session, _userText) {
-  // STEP6ではLLMを使ってDoing（行動・実践）とBeing（価値観・関わり方）を生成
+async function handleStep6(session, userText) {
   console.log("[STEP6] ===== START =====");
+  if (!session.meta) session.meta = {};
+
+  const incomingText = typeof userText === "string" ? userText.trim() : "";
+  if (session.meta.step6_user_name && incomingText) {
+    session.stage.turnIndex += 1;
+  }
+
+  if (!session.meta.step6_user_name) {
+    if (!incomingText) {
+      return {
+        response: "分析に使うあなたの名前を教えてね！フルネームじゃなくてもOKだよ✨",
+        status: session.status,
+        meta: { step: 6, phase: "ask_name" },
+        drill: session.drill,
+      };
+    }
+    const sanitizedName = incomingText.replace(/\s+/g, " ").slice(0, 20);
+    session.meta.step6_user_name = sanitizedName;
+    session.status.user_name = sanitizedName;
+    session.stage.turnIndex = 0;
+    console.log("[STEP6] Captured user name:", sanitizedName);
+  }
+
+  const displayName = session.meta.step6_user_name || "あなた";
   console.log("[STEP6] can_text:", session.status.can_text);
   console.log("[STEP6] will_text:", session.status.will_text);
   console.log("[STEP6] must_text:", session.status.must_text);
   console.log("[STEP6] self_text:", session.status.self_text);
-  console.log("[STEP6] Generating Doing and Being using LLM.");
-  
-  // STEP6は最終ステップなので、stepは6のまま
+  console.log("[STEP6] Generating Strength / Doing / Being using LLM.");
+
   session.step = 6;
   session.stage.turnIndex = 0;
 
-  // LLMにCan/Will/Must/Selfの情報を渡してDoing/Beingを生成
   const payload = {
     locale: "ja",
+    user_name: session.meta.step6_user_name || "",
     can_text: session.status.can_text || "",
     can_texts: session.status.can_texts || [],
     will_text: session.status.will_text || "",
@@ -2159,6 +2178,7 @@ async function handleStep6(session, _userText) {
     must_text: session.status.must_text || "",
     self_text: session.status.self_text || "",
     status: {
+      user_name: session.meta.step6_user_name || "",
       can_text: session.status.can_text,
       will_text: session.status.will_text,
       must_text: session.status.must_text,
@@ -2166,7 +2186,6 @@ async function handleStep6(session, _userText) {
     },
   };
 
-  // GPT-4oを使用してDoing/Beingを生成
   const llmResult = await callLLM(6, payload, session, { model: "gpt-4o" });
 
   if (
@@ -2175,7 +2194,6 @@ async function handleStep6(session, _userText) {
     llmResult.parsed?.status?.doing_text &&
     llmResult.parsed?.status?.being_text
   ) {
-    // LLM生成成功
     session.status.strength_text = smoothAnalysisText(llmResult.parsed.status.strength_text);
     session.status.doing_text = smoothAnalysisText(llmResult.parsed.status.doing_text);
     session.status.being_text = smoothAnalysisText(llmResult.parsed.status.being_text);
@@ -2183,7 +2201,6 @@ async function handleStep6(session, _userText) {
     console.log("[STEP6] LLM generated Doing:", session.status.doing_text);
     console.log("[STEP6] LLM generated Being:", session.status.being_text);
   } else {
-    // LLM失敗時のフォールバック
     console.warn("[STEP6 WARNING] LLM generation failed. Using fallback.");
     const fallbackStrength =
       session.status.can_text ||
@@ -2193,10 +2210,15 @@ async function handleStep6(session, _userText) {
     session.status.strength_text = smoothAnalysisText(fallbackStrength);
     session.status.doing_text = smoothAnalysisText(session.status.can_text || "行動・実践について伺いました。");
     session.status.being_text = smoothAnalysisText(session.status.self_text || "価値観・関わり方について伺いました。");
+    if (session.meta.step6_user_name) {
+      const namePrefix = `${displayName}さんは`;
+      if (session.status.strength_text && !session.status.strength_text.includes(displayName)) {
+        session.status.strength_text = `${namePrefix}${session.status.strength_text.replace(/^(さん?は|は)/, "")}`;
+      }
+    }
   }
 
   const hearingCards = [];
-
   if (Array.isArray(session.status.qual_ids) && session.status.qual_ids.length > 0) {
     const qualNames = session.status.qual_ids
       .map((id) => QUAL_NAME_BY_ID.get(Number(id)))
@@ -2230,64 +2252,26 @@ async function handleStep6(session, _userText) {
 
   const selfSummary = session.status.self_text || "";
 
-  const aiAnalysisEntries = [];
-  if (session.status.strength_text) {
-    aiAnalysisEntries.push({
-      key: "strength",
-      title: "あなたの強み",
-      body: session.status.strength_text,
-    });
-  }
-  if (session.status.doing_text) {
-    aiAnalysisEntries.push({
-      key: "doing",
-      title: "Doing（行動・実践）",
-      body: session.status.doing_text,
-    });
-  }
-  if (session.status.being_text) {
-    aiAnalysisEntries.push({
-      key: "being",
-      title: "Being（価値観・関わり方）",
-      body: session.status.being_text,
-    });
-  }
-  const aiAnalysisTextCombined = aiAnalysisEntries.map((entry) => entry.body).join("\n\n").trim();
-  session.status.ai_analysis = aiAnalysisTextCombined;
+  const strengthParts = [];
+  if (session.status.strength_text) strengthParts.push(session.status.strength_text);
+  if (session.status.doing_text) strengthParts.push(session.status.doing_text);
+  if (session.status.being_text) strengthParts.push(session.status.being_text);
 
-  const heroHtml = `
-    <section class="summary-hero">
-      <div class="summary-hero__intro">
-        <span class="summary-hero__badge">🧭 CAREER SNAPSHOT</span>
-        <h2 class="summary-hero__title">あなたのキャリアレポート</h2>
-        <p class="summary-hero__lead">
-          これまでのヒアリングで見えてきた強みと価値観を、コンパクトにまとめたよ。大切にしたいことを一緒に確認してみよう！
-        </p>
-      </div>
-      <div class="summary-hero__steps">
-        ${[
-          { step: "STEP 1", title: "ヒアリング完了", desc: "Can / Will / Must をあなたの言葉で整理しました。" },
-          { step: "STEP 2", title: "自己分析", desc: "「私はこんな人」を一緒に言語化しました。" },
-          { step: "STEP 3", title: "AI分析", desc: "強み・行動・価値観を俯瞰してまとめました。" },
-        ]
-          .map(
-            (card) => `
-          <div class="summary-step-card">
-            <span class="summary-step-card__badge">${card.step}</span>
-            <h3>${card.title}</h3>
-            <p>${card.desc}</p>
-          </div>
-        `
-          )
-          .join("")}
-      </div>
-    </section>
-  `;
+  if (strengthParts.length && session.meta.step6_user_name) {
+    const first = strengthParts[0] || "";
+    if (!first.includes(displayName)) {
+      strengthParts[0] = `${displayName}さんは${first.replace(/^(さん?は|は)/, "")}`;
+    }
+  }
+
+  const strengthBody = strengthParts
+    .map((paragraph) => escapeHtml(paragraph).replace(/\n/g, "<br />"))
+    .join("<br /><br />");
 
   const hearingHtml = `
-    <section class="summary-section summary-section--hearing">
-      <h3 class="summary-section__title">📌 ヒアリングメモ</h3>
-      <p class="summary-section__note">あなたが話してくれた言葉を、そのままの温度感でメモしています。</p>
+    <section class="summary-panel summary-panel--hearing">
+      <h3>📝 ヒアリングメモ</h3>
+      <p class="summary-panel__note">これまで伺った情報をそのままの言葉で整理しています。</p>
       <div class="summary-pill-grid">
         ${
           hearingCards.length
@@ -2313,73 +2297,59 @@ async function handleStep6(session, _userText) {
   `;
 
   const selfHtml = `
-    <section class="summary-section summary-section--self">
-      <h3 class="summary-section__title">🌱 自己分析（あなたの言葉）</h3>
-      <article class="summary-card summary-card--self">
-        <p>${selfSummary ? escapeHtml(selfSummary).replace(/\n/g, "<br />") : "未入力"}</p>
-      </article>
+    <section class="summary-panel summary-panel--self">
+      <h3>🌱 私はこんな人（自己分析）</h3>
+      <p>${selfSummary ? escapeHtml(selfSummary).replace(/\n/g, "<br />") : "未入力"}</p>
     </section>
   `;
 
-  const aiAnalysisCardsHtml = aiAnalysisEntries.length
-    ? aiAnalysisEntries
-        .map(
-          (entry) => `
-        <article class="summary-card summary-card--ai summary-card--ai-${entry.key}">
-          <h4>${escapeHtml(entry.title)}</h4>
-          <p>${escapeHtml(entry.body).replace(/\n/g, "<br />")}</p>
-        </article>
-      `
-        )
-        .join("")
-    : `
-      <article class="summary-card summary-card--ai summary-card--empty">
-        <h4>AIの分析</h4>
-        <p>今回のヒアリングではAI分析がまだ生成されていません。</p>
-      </article>
-    `;
-
-  const aiHtml = `
-    <section class="summary-section summary-section--analysis">
-      <h3 class="summary-section__title">🔍 AI分析レポート</h3>
-      <p class="summary-section__note">AI視点で整理した「強み」「行動」「価値観」をチェックしてみてね。</p>
-      <div class="summary-ai-grid">
-        ${aiAnalysisCardsHtml}
+  const strengthHtml = `
+    <section class="summary-panel summary-panel--strength">
+      <h3>🌟 あなたの強み（AI分析）</h3>
+      <div class="summary-strength__body">
+        <p>${strengthBody || "強みについて伺いました。"}</p>
       </div>
     </section>
   `;
 
   const ctaHtml = `
-    <section class="summary-section summary-section--cta">
-      <div class="summary-cta">
-        <div class="summary-cta__text">
-          <h3>🚀 もっと詳しいキャリアシートを作成しよう</h3>
-          <p>
-            履歴書代わりになる詳細なシートを作りたい人は、ここから無料登録してね！<br />
-            これまでの経歴を入力したり、今回の内容をもとにキャリア相談もできるよ✨
-          </p>
-        </div>
-        <button type="button" class="summary-cta__button choice-btn">無料で登録する</button>
+    <section class="summary-cta">
+      <div class="summary-cta__text">
+        <h3>🚀 詳細なキャリアシートも作成できます</h3>
+        <p>
+          履歴書代わりになる詳細なシートを作りたい人は下記から無料登録に進んでね！<br />
+          これまでの経歴を入力したり、今回の内容を元にキャリア相談ができるよ✨
+        </p>
       </div>
+      <button type="button" class="summary-cta__button choice-btn">無料で登録する</button>
     </section>
   `;
 
+  const headerHtml = `
+    <header class="summary-header">
+      <h2><span>${escapeHtml(displayName)}さんの</span>キャリア分析シート</h2>
+      <p>今のあなたの強みと大切にしたい価値観を、読みやすくまとめたよ。</p>
+    </header>
+  `;
+
   const summaryData = `
-    <div class="summary-diagnostic">
-      ${heroHtml}
-      <div class="summary-diagnostic__body">
+    <div class="summary-report">
+      ${headerHtml}
+      <div class="summary-report__grid">
         ${hearingHtml}
-        <div class="summary-columns">
+        <div class="summary-report__analysis">
           ${selfHtml}
-          ${aiHtml}
+          ${strengthHtml}
         </div>
-        ${ctaHtml}
       </div>
+      ${ctaHtml}
     </div>
   `.trim();
 
+  session.status.ai_analysis = strengthParts.join("\n\n").trim();
+
   const finalMessage = [
-    "ここまでたくさん話してくれて本当にありがとう！",
+    `${displayName}さん、ここまでたくさん話してくれて本当にありがとう！`,
     "このあと『ヒアリング内容』と『分析』をまとめたシートを開くね。",
     "まずはあなたの言葉を振り返ってみて、次にAIからの分析もチェックしてみて！",
     "レポートを表示するまで数秒だけ待っててね✨"
@@ -2390,7 +2360,7 @@ async function handleStep6(session, _userText) {
     status: session.status,
     meta: {
       step: session.step,
-      show_summary_after_delay: 5000, // 5秒後に表示（吹き出しを読む時間を確保）
+      show_summary_after_delay: 5000,
       summary_data: summaryData || "キャリアの説明書を作成しました。",
     },
     drill: session.drill,
