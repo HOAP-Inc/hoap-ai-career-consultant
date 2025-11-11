@@ -2,9 +2,8 @@ import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from
 /* eslint-disable @next/next/no-img-element */
 
 // basic以外のアニメーション用画像（ランダムに使用）
+// hoap-up.pngは「ありがとう！」専用のため除外
 const HOAP_ANIMATION_IMAGES = [
-  "/hoap-up.png",
-  "/hoap-wide.png",
   "/hoap-skip.png",
   "/hoap-10.png",
   "/hoap-11.png",
@@ -169,6 +168,26 @@ function getStatusRowDisplay(key, statusMeta = {}) {
   const MAX_STEP = 6;
   const progress = Math.min(100, Math.max(0, Math.round((Math.min(step, MAX_STEP) / MAX_STEP) * 100)));
 
+  // 画像のプリロード（画像が消える問題を防ぐ）
+  useEffect(() => {
+    const imagesToPreload = [
+      "/hoap-basic.png",
+      "/hoap-up.png",
+      "/hoap-wide.png",
+      "/hoap-skip.png",
+      "/hoap-10.png",
+      "/hoap-11.png",
+      "/hoap-12.png",
+      "/hoap-13.png",
+      "/hoap-14.png"
+    ];
+
+    imagesToPreload.forEach((src) => {
+      const img = new Image();
+      img.src = src;
+    });
+  }, []);
+
   // セッションがリセットされたらフラグも戻す
   useEffect(() => {
     if (step <= 1) {
@@ -315,11 +334,16 @@ setChoices(isChoiceStep(next) ? uniqueByNormalized(inline) : []);
         const randomImage = HOAP_ANIMATION_IMAGES[Math.floor(Math.random() * HOAP_ANIMATION_IMAGES.length)];
         setHoapSrc(randomImage);
 
-        // 2秒後にbasicに戻す
+        // 2秒後にwideを表示
         setTimeout(() => {
-          setHoapSrc("/hoap-basic.png");
-          // 次のアニメーションをスケジュール
-          scheduleNextAnimation();
+          setHoapSrc("/hoap-wide.png");
+
+          // 0.5秒後にbasicに戻す
+          setTimeout(() => {
+            setHoapSrc("/hoap-basic.png");
+            // 次のアニメーションをスケジュール
+            scheduleNextAnimation();
+          }, 500);
         }, 2000);
       }, nextDelay);
     };
@@ -586,7 +610,7 @@ setChoices(isChoiceStep(next) ? uniqueByNormalized(inline) : []);
       <section className="duo-stage">
         <div className="duo-stage__bg" />
         <div className="duo-stage__wrap">
-          <img className="duo-stage__hoap" src={hoapSrc} alt="ほーぷちゃん" />
+          <img className="duo-stage__hoap" src={hoapSrc} alt="ほーぷちゃん" key={hoapSrc} />
           <div className="duo-stage__bubbles-container">
             {isTyping ? (
               <div className="duo-stage__bubble typing" aria-live="polite">
