@@ -1405,7 +1405,24 @@ function buildCompactSummaryFromTexts(texts, maxSentences = 3) {
     const key = normKey(normalized);
     if (seen.has(key)) continue;
     seen.add(key);
-    const ended = /[。.!?！？]$/.test(normalized) ? normalized : `${normalized}。`;
+
+    // 短い名詞句や単語だけの場合は文として整形
+    const isShortPhrase = normalized.length < 15 && !/[。、]/.test(normalized);
+    let formatted = normalized;
+
+    if (isShortPhrase) {
+      // 「〜こと」「〜の」で終わる場合は「〜ことが得意」「〜のスキル」に補う
+      if (/こと$/.test(normalized)) {
+        formatted = `${normalized}が得意`;
+      } else if (/の$/.test(normalized)) {
+        formatted = normalized.replace(/の$/, "");
+      } else if (!/[するできいる]$/.test(normalized)) {
+        // 動詞で終わっていない場合は「〜を大切にする」「〜に取り組む」などを補う
+        formatted = `${normalized}を大切にしている`;
+      }
+    }
+
+    const ended = /[。.!?！？]$/.test(formatted) ? formatted : `${formatted}。`;
     sentences.push(ended);
     if (sentences.length >= maxSentences) break;
   }
@@ -2640,7 +2657,7 @@ async function handleStep6(session, userText) {
   `;
 
   const ctaHtml = `
-    <div style="text-align: center; margin-bottom: 24px;">
+    <div style="border: 2px solid transparent; background-image: linear-gradient(white, white), linear-gradient(135deg, #F09433 0%, #E6683C 25%, #DC2743 50%, #CC2366 75%, #BC1888 100%); background-origin: border-box; background-clip: padding-box, border-box; padding: 20px; border-radius: 16px; text-align: center; margin-bottom: 24px;">
       <p style="color: #000; font-weight: 600; margin: 0 0 16px 0; font-size: 14px;">自分の経歴書代わりに使えるキャリアシートを作成したい人はこちらのボタンから無料作成してね！これまでの経歴や希望条件を入れたり、キャリアエージェントに相談もできるよ。</p>
       <button type="button" class="choice-btn" style="width: auto; padding: 14px 28px; font-size: 16px;">無料で作成する</button>
     </div>
@@ -2648,9 +2665,11 @@ async function handleStep6(session, userText) {
 
   const sheetHeaderHtml = `
     <div style="text-align: center; margin-bottom: 24px;">
-      <h2 style="margin: 0 0 8px 0; font-size: clamp(24px, 5vw, 36px); font-weight: 900; background: linear-gradient(135deg, #F09433 0%, #E6683C 25%, #DC2743 50%, #CC2366 75%, #BC1888 100%); -webkit-background-clip: text; background-clip: text; color: transparent;">
-        ${escapeHtml(displayName)}さんのキャリア分析シート
-      </h2>
+      <div style="display: inline-block; padding: 12px 32px; border-radius: 50px; background: linear-gradient(135deg, #F09433 0%, #E6683C 25%, #DC2743 50%, #CC2366 75%, #BC1888 100%); box-shadow: 0 4px 15px rgba(236, 72, 153, 0.3);">
+        <h2 style="margin: 0; font-size: clamp(20px, 4.5vw, 32px); font-weight: 900; color: #fff; text-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+          ${escapeHtml(displayName)}さんのキャリア分析シート
+        </h2>
+      </div>
       <p style="margin: 0; font-size: 14px; color: #64748b;">あなたのキャリアにおける強みと価値観をAIが分析してまとめたよ。</p>
     </div>
   `;
