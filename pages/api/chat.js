@@ -1351,32 +1351,17 @@ function finalizeMustState(session) {
   const parts = [];
   if (Array.isArray(status.must_have_ids)) {
     status.must_have_ids.forEach((id) => {
-      const tagName = TAG_NAME_BY_ID.get(Number(id));
-      if (tagName) {
-        parts.push(`have:${tagName}(ID:${id})`);
-      } else {
-        parts.push(`have:ID:${id}`);
-      }
+      parts.push(`ID:${id}`);
     });
   }
   if (Array.isArray(status.ng_ids)) {
     status.ng_ids.forEach((id) => {
-      const tagName = TAG_NAME_BY_ID.get(Number(id));
-      if (tagName) {
-        parts.push(`ng:${tagName}(ID:${id})`);
-      } else {
-        parts.push(`ng:ID:${id}`);
-      }
+      parts.push(`ID:${id}`);
     });
   }
   if (Array.isArray(status.pending_ids)) {
     status.pending_ids.forEach((id) => {
-      const tagName = TAG_NAME_BY_ID.get(Number(id));
-      if (tagName) {
-        parts.push(`pending:${tagName}(ID:${id})`);
-      } else {
-        parts.push(`pending:ID:${id}`);
-      }
+      parts.push(`ID:${id}`);
     });
   }
 
@@ -1743,6 +1728,29 @@ function refineStep5Question(session, question) {
   const lastUserText = getLatestUserText(session, 5);
   const anchor = deriveAnchorText(lastUserText);
 
+  // 「〜と思う」「〜と思います」で終わる場合の不自然な「と感じたとき」を検出して修正
+  const thinkingPatterns = /(と思う|と思います|だと思う|だと思います|と感じる|と感じます)と感じたとき/;
+  if (thinkingPatterns.test(result)) {
+    // 「〜と思うと感じたとき」を「そう思うのはどんなときが多い？」などに置き換え
+    result = result.replace(thinkingPatterns, "");
+    if (anchor) {
+      result = `それって、いつ頃からそう思うようになった？`;
+    } else {
+      result = `そう思うのは、どんな場面が多い？`;
+    }
+  }
+
+  // 「〜言われます」で終わる場合の不自然な「と感じたとき」を検出して修正
+  const passivePatterns = /(言われます|言われる|されます|される)と感じたとき/;
+  if (passivePatterns.test(result)) {
+    result = result.replace(passivePatterns, "");
+    if (anchor) {
+      result = `それって、誰に一番言われる？`;
+    } else {
+      result = `そう言われるのは、どんなときが多い？`;
+    }
+  }
+
   const ambiguousPatterns = [
     /いつも/,
     /どんな場面/,
@@ -1754,7 +1762,12 @@ function refineStep5Question(session, question) {
   ];
 
   if (anchor && ambiguousPatterns.some((p) => p.test(result))) {
-    result = `${anchor}と感じたとき、具体的にどんな状況だった？`;
+    // anchorが「〜と思う/思います」で終わる場合は「と感じたとき」を使わない
+    if (/(と思う|と思います|だと思う|だと思います)$/.test(anchor)) {
+      result = `それって、いつ頃からそう思うようになった？`;
+    } else {
+      result = `${anchor}と感じたとき、具体的にどんな状況だった？`;
+    }
   }
 
   if (!hasQuestionMark) {
@@ -2654,32 +2667,17 @@ async function handleStep6(session, userText) {
 
   if (
     llmResult.ok &&
-    llmResult.parsed?.status?.strength_text &&
     llmResult.parsed?.status?.doing_text &&
     llmResult.parsed?.status?.being_text
   ) {
-    session.status.strength_text = smoothAnalysisText(llmResult.parsed.status.strength_text);
     session.status.doing_text = smoothAnalysisText(llmResult.parsed.status.doing_text);
     session.status.being_text = smoothAnalysisText(llmResult.parsed.status.being_text);
-    console.log("[STEP6] LLM generated Strength:", session.status.strength_text);
     console.log("[STEP6] LLM generated Doing:", session.status.doing_text);
     console.log("[STEP6] LLM generated Being:", session.status.being_text);
   } else {
     console.warn("[STEP6 WARNING] LLM generation failed. Using fallback.");
-    const fallbackStrength =
-      session.status.can_text ||
-      (Array.isArray(session.status.can_texts) && session.status.can_texts.length > 0
-        ? session.status.can_texts.join("／")
-        : "強みについて伺いました。");
-    session.status.strength_text = smoothAnalysisText(fallbackStrength);
     session.status.doing_text = smoothAnalysisText(session.status.can_text || "行動・実践について伺いました。");
     session.status.being_text = smoothAnalysisText(session.status.self_text || "価値観・関わり方について伺いました。");
-    if (session.meta.step6_user_name) {
-      const namePrefix = `${displayName}さんは`;
-      if (session.status.strength_text && !session.status.strength_text.includes(displayName)) {
-        session.status.strength_text = `${namePrefix}${session.status.strength_text.replace(/^(さん?は|は)/, "")}`;
-      }
-    }
   }
 
   const hearingCards = [];
@@ -2730,23 +2728,31 @@ async function handleStep6(session, userText) {
     hearingCards.push({ title: "Must（譲れない条件）", body: session.status.must_text });
     }
 
-  const selfSummary = session.status.self_text || "";
+  // Self表示：整形処理を適用
+  const rawSelf = session.status.self_text || "";
+  const selfSummary = rawSelf ? polishSummaryText(rawSelf, 5) : "";
 
-  const strengthParts = [];
-  if (session.status.strength_text) strengthParts.push(session.status.strength_text);
-  if (session.status.doing_text) strengthParts.push(session.status.doing_text);
-  if (session.status.being_text) strengthParts.push(session.status.being_text);
-
-  if (strengthParts.length && session.meta.step6_user_name) {
-    const first = strengthParts[0] || "";
-    if (!first.includes(displayName)) {
-      strengthParts[0] = `${displayName}さんは${first.replace(/^(さん?は|は)/, "")}`;
-    }
+  // AI分析：strengthを削除し、Doing/Beingのみ表示
+  const analysisParts = [];
+  if (session.status.doing_text) {
+    analysisParts.push({
+      label: "Doing：行動・実践",
+      text: session.status.doing_text
+    });
+  }
+  if (session.status.being_text) {
+    analysisParts.push({
+      label: "Being：価値観・関わり方",
+      text: session.status.being_text
+    });
   }
 
-  const strengthBody = strengthParts
-    .map((paragraph) => escapeHtml(paragraph).replace(/\n/g, "<br />"))
-    .join("<br /><br />");
+  if (analysisParts.length && session.meta.step6_user_name) {
+    const first = analysisParts[0];
+    if (first && first.text && !first.text.includes(displayName)) {
+      first.text = `${displayName}さんは${first.text.replace(/^(さん?は|は)/, "")}`;
+    }
+  }
 
   const hearingHtml = `
     <section class="summary-panel summary-panel--hearing">
@@ -2783,14 +2789,19 @@ async function handleStep6(session, userText) {
     </section>
   `;
 
-  const strengthHtml = `
-    <section class="summary-panel summary-panel--strength">
-      <h3>🌟 あなたの強み（AI分析）</h3>
-      <div class="summary-strength__body">
-        <p>${strengthBody || "強みについて伺いました。"}</p>
-      </div>
-    </section>
-  `;
+  // AI分析HTML（Doing/Beingのみ、サブタイトル付き）
+  const analysisHtml = analysisParts.length > 0
+    ? analysisParts.map((part) => `
+      <section class="summary-panel summary-panel--analysis">
+        <div class="analysis-subtitle">${escapeHtml(part.label)}</div>
+        <p>${escapeHtml(part.text).replace(/\n/g, "<br />")}</p>
+      </section>
+    `).join("")
+    : `
+      <section class="summary-panel summary-panel--analysis">
+        <p>AI分析を生成中です。</p>
+      </section>
+    `;
 
   const ctaHtml = `
     <div style="text-align: center; margin-bottom: 24px;">
@@ -2815,7 +2826,7 @@ async function handleStep6(session, userText) {
         ${hearingHtml}
         <div class="summary-report__analysis">
           ${selfHtml}
-          ${strengthHtml}
+          ${analysisHtml}
         </div>
       </div>
     </div>
@@ -2826,7 +2837,9 @@ async function handleStep6(session, userText) {
     ${summaryReportHtml}
   `.trim();
 
-  session.status.ai_analysis = strengthParts.join("\n\n").trim();
+  // ai_analysisはDoing/Beingの組み合わせ
+  const analysisTexts = analysisParts.map(part => part.text).filter(Boolean);
+  session.status.ai_analysis = analysisTexts.join("\n\n").trim();
 
   const finalMessage = [
     `${displayName}さん、ここまでたくさん話してくれて本当にありがとう！`,
