@@ -160,9 +160,6 @@ function getStatusRowDisplay(key, statusMeta = {}) {
   // ポーズを元に戻すタイマー保持
   const revertTimerRef = useRef(null);
 
-  // 定期アニメーションループ用タイマー
-  const animationLoopTimerRef = useRef(null);
-
   // 進捗バー（STEP1〜6の6段階）
   const MAX_STEP = 6;
   const progress = Math.min(100, Math.max(0, Math.round((Math.min(step, MAX_STEP) / MAX_STEP) * 100)));
@@ -315,45 +312,7 @@ setChoices(isChoiceStep(next) ? uniqueByNormalized(inline) : []);
     }
   }, [step]);
 
-  // 定期的なランダムアニメーションループ（適度な間隔で自然に動かす）
-  useEffect(() => {
-    const scheduleNextAnimation = () => {
-      // 8〜12秒のランダムな間隔で次のアニメーションをスケジュール
-      const nextDelay = 8000 + Math.random() * 4000;
-
-      animationLoopTimerRef.current = setTimeout(() => {
-        // イベント駆動のアニメーション中（revertTimerが動いている）場合はスキップ
-        if (revertTimerRef.current !== null) {
-          scheduleNextAnimation();
-          return;
-        }
-
-        // basicからランダム画像へ
-        const randomImage = HOAP_ANIMATION_IMAGES[Math.floor(Math.random() * HOAP_ANIMATION_IMAGES.length)];
-        setHoapSrc(randomImage);
-
-        // 2秒後にbasicに戻す
-        setTimeout(() => {
-          setHoapSrc("/hoap-basic.png");
-          // 次のアニメーションをスケジュール
-          scheduleNextAnimation();
-        }, 2000);
-      }, nextDelay);
-    };
-
-    // 初回スケジュール
-    scheduleNextAnimation();
-
-    // クリーンアップ
-    return () => {
-      if (animationLoopTimerRef.current) {
-        clearTimeout(animationLoopTimerRef.current);
-        animationLoopTimerRef.current = null;
-      }
-    };
-  }, []);
-
-  // AI応答が更新されるたびに、ランダムで「手を広げる」を短時間表示
+  // AI応答が更新されるたびに、ランダム画像を短時間表示
   useEffect(() => {
     if (!aiText) return;
 
@@ -374,13 +333,14 @@ setChoices(isChoiceStep(next) ? uniqueByNormalized(inline) : []);
       return;
     }
 
-    // 33% くらいの確率で手を広げる
+    // 33% くらいの確率でランダム画像を表示
     if (Math.random() < 0.33) {
       if (revertTimerRef.current) {
         clearTimeout(revertTimerRef.current);
         revertTimerRef.current = null;
       }
-      setHoapSrc("/hoap-wide.png");
+      const randomImage = HOAP_ANIMATION_IMAGES[Math.floor(Math.random() * HOAP_ANIMATION_IMAGES.length)];
+      setHoapSrc(randomImage);
       revertTimerRef.current = setTimeout(() => {
         // バンザイに上書きされていない場合のみ basic に戻す
         setHoapSrc((cur) => (cur === "/hoap-up.png" ? cur : "/hoap-basic.png"));
