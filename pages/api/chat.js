@@ -1659,6 +1659,74 @@ function polishSummaryText(text, maxSentences = 3) {
   return polished.join("");
 }
 
+async function reconstructSelfAnalysis(rawText) {
+  if (!rawText) return "";
+
+  // まず基本的な整形を適用
+  const normalized = String(rawText)
+    .replace(/\r/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  if (!normalized) return "";
+
+  // 既に十分整っている文章かチェック（完全な文が3つ以上あり、不完全な語尾がない）
+  const sentences = normalized.split(/(?<=[。！？])/).filter(Boolean);
+  const hasIncompleteEndings = /[、とき]。/.test(normalized);
+  const hasFragmentation = sentences.some(s => s.length < 15 || /^[、。]/.test(s));
+
+  if (sentences.length >= 3 && !hasIncompleteEndings && !hasFragmentation) {
+    // 既に整っているのでLLM呼び出しをスキップ
+    return polishSummaryText(normalized, 5);
+  }
+
+  // LLMで文章を再構成
+  const prompt = `あなたは自己分析テキストを整形する専門家です。
+以下のテキストはユーザーが自分について語った内容の断片です。
+これを、意味が通る自然な日本語の文章に再構成してください。
+
+【入力テキスト】
+${normalized}
+
+【再構成ルール】
+1. ユーザーの言葉と内容を変えない（事実の追加・削除禁止）
+2. 不完全な文（「〜とき。」など）を完全な文に修正する
+3. 断片的な発話を接続詞で繋ぎ、滑らかな文章にする
+4. 180〜280字の一人称文章（「私は」「私の」）として整形
+5. 語尾は全て丁寧語（「〜です」「〜ます」「〜でした」）で統一
+6. 3〜4文で構成し、各文を自然に繋げる
+7. 定型文（「という性格です」「という人間です」など）は使用禁止
+8. 仕事の話ではなく、人としての性格・価値観を描く
+
+【出力】
+再構成した文章のみを出力してください。説明や前置きは不要です。`;
+
+  try {
+    const openai = getOpenAI();
+    const response = await openai.chat.completions.create({
+      model: "gpt-4o",
+      messages: [
+        { role: "system", content: "You are a professional text editor specializing in Japanese self-analysis texts." },
+        { role: "user", content: prompt }
+      ],
+      temperature: 0.3,
+      max_tokens: 500,
+    });
+
+    const reconstructed = response.choices?.[0]?.message?.content?.trim();
+    if (reconstructed && reconstructed.length >= 50) {
+      console.log("[reconstructSelfAnalysis] Successfully reconstructed:", reconstructed);
+      return reconstructed;
+    } else {
+      console.warn("[reconstructSelfAnalysis] LLM returned insufficient text, using fallback");
+      return polishSummaryText(normalized, 5);
+    }
+  } catch (error) {
+    console.error("[reconstructSelfAnalysis] Error calling LLM:", error);
+    return polishSummaryText(normalized, 5);
+  }
+}
+
 function enforcePoliteTone(text) {
   if (!text) return "";
   const paragraphs = String(text)
@@ -2743,9 +2811,9 @@ async function handleStep6(session, userText) {
     hearingCards.push({ title: "Must（譲れない条件）", body: session.status.must_text });
     }
 
-  // Self表示：整形処理を適用
+  // Self表示：LLMで文章を再構成
   const rawSelf = session.status.self_text || "";
-  const selfSummary = rawSelf ? polishSummaryText(rawSelf, 5) : "";
+  const selfSummary = rawSelf ? await reconstructSelfAnalysis(rawSelf) : "";
 
   // AI分析：strengthを削除し、Doing/Beingのみ表示
   const analysisParts = [];
