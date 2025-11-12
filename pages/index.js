@@ -51,17 +51,32 @@ function getStatusRowDisplay(key, statusMeta = {}) {
       if (typeof statusMeta.status_bar === "string" && statusMeta.status_bar.trim()) {
         return statusMeta.status_bar
           .split(",")
-          .map((entry) => entry.split("/")[0])
+          .map((entry) => entry && entry.trim())
           .filter(Boolean)
+          .map((entry) => {
+            const withoutPrefix = entry.startsWith("ID:") ? entry.slice(3) : entry;
+            return withoutPrefix.replace("/", " ");
+          })
           .join("、");
       }
-      const ids = [
-        ...(statusMeta.must_have_ids || []),
-        ...(statusMeta.ng_ids || []),
-        ...(statusMeta.pending_ids || []),
-      ];
-      const value = formatIds(ids);
-      return value || "未入力";
+      const directionMap =
+        statusMeta.direction_map && typeof statusMeta.direction_map === "object"
+          ? statusMeta.direction_map
+          : {};
+      const entries = [];
+      (statusMeta.must_have_ids || []).forEach((id) => {
+        entries.push(`ID:${id}/${directionMap[String(id)] || "have"}`);
+      });
+      (statusMeta.ng_ids || []).forEach((id) => {
+        entries.push(`ID:${id}/${directionMap[String(id)] || "ng"}`);
+      });
+      (statusMeta.pending_ids || []).forEach((id) => {
+        entries.push(`ID:${id}/${directionMap[String(id)] || "pending"}`);
+      });
+      return entries
+        .map((entry) => (entry.startsWith("ID:") ? entry.slice(3) : entry))
+        .map((entry) => entry.replace("/", " "))
+        .join("、") || "未入力";
     }
     case "私はこんな人": {
       return statusMeta.self_text ? "済" : "未入力";
@@ -306,16 +321,11 @@ setChoices(isChoiceStep(next) ? uniqueByNormalized(inline) : []);
 
     // 33% くらいの確率で手を広げる
     if (Math.random() < 0.33) {
-      if (revertTimerRef.current) {
-        clearTimeout(revertTimerRef.current);
-        revertTimerRef.current = null;
+      if (hoapSrc !== "/hoap-wide.png") {
+        setHoapSrc("/hoap-wide.png");
       }
-      setHoapSrc("/hoap-wide.png");
-      revertTimerRef.current = setTimeout(() => {
-        // バンザイに上書きされていない場合のみ basic に戻す
-        setHoapSrc((cur) => (cur === "/hoap-up.png" ? cur : "/hoap-basic.png"));
-        revertTimerRef.current = null;
-      }, 1600);
+    } else if (hoapSrc === "/hoap-wide.png") {
+      setHoapSrc("/hoap-basic.png");
     }
   }, [aiText, hoapSrc]);
 

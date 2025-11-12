@@ -28,7 +28,7 @@ const LLM_BRAKE_PROMPT = safeRead(path.join(PROMPTS_DIR, "llm_brake_system.txt")
 const STEP_INTRO_QUESTIONS = {
   2: "次は、仕事中に自然にやってることを教えて！患者さん（利用者さん）と接するとき、無意識にやってることでもOKだよ✨",
   3: "次は、今の職場ではできないけど、やってみたいことを教えて！『これができたらいいな』って思うことでOKだよ✨",
-  4: "次は、働きたい事業形態や労働条件を教えて！たとえば『クリニックがいい』『夜勤は避けたい』みたいな感じでOKだよ✨",
+  4: "次は、働きたい事業形態や労働条件を教えて！たとえば『クリニックがいい』『夜勤は避けたい』みたいな感じでOKだよ✨その条件が『絶対あってほしい』か『絶対なしにしてほしい』かも一緒に教えてくれるとうれしいな！",
   5: "最後に、仕事以外の話を聞かせて！友達や家族に『あなたってこういう人だよね』って言われることって、ある？😊",
 };
 
@@ -1135,6 +1135,118 @@ function filterTagsByUserText(userText, tagsData) {
   return tagsData;
 }
 
+const NEG_DIRECTION_PATTERNS = [
+  /(絶対|まったく|全然|全く|完全)\s*(なし|避け|NG|いや|いやだ|無理|したくない)/,
+  /(避けたい|避けよう|避けて|行きたくない|働きたくない|いやだ|嫌だ|嫌|無理|NG|不要|いらない|いりません)/,
+  /(なしで|なしがいい|無しで|無しがいい)/,
+];
+
+const POS_DIRECTION_PATTERNS = [
+  /(絶対|必ず|どうしても)\s*(ほしい|欲しい|必要|あってほしい|あって欲しい)/,
+  /(欲しい|ほしい|希望|いい|がいい|が理想|必要|求めてる|求めている)/,
+];
+
+const PENDING_DIRECTION_PATTERNS = [
+  /(あれば|できれば|できたら|あったら|あったらうれしい|あったら嬉しい)/,
+  /(多少|ちょっと|少し|月\d+時間|20時間|二十時間)/,
+  /(なくても|なくて|でいい|で構わない|妥協)/,
+];
+
+function detectDirectionFromText(userText) {
+  const normalized = String(userText || "").replace(/\s+/g, "");
+  if (!normalized) return null;
+  if (NEG_DIRECTION_PATTERNS.some((pattern) => pattern.test(normalized))) {
+    return "ng";
+  }
+  if (POS_DIRECTION_PATTERNS.some((pattern) => pattern.test(normalized))) {
+    return "have";
+  }
+  if (PENDING_DIRECTION_PATTERNS.some((pattern) => pattern.test(normalized))) {
+    return "pending";
+  }
+  return null;
+}
+
+function getTagPrimaryKey(tag) {
+  if (!tag || typeof tag.name !== "string") return "";
+  const base = tag.name.split(/[（(]/)[0] || "";
+  const primary = base.split(/[・／\/]/)[0] || base;
+  return normKey(primary);
+}
+
+function extractExplicitTagMatches(userText, tags) {
+  if (!userText || !Array.isArray(tags) || tags.length === 0) {
+    return [];
+  }
+  const replaced = String(userText)
+    .replace(/(と|や|もしくは|または|及び|＆|&|なら)/g, "、");
+  const tokens = replaced
+    .split(/[、，。,\.／\/・\s]+/)
+    .map((token) => token && token.trim())
+    .filter(Boolean)
+    .map((token) => normKey(token));
+  if (!tokens.length) return [];
+
+  const explicit = [];
+  const seen = new Set();
+  for (const tag of tags) {
+    const id = Number(tag?.id);
+    if (!Number.isInteger(id) || seen.has(id)) continue;
+    const primaryKey = getTagPrimaryKey(tag);
+    if (!primaryKey) continue;
+    const matched = tokens.some((token) => token.startsWith(primaryKey));
+    if (matched) {
+      explicit.push(tag);
+      seen.add(id);
+    }
+  }
+  return explicit;
+}
+
+function applyDirectionToSession(session, id, direction, autoDirectionMap = {}) {
+  if (!session) return;
+  const numericId = Number(id);
+  if (!Number.isInteger(numericId)) return;
+
+  if (!session.status || typeof session.status !== "object") {
+    session.status = {};
+  }
+  if (!Array.isArray(session.status.must_have_ids)) session.status.must_have_ids = [];
+  if (!Array.isArray(session.status.ng_ids)) session.status.ng_ids = [];
+  if (!Array.isArray(session.status.pending_ids)) session.status.pending_ids = [];
+  if (!session.status.direction_map || typeof session.status.direction_map !== "object") {
+    session.status.direction_map = {};
+  }
+
+  const normalizedDirection =
+    direction === "ng" ? "ng" : direction === "pending" ? "pending" : "have";
+
+  const buckets = {
+    have: "must_have_ids",
+    ng: "ng_ids",
+    pending: "pending_ids",
+  };
+
+  for (const key of Object.values(buckets)) {
+    const arr = session.status[key];
+    if (Array.isArray(arr)) {
+      const idx = arr.indexOf(numericId);
+      if (idx >= 0) arr.splice(idx, 1);
+    }
+  }
+
+  const targetKey = buckets[normalizedDirection] || buckets.have;
+  const targetArr = session.status[targetKey];
+  if (Array.isArray(targetArr) && !targetArr.includes(numericId)) {
+    targetArr.push(numericId);
+  }
+
+  session.status.direction_map[String(numericId)] = normalizedDirection;
+  if (autoDirectionMap && typeof autoDirectionMap === "object") {
+    autoDirectionMap[String(numericId)] = normalizedDirection;
+  }
+}
+
 function applyMustStatus(session, status, meta) {
   session.status.must_have_ids = Array.isArray(status?.must_ids) ? status.must_ids : [];
   session.status.ng_ids = Array.isArray(status?.ng_ids) ? status.ng_ids : [];
@@ -1646,7 +1758,7 @@ async function handleStep4(session, userText) {
     session.meta.step4_intro_shown = true;
     console.log("[STEP4] Showing intro question for the first time.");
     return {
-      response: "次は、働きたい事業形態や労働条件を教えて！たとえば『クリニックで働きたい』『夜勤は避けたい』みたいな感じでOKだよ✨",
+      response: "次は、働きたい事業形態や労働条件を教えて！たとえば『クリニックで働きたい』『夜勤は避けたい』みたいな感じでOKだよ✨その条件が『絶対あってほしい』か『絶対なしにしてほしい』かも一緒に教えてくれるとうれしいな！",
       status: session.status,
       meta: { step: 4, phase: "intro", deepening_count: 0 },
       drill: session.drill,
@@ -1671,70 +1783,67 @@ async function handleStep4(session, userText) {
   }
   let autoConfirmedIds = [];
   const autoDirectionMap = {};
+  const autoConfirmedSet = new Set();
 
-  if (directMatches.length === 1) {
-    autoConfirmedIds = directMatches.map(tag => tag.id);
+  const directionFromText = detectDirectionFromText(userText);
+  const explicitMatches = extractExplicitTagMatches(userText, directMatches);
+  const uniqueDirectIds = new Set(
+    directMatches
+      .map((tag) => Number(tag?.id))
+      .filter((id) => Number.isInteger(id))
+  );
+  const uniqueExplicitIds = new Set(
+    explicitMatches
+      .map((tag) => Number(tag?.id))
+      .filter((id) => Number.isInteger(id))
+  );
+  const canAutoAllExplicit =
+    directionFromText &&
+    uniqueExplicitIds.size >= 2 &&
+    uniqueExplicitIds.size === uniqueDirectIds.size;
+
+  const applyAutoConfirm = (tag, directionHint) => {
+    const numericId = Number(tag?.id);
+    if (!Number.isInteger(numericId) || autoConfirmedSet.has(numericId)) return;
+    const normalizedDirection =
+      directionHint === "ng"
+        ? "ng"
+        : directionHint === "pending"
+        ? "pending"
+        : "have";
+    applyDirectionToSession(session, numericId, normalizedDirection, autoDirectionMap);
+    autoConfirmedSet.add(numericId);
     console.log(
-      `[STEP4 FAST] Auto-confirmed ID: ${autoConfirmedIds[0]} (${directMatches[0].name})`
+      `[STEP4 FAST] Auto-confirmed ID: ${numericId} (${tag?.name || ""}) direction=${normalizedDirection}`
     );
-    // 方向性を判定（have/ng/pending を決める）
-    const normalized = userText.replace(/\s+/g, "");
-    let direction = "have";
-    const negPattern = /(絶対|まったく|全然|全く|完全)\s*(なし|避け|NG|いや|いやだ|無理|したくない)/;
-    const posPattern = /(絶対|必ず|どうしても)\s*(ほしい|欲しい|必要|あってほしい)/;
-    const neutralPattern = /(あれば|できれば|できたら|なくても|なくて)/;
-    if (negPattern.test(normalized) || /(なし|困る|避けたい|無理|いや|いやだ|遠慮|拒否)/.test(normalized)) {
-      direction = "ng";
-    } else if (posPattern.test(normalized)) {
-      direction = "have";
-    } else if (neutralPattern.test(normalized)) {
-      direction = "pending";
-    } else if (/(多少|ちょっと|少し|月\d+時間|20時間|二十時間)/.test(normalized)) {
-      direction = "pending";
-    }
-    if (!session.status.must_have_ids) session.status.must_have_ids = [];
-    if (!session.status.ng_ids) session.status.ng_ids = [];
-    if (!session.status.pending_ids) session.status.pending_ids = [];
-    if (!session.status.direction_map) session.status.direction_map = {};
-    const id = autoConfirmedIds[0];
+  };
 
-    // 他の配列から同一IDを除外
-    const removeId = (arr) => {
-      if (Array.isArray(arr)) {
-        const idx = arr.indexOf(id);
-        if (idx >= 0) arr.splice(idx, 1);
-      }
-    };
-    removeId(session.status.must_have_ids);
-    removeId(session.status.ng_ids);
-    removeId(session.status.pending_ids);
+  if (canAutoAllExplicit) {
+    explicitMatches.forEach((tag) => applyAutoConfirm(tag, directionFromText));
+  }
 
-    if (direction === "have") {
-      if (!session.status.must_have_ids.includes(id)) {
-        session.status.must_have_ids.push(id);
-      }
-    } else if (direction === "ng") {
-      if (!session.status.ng_ids.includes(id)) {
-        session.status.ng_ids.push(id);
-      }
-    } else {
-      if (!session.status.pending_ids.includes(id)) {
-        session.status.pending_ids.push(id);
-      }
-    }
-    session.status.direction_map[String(id)] = direction;
-    autoDirectionMap[String(id)] = direction;
-    const existingBar = (session.status.status_bar || "")
-      .split(",")
-      .map((s) => s.trim())
-      .filter(Boolean);
-    const entry = `ID:${id}/${direction}`;
-    if (!existingBar.includes(entry)) {
-      existingBar.push(entry);
-    }
-    session.status.status_bar = existingBar.join(",");
-  } else if (directMatches.length > 1) {
-    const uniqueLabels = Array.from(new Set(directMatches.map(tag => tag.name))).slice(0, 6);
+  if (autoConfirmedSet.size > 0) {
+    directMatches = directMatches.filter(
+      (tag) => !autoConfirmedSet.has(Number(tag?.id))
+    );
+  }
+
+  if (directMatches.length === 1 && !autoConfirmedSet.has(Number(directMatches[0]?.id))) {
+    const singleTag = directMatches[0];
+    const directionHint = directionFromText || "have";
+    applyAutoConfirm(singleTag, directionHint);
+    directMatches = [];
+  }
+
+  if (autoConfirmedSet.size > 0) {
+    autoConfirmedIds = Array.from(autoConfirmedSet).sort((a, b) => a - b);
+    finalizeMustState(session);
+  }
+
+  if (directMatches.length > 1) {
+    const uniqueLabels = Array.from(
+      new Set(directMatches.map((tag) => tag.name))
+    ).slice(0, 6);
     if (uniqueLabels.length > 1) {
       session.drill.phase = "step4_tag_choice";
       session.drill.awaitingChoice = true;
@@ -1837,7 +1946,6 @@ async function handleStep4(session, userText) {
       // LLM生成成功：statusを適用
       applyMustStatus(session, genLLM.parsed.status, genLLM.parsed.meta || {});
       ensureAutoConfirmedIds(session, autoConfirmedIds, autoDirectionMap);
-      ensureAutoConfirmedIds(session, autoConfirmedIds, autoDirectionMap);
       finalizeMustState(session);
     }
     
@@ -1879,7 +1987,6 @@ async function handleStep4(session, userText) {
   if (parsed?.status && typeof parsed.status === "object") {
     // LLM から帰ってきた譲れない条件をセッションへ適用
     applyMustStatus(session, parsed.status, parsed.meta || {});
-    ensureAutoConfirmedIds(session, autoConfirmedIds, autoDirectionMap);
     ensureAutoConfirmedIds(session, autoConfirmedIds, autoDirectionMap);
     finalizeMustState(session);
     
