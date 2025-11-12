@@ -2100,10 +2100,6 @@ async function handleStep4(session, userText) {
       const recentTexts = session.history.slice(-3).map(item => item.text).join(" ");
       const combinedText = `${userInput} ${recentTexts}`;
 
-      // ネガティブキーワードがある場合は質問をスキップ（既に方向性が明確）
-      const hasNegativeKeywords = /嫌|避けたい|したくない|なし|いらない|不要|NG|以外|じゃなくて|ではなく/.test(combinedText);
-      const hasPositiveKeywords = /欲しい|いい|希望|理想|好き|したい|あってほしい|挑戦|やりたい/.test(combinedText);
-
       let question;
 
       // 方向性が既に明確な場合は質問をスキップ
