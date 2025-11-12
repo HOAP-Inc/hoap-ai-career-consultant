@@ -331,19 +331,17 @@ setChoices(isChoiceStep(next) ? uniqueByNormalized(inline) : []);
           return;
         }
 
-        // 1. basicからランダム画像へ
-        const randomImage1 = HOAP_ANIMATION_IMAGES[Math.floor(Math.random() * HOAP_ANIMATION_IMAGES.length)];
-        setHoapSrc(randomImage1);
+        // 1. basicからwideへ
+        setHoapSrc("/hoap-wide.png");
 
         // 2. 0.5秒後にランダム画像へ
         setTimeout(() => {
-          const randomImage2 = HOAP_ANIMATION_IMAGES[Math.floor(Math.random() * HOAP_ANIMATION_IMAGES.length)];
-          setHoapSrc(randomImage2);
+          const randomImage = HOAP_ANIMATION_IMAGES[Math.floor(Math.random() * HOAP_ANIMATION_IMAGES.length)];
+          setHoapSrc(randomImage);
 
-          // 3. 2秒後にランダム画像へ
+          // 3. 2秒後にwideへ
           setTimeout(() => {
-            const randomImage3 = HOAP_ANIMATION_IMAGES[Math.floor(Math.random() * HOAP_ANIMATION_IMAGES.length)];
-            setHoapSrc(randomImage3);
+            setHoapSrc("/hoap-wide.png");
 
             // 4. 0.5秒後にbasicに戻す
             setTimeout(() => {
