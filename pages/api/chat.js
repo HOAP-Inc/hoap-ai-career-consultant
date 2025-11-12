@@ -34,8 +34,11 @@ const LLM_BRAKE_PROMPT = safeRead(path.join(PROMPTS_DIR, "llm_brake_system.txt")
 // STEP遷移時のブリッジメッセージ（"ありがとう！"等）もサーバ管理です
 // ==========================================
 const STEP_INTRO_QUESTIONS = {
-  2: "これまでどんな職場でどんなことをしてきた？これまで経験してきたあなたの得意なことやこれからも活かしたいことも一緒に教えてね！",
-  3: "ありがとう！\n\n次は、今の職場ではできないけど、やってみたいことを教えて！『これができたらいいな』って思うことでOKだよ✨",
+  2: {
+    first: "これまでどんな職場でどんなことをしてきた？\n\nあなたの経歴を簡単でいいから教えてね。",
+    second: "その経験の中で、あなたが得意だなと感じていることや、これからも活かしていきたい強みってどんなこと？"
+  },
+  3: "ありがとう！\n\n次は、今後挑戦したいこと、やってみたいことを教えて！『これができたらいいな』って思うことでOKだよ✨",
   4: "次は、働きたい事業形態や労働条件を教えて！たとえば『クリニックがいい』『夜勤は避けたい』みたいなイメージでOKだよ✨",
   5: "ありがとう！\n\n自分で自分ってどんなタイプの人間だと思う？周りからこんな人って言われる、っていうのでもいいよ！",
 };
@@ -369,7 +372,7 @@ async function handleStep1(session, userText) {
     resetDrill(session);
     // 資格なしの場合は「ありがとう！」だけを表示してSTEP2へ強制移行
     return {
-      response: STEP_INTRO_QUESTIONS[2],
+      response: STEP_INTRO_QUESTIONS[2].first,
       status: session.status,
       meta: { step: 2 },
       drill: session.drill,
@@ -443,7 +446,7 @@ async function handleStep1(session, userText) {
       session.stage.turnIndex = 0;
       resetDrill(session);
       return {
-        response: STEP_INTRO_QUESTIONS[2],
+        response: STEP_INTRO_QUESTIONS[2].first,
         status: session.status,
         meta: { step: 2 },
         drill: session.drill,
@@ -569,10 +572,27 @@ function buildStepPayload(session, userText, recentCount) {
 }
 
 async function handleStep2(session, userText) {
-  // userTextがある場合のみturnIndexをインクリメント（STEP遷移時はインクリメントしない）
+  // session.meta 初期化
+  if (!session.meta) session.meta = {};
+  if (typeof session.meta.step2_intro_phase !== "number") {
+    session.meta.step2_intro_phase = 1; // 1: first質問, 2: second質問後
+  }
+
+  // 【Phase 1】first質問を返す（userTextが空 && phase=1）
+  if ((!userText || !userText.trim()) && session.meta.step2_intro_phase === 1) {
+    return {
+      response: STEP_INTRO_QUESTIONS[2].first,
+      status: session.status,
+      meta: { step: 2, intro_phase: 1 },
+      drill: session.drill,
+    };
+  }
+
+  // userTextがある場合のみturnIndexをインクリメント
   if (userText && userText.trim()) {
     session.stage.turnIndex += 1;
   }
+
   const payload = buildStepPayload(session, userText, 3);
   const llm = await callLLM(2, payload, session, { model: "gpt-4o" });
 
@@ -582,13 +602,29 @@ async function handleStep2(session, userText) {
 
   const parsed = llm.parsed || {};
 
-  // intro フェーズの処理（STEP2初回質問）
+  // 【Phase 1の応答処理】empathy + second質問を結合
+  if (session.meta.step2_intro_phase === 1 && parsed?.empathy) {
+    session.meta.step2_intro_phase = 2; // フェーズを2に進める
+    const combinedResponse = [
+      parsed.empathy,
+      STEP_INTRO_QUESTIONS[2].second
+    ].filter(Boolean).join("\n\n");
+
+    return {
+      response: combinedResponse,
+      status: session.status,
+      meta: { step: 2, intro_phase: 2 },
+      drill: session.drill,
+    };
+  }
+
+  // intro フェーズの処理（安全装置：LLMが予期せずintroを返した場合）
   if (parsed?.control?.phase === "intro") {
     // deepening_countをリセット
     if (!session.meta) session.meta = {};
     session.meta.step2_deepening_count = 0;
     return {
-      response: parsed.response || "次は、あなたが今までやってきたことでこれからも活かしていきたいこと、あなたの強みを教えて！",
+      response: parsed.response || STEP_INTRO_QUESTIONS[2].first,
       status: session.status,
       meta: { step: 2 },
       drill: session.drill,

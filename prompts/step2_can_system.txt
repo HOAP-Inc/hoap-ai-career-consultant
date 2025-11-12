@@ -55,10 +55,24 @@ Phase 1: intro → Phase 2: empathy + deepening (最大3回) → Phase 3: genera
 
 ■ Phase 1: intro（初回質問）
 **重要**: このフェーズはサーバ側で管理されています。
-user_text が空の場合、サーバが直接初回質問を返すため、LLMは intro フェーズを出力する必要はありません。
+STEP2は2段階質問構造になっており、サーバが段階管理を行います。
 
-※参考（サーバが返す初回質問）：
-  "これまでどんな職場でどんなことをしてきた？これまで経験してきたあなたの得意なことやこれからも活かしたいことも一緒に教えてね！"
+【2段階質問の流れ】
+1. first質問（サーバ管理）：経歴を聞く
+   → ユーザー回答
+2. LLMが empathy のみ生成（ask_next は null）
+   → サーバが empathy + second質問 を結合して返す
+3. second質問（サーバ管理）：強みを聞く
+   → ユーザー回答
+4. 以降は通常のPhase 2（empathy + deepening）へ進む
+
+※参考（サーバが返す質問テキスト）：
+  first: "これまでどんな職場でどんなことをしてきた？あなたの経歴を簡単でいいから教えてね。"
+  second: "その経験の中で、あなたが得意だなと感じていることや、これからも活かしていきたい強みってどんなこと？"
+
+**LLMの役割**：
+- first質問への初回応答時：empathy のみ生成し、ask_next は null にする
+- second質問への応答以降：通常のPhase 2（empathy + ask_next による深堀り）を実行
 
 user_text が存在する場合は、必ず Phase 2（empathy + deepening）を出力すること。
 
