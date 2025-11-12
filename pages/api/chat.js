@@ -26,10 +26,10 @@ const LLM_BRAKE_PROMPT = safeRead(path.join(PROMPTS_DIR, "llm_brake_system.txt")
 
 // 各STEPの初回質問（プロンプトファイルから抽出）
 const STEP_INTRO_QUESTIONS = {
-  2: "これまでどんな職場でどんなことをしてきた？これまで経験してきたあなたの得意なことやこれからも活かしたいことも一緒に教えてね！",
-  3: "次は、今の職場ではできないけど、やってみたいことを教えて！『これができたらいいな』って思うことでOKだよ✨",
-  4: "次は、働きたい事業形態や労働条件を教えて！たとえば『クリニックがいい』『夜勤は避けたい』みたいな感じでOKだよ✨",
-  5: "自分で自分ってどんなタイプの人間だと思う？周りからこんな人って言われる、っていうのでもいいよ！",
+  2: "教えてくれてありがとう！\n\n次は、仕事中に自然にやってることを教えて！患者さん（利用者さん）と接するとき、無意識にやってることでもOKだよ✨",
+  3: "ありがとう！\n\n次は、今の職場ではできないけど、やってみたいことを教えて！『これができたらいいな』って思うことでOKだよ✨",
+  4: "次は、働きたい事業形態や労働条件を教えて！たとえば『クリニックがいい』『夜勤は避けたい』みたいなイメージでOKだよ✨",
+  5: "ありがとう！\n\n自分で自分ってどんなタイプの人間だと思う？周りからこんな人って言われる、っていうのでもいいよ！",
 };
 
 function loadJson(fileName) {
@@ -1702,7 +1702,7 @@ async function handleStep4(session, userText) {
     session.meta.step4_intro_shown = true;
     console.log("[STEP4] Showing intro question for the first time.");
     return {
-      response: "次は、働きたい事業形態や労働条件を教えて！たとえば『クリニックで働きたい』『夜勤は避けたい』みたいな感じでOKだよ✨",
+      response: STEP_INTRO_QUESTIONS[4],
       status: session.status,
       meta: { step: 4, phase: "intro", deepening_count: 0 },
       drill: session.drill,
@@ -1869,7 +1869,7 @@ async function handleStep4(session, userText) {
       session.meta.step4_intro_shown = true;
       session.meta.step4_deepening_count = 0;
       return {
-        response: parsed.response || "働く上で『ここだけは譲れないな』って思うこと、ある？職場の雰囲気でも働き方でもOKだよ✨",
+        response: parsed.response || STEP_INTRO_QUESTIONS[4],
         status: session.status,
         meta: { step: 4, phase: "intro", deepening_count: 0 },
         drill: session.drill,
