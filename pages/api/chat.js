@@ -1351,17 +1351,32 @@ function finalizeMustState(session) {
   const parts = [];
   if (Array.isArray(status.must_have_ids)) {
     status.must_have_ids.forEach((id) => {
-      parts.push(`ID:${id}`);
+      const tagName = TAG_NAME_BY_ID.get(Number(id));
+      if (tagName) {
+        parts.push(`have:${tagName}(ID:${id})`);
+      } else {
+        parts.push(`have:ID:${id}`);
+      }
     });
   }
   if (Array.isArray(status.ng_ids)) {
     status.ng_ids.forEach((id) => {
-      parts.push(`ID:${id}`);
+      const tagName = TAG_NAME_BY_ID.get(Number(id));
+      if (tagName) {
+        parts.push(`ng:${tagName}(ID:${id})`);
+      } else {
+        parts.push(`ng:ID:${id}`);
+      }
     });
   }
   if (Array.isArray(status.pending_ids)) {
     status.pending_ids.forEach((id) => {
-      parts.push(`ID:${id}`);
+      const tagName = TAG_NAME_BY_ID.get(Number(id));
+      if (tagName) {
+        parts.push(`pending:${tagName}(ID:${id})`);
+      } else {
+        parts.push(`pending:ID:${id}`);
+      }
     });
   }
 
@@ -2789,19 +2804,21 @@ async function handleStep6(session, userText) {
     </section>
   `;
 
-  // AI分析HTML（Doing/Beingのみ、サブタイトル付き）
-  const analysisHtml = analysisParts.length > 0
-    ? analysisParts.map((part) => `
-      <section class="summary-panel summary-panel--analysis">
-        <div class="analysis-subtitle">${escapeHtml(part.label)}</div>
-        <p>${escapeHtml(part.text).replace(/\n/g, "<br />")}</p>
-      </section>
-    `).join("")
-    : `
-      <section class="summary-panel summary-panel--analysis">
-        <p>AI分析を生成中です。</p>
-      </section>
-    `;
+  // AI分析HTML：大枠の中にDoing/Beingをサブセクションとして配置
+  const analysisHtml = `
+    <section class="summary-panel summary-panel--ai-analysis">
+      <h3>🌟 AI分析</h3>
+      ${analysisParts.length > 0
+        ? analysisParts.map((part) => `
+          <div class="analysis-subsection">
+            <div class="analysis-subtitle">${escapeHtml(part.label)}</div>
+            <p>${escapeHtml(part.text).replace(/\n/g, "<br />")}</p>
+          </div>
+        `).join("")
+        : `<p>AI分析を生成中です。</p>`
+      }
+    </section>
+  `;
 
   const ctaHtml = `
     <div style="text-align: center; margin-bottom: 24px;">
