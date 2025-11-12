@@ -1006,6 +1006,53 @@ async function handleStep3(session, userText) {
 }
 
 /**
+ * キーワードの周辺テキストを抽出する
+ * @param {string} userText - ユーザー発話全体
+ * @param {string} keyword - 検索するキーワード
+ * @returns {string} キーワードとその周辺テキスト
+ */
+function extractKeywordContext(userText, keyword) {
+  const index = userText.toLowerCase().indexOf(keyword.toLowerCase());
+  if (index === -1) return userText;
+
+  // キーワードの前後30文字を取得（句読点を考慮）
+  const start = Math.max(0, index - 30);
+  const end = Math.min(userText.length, index + keyword.length + 30);
+  return userText.slice(start, end);
+}
+
+/**
+ * テキストから方向性を判定する
+ * @param {string} text - 判定対象のテキスト
+ * @returns {string|null} "have" | "ng" | "pending" | null
+ */
+function judgeDirection(text) {
+  const normalized = text.replace(/\s+/g, "");
+
+  // 否定パターン（明確にngと判断できる場合のみ）
+  const negPattern = /(絶対|まったく|全然|全く|完全)\s*(なし|避け|NG|いや|いやだ|無理|したくない)/;
+  const negKeywords = /(なし|困る|避けたい|無理|いや|いやだ|遠慮|拒否|嫌|苦手|できない)/;
+
+  // 肯定パターン（明確にhaveと判断できる場合のみ）
+  const posPattern = /(絶対|必ず|どうしても|ぜひ)\s*(ほしい|欲しい|必要|あってほしい|したい)/;
+  const posKeywords = /(ほしい|欲しい|必要|希望|理想|重視|大事|重要|働きたい|やりたい|興味|魅力|がいい)/;
+
+  // 保留パターン
+  const neutralPattern = /(あれば|できれば|できたら|なくても|なくて|どちらでも)/;
+  const flexiblePattern = /(多少|ちょっと|少し|月\d+時間|20時間|二十時間)/;
+
+  if (negPattern.test(normalized) || negKeywords.test(normalized)) {
+    return "ng";
+  } else if (posPattern.test(normalized) || posKeywords.test(normalized)) {
+    return "have";
+  } else if (neutralPattern.test(normalized) || flexiblePattern.test(normalized)) {
+    return "pending";
+  }
+
+  return null; // 不明な場合はLLMに委ねる
+}
+
+/**
  * ユーザー発話から直接ID候補を検索（最優先・最速）
  * 完全一致・部分一致で即座にタグを絞り込む
  */
@@ -1793,29 +1840,9 @@ async function handleStep4(session, userText) {
       `[STEP4 FAST] Direct ID match found: ${matchedTag.id} (${matchedTag.name})`
     );
 
-    // 方向性を判定（have/ng/pending を決める）
-    const normalized = userText.replace(/\s+/g, "");
-    let direction = null; // デフォルトをnullに変更（不明な場合はLLMに委ねる）
-
-    // 否定パターン（明確にngと判断できる場合のみ）
-    const negPattern = /(絶対|まったく|全然|全く|完全)\s*(なし|避け|NG|いや|いやだ|無理|したくない)/;
-    const negKeywords = /(なし|困る|避けたい|無理|いや|いやだ|遠慮|拒否|嫌|苦手)/;
-
-    // 肯定パターン（明確にhaveと判断できる場合のみ）
-    const posPattern = /(絶対|必ず|どうしても|ぜひ)\s*(ほしい|欲しい|必要|あってほしい|したい)/;
-    const posKeywords = /(ほしい|欲しい|必要|希望|理想|重視|大事|重要|働きたい|やりたい|興味|魅力)/;
-
-    // 保留パターン
-    const neutralPattern = /(あれば|できれば|できたら|なくても|なくて|どちらでも)/;
-    const flexiblePattern = /(多少|ちょっと|少し|月\d+時間|20時間|二十時間)/;
-
-    if (negPattern.test(normalized) || negKeywords.test(normalized)) {
-      direction = "ng";
-    } else if (posPattern.test(normalized) || posKeywords.test(normalized)) {
-      direction = "have";
-    } else if (neutralPattern.test(normalized) || flexiblePattern.test(normalized)) {
-      direction = "pending";
-    }
+    // キーワードの周辺テキストを抽出して方向性を判定
+    const context = extractKeywordContext(userText, matchedTag.name);
+    let direction = judgeDirection(context);
 
     // 方向性が確定した場合のみauto_confirmed_idsに含める
     if (direction !== null) {
@@ -1871,20 +1898,68 @@ async function handleStep4(session, userText) {
       // （LLMの共感文生成後に更新）
     }
   } else if (directMatches.length > 1) {
-    const uniqueLabels = Array.from(new Set(directMatches.map(tag => tag.name))).slice(0, 6);
-    if (uniqueLabels.length > 1) {
-      session.drill.phase = "step4_tag_choice";
-      session.drill.awaitingChoice = true;
-      session.drill.options = uniqueLabels;
+    // 複数キーワードが見つかった場合、各キーワードについて個別に方向性を判定
+    console.log(
+      `[STEP4 FAST] Multiple matches found: ${directMatches.map(t => t.name).join(", ")}`
+    );
+
+    if (!session.status.must_have_ids) session.status.must_have_ids = [];
+    if (!session.status.ng_ids) session.status.ng_ids = [];
+    if (!session.status.pending_ids) session.status.pending_ids = [];
+    if (!session.status.direction_map) session.status.direction_map = {};
+
+    const processedTags = [];
+
+    for (const tag of directMatches) {
+      // キーワードの周辺テキストを抽出
+      const context = extractKeywordContext(userText, tag.name);
+      const direction = judgeDirection(context);
+
+      if (direction !== null) {
+        // 方向性が確定した場合のみ登録
+        processedTags.push({ tag, direction });
+        autoConfirmedIds.push(tag.id);
+
+        // 他の配列から同一IDを除外
+        const removeId = (arr) => {
+          if (Array.isArray(arr)) {
+            const idx = arr.indexOf(tag.id);
+            if (idx >= 0) arr.splice(idx, 1);
+          }
+        };
+        removeId(session.status.must_have_ids);
+        removeId(session.status.ng_ids);
+        removeId(session.status.pending_ids);
+
+        // 方向性に応じて配列に追加
+        if (direction === "have") {
+          if (!session.status.must_have_ids.includes(tag.id)) {
+            session.status.must_have_ids.push(tag.id);
+          }
+        } else if (direction === "ng") {
+          if (!session.status.ng_ids.includes(tag.id)) {
+            session.status.ng_ids.push(tag.id);
+          }
+        } else if (direction === "pending") {
+          if (!session.status.pending_ids.includes(tag.id)) {
+            session.status.pending_ids.push(tag.id);
+          }
+        }
+
+        session.status.direction_map[String(tag.id)] = direction;
+        autoDirectionMap[String(tag.id)] = direction;
+
+        console.log(
+          `[STEP4 FAST] Auto-processed: ${tag.id} (${tag.name}) → ${direction}`
+        );
+      }
+    }
+
+    // 一部でも方向性が不明なタグがあれば、LLMに委ねる
+    if (processedTags.length < directMatches.length) {
       console.log(
-        `[STEP4 FAST] Presenting direct match options: ${uniqueLabels.join(", ")}`
+        `[STEP4 FAST] Some tags have unclear direction. Deferring to LLM. Processed: ${processedTags.length}/${directMatches.length}`
       );
-      return {
-        response: `どれが一番近い？『${formatOptions(uniqueLabels)}』`,
-        status: session.status,
-        meta: { step: 4, phase: "choice" },
-        drill: session.drill,
-      };
     }
   }
 
