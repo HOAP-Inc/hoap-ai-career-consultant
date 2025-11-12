@@ -1351,36 +1351,21 @@ function finalizeMustState(session) {
   const parts = [];
   if (Array.isArray(status.must_have_ids)) {
     status.must_have_ids.forEach((id) => {
-      const tagName = TAG_NAME_BY_ID.get(Number(id));
-      if (tagName) {
-        parts.push(`have:${tagName}(ID:${id})`);
-      } else {
-        parts.push(`have:ID:${id}`);
-      }
+      parts.push(`ID:${id}/have`);
     });
   }
   if (Array.isArray(status.ng_ids)) {
     status.ng_ids.forEach((id) => {
-      const tagName = TAG_NAME_BY_ID.get(Number(id));
-      if (tagName) {
-        parts.push(`ng:${tagName}(ID:${id})`);
-      } else {
-        parts.push(`ng:ID:${id}`);
-      }
+      parts.push(`ID:${id}/ng`);
     });
   }
   if (Array.isArray(status.pending_ids)) {
     status.pending_ids.forEach((id) => {
-      const tagName = TAG_NAME_BY_ID.get(Number(id));
-      if (tagName) {
-        parts.push(`pending:${tagName}(ID:${id})`);
-      } else {
-        parts.push(`pending:ID:${id}`);
-      }
+      parts.push(`ID:${id}/pending`);
     });
   }
 
-  status.status_bar = parts.join(",");
+  status.status_bar = parts.join("，");
 }
 
 function stripQuestionSentences(text) {
