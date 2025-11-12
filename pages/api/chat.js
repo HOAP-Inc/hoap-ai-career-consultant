@@ -840,10 +840,18 @@ async function handleStep2(session, userText) {
 
 
 async function handleStep3(session, userText) {
-  // userTextがある場合のみturnIndexをインクリメント（STEP遷移時はインクリメントしない）
-  if (userText && userText.trim()) {
-    session.stage.turnIndex += 1;
+  // 【重要】STEP遷移時（userTextが空）は、LLMを呼ばずにintro質問を返す
+  if (!userText || !userText.trim()) {
+    return {
+      response: STEP_INTRO_QUESTIONS[3],
+      status: session.status,
+      meta: { step: 3 },
+      drill: session.drill,
+    };
   }
+
+  // userTextがある場合のみturnIndexをインクリメント
+  session.stage.turnIndex += 1;
   const payload = buildStepPayload(session, userText, 5);
   const llm = await callLLM(3, payload, session, { model: "gpt-4o" });
   if (!llm.ok) {
@@ -2311,11 +2319,19 @@ async function handleStep4(session, userText) {
 }
 
 async function handleStep5(session, userText) {
-  // userTextがある場合のみturnIndexをインクリメント（STEP遷移時はインクリメントしない）
-  if (userText && userText.trim()) {
-    session.stage.turnIndex += 1;
+  // 【重要】STEP遷移時（userTextが空）は、LLMを呼ばずにintro質問を返す
+  if (!userText || !userText.trim()) {
+    return {
+      response: STEP_INTRO_QUESTIONS[5],
+      status: session.status,
+      meta: { step: 5 },
+      drill: session.drill,
+    };
   }
-  
+
+  // userTextがある場合のみturnIndexをインクリメント
+  session.stage.turnIndex += 1;
+
   // ペイロード最適化：発話履歴ではなく生成済みテキストを送る
   const payload = {
     locale: "ja",
@@ -2331,7 +2347,7 @@ async function handleStep5(session, userText) {
       self_text: session.status.self_text || "",
     },
   };
-  
+
   // STEP5はまずGPT-4oで試す（タイムアウト回避）
   let llm = await callLLM(5, payload, session, { model: "gpt-4o" });
   if (!llm.ok) {

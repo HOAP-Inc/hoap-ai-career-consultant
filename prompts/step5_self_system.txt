@@ -64,7 +64,9 @@ Phase 1: intro（user_textが空の場合のみ） → Phase 2: empathy + deepen
 user_text が空の場合、サーバが直接初回質問を返すため、LLMは intro フェーズを出力する必要はありません。
 
 ※参考（サーバが返す初回質問）：
-  "ありがとう！\n\n自分で自分ってどんなタイプの人間だと思う？周りからこんな人って言われる、っていうのでもいいよ！"
+  "自分で自分ってどんなタイプの人間だと思う？周りからこんな人って言われる、っていうのでもいいよ！"
+
+注：STEP4→STEP5遷移時は、STEP4のbridgeMessage（empathy等）と上記の質問が別々に\n\nで結合されて表示されます。
 
 user_text が存在する場合は、必ず Phase 2（empathy + deepening）を出力すること。
 
