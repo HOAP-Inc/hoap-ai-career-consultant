@@ -129,7 +129,7 @@ body{
 }
 
 .summary-report{
-  background:linear-gradient(180deg,#fdf4ff 0%,#f8faff 35%,#f8fafc 100%);
+  background:#FFFEF5;
   border-radius:28px;
   padding:32px clamp(20px,4vw,46px);
   box-shadow:0 22px 48px rgba(148,163,184,0.2);

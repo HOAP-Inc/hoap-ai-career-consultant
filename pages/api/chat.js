@@ -2693,16 +2693,32 @@ async function handleStep6(session, userText) {
       }
     }
 
-  const canSummary = Array.isArray(session.status.can_texts) && session.status.can_texts.length > 0
+  // STEP2のファースト質問への回答（経歴）を取得
+  const step2History = session.history.filter(h => h.step === 2 && h.role === "user");
+  const careerBackground = step2History.length > 0 ? step2History[0].text : "";
+
+  // CAN表示：経歴 + 強み
+  const canParts = [];
+  if (careerBackground) {
+    canParts.push(careerBackground);
+  }
+  const canStrengths = Array.isArray(session.status.can_texts) && session.status.can_texts.length > 0
     ? session.status.can_texts.join("／")
     : session.status.can_text || "";
+  if (canStrengths) {
+    canParts.push(canStrengths);
+  }
+  const canSummary = canParts.filter(Boolean).join("。");
+
   if (canSummary) {
     hearingCards.push({ title: "Can（今できること）", body: canSummary });
     }
 
-  const willSummary = Array.isArray(session.status.will_texts) && session.status.will_texts.length > 0
+  // Will表示：整形処理を適用
+  const rawWill = Array.isArray(session.status.will_texts) && session.status.will_texts.length > 0
     ? session.status.will_texts.join("／")
     : session.status.will_text || "";
+  const willSummary = rawWill ? polishSummaryText(rawWill, 3) : "";
   if (willSummary) {
     hearingCards.push({ title: "Will（やりたいこと）", body: willSummary });
     }
@@ -2778,8 +2794,8 @@ async function handleStep6(session, userText) {
 
   const ctaHtml = `
     <div style="text-align: center; margin-bottom: 24px;">
-      <p style="color: #000; font-weight: 600; margin: 0 0 16px 0; font-size: 14px;">自分の経歴書代わりに使えるキャリアシートを作成したい人はこちらのボタンから無料作成してね！これまでの経歴や希望条件を入れたり、キャリアエージェントに相談もできるよ。</p>
-      <button type="button" class="choice-btn" style="width: auto; padding: 14px 28px; font-size: 16px;">無料で作成する</button>
+      <p style="color: #000; font-weight: 600; margin: 0 0 16px 0; font-size: 14px; line-height: 1.7;">自分の経歴書代わりに使えるキャリアシートを作成したい人はこちらのボタンから無料作成してね！<br>これまでの経歴や希望条件を入れたり、キャリアエージェントに相談もできるよ。</p>
+      <button type="button" style="background: linear-gradient(135deg, #F09433 0%, #E6683C 25%, #DC2743 50%, #CC2366 75%, #BC1888 100%); border: none; border-radius: 999px; padding: 14px 28px; font-size: 16px; font-weight: 700; color: #fff; cursor: pointer; box-shadow: 0 4px 12px rgba(236, 72, 153, 0.3); transition: transform 0.2s ease;">無料で作成する</button>
     </div>
   `;
 
