@@ -1992,19 +1992,19 @@ async function handleStep4(session, userText) {
         const directionMap = session.status.direction_map || {};
         session.status.must_have_ids.forEach(id => {
           const direction = directionMap[String(id)] || "have";
-          statusBarParts.push(`ID:${id}/${direction}`);
+          statusBarParts.push(`${id}:${direction}`);
         });
       }
       if (Array.isArray(session.status.ng_ids) && session.status.ng_ids.length > 0) {
         const directionMap = session.status.direction_map || {};
         session.status.ng_ids.forEach(id => {
           const direction = directionMap[String(id)] || "ng";
-          statusBarParts.push(`ID:${id}/${direction}`);
+          statusBarParts.push(`${id}:${direction}`);
         });
       }
       if (Array.isArray(session.status.pending_ids) && session.status.pending_ids.length > 0) {
         session.status.pending_ids.forEach(id => {
-          statusBarParts.push(`ID:${id}/pending`);
+          statusBarParts.push(`${id}:pending`);
         });
       }
       if (statusBarParts.length > 0) {
@@ -2113,8 +2113,8 @@ async function handleStep4(session, userText) {
         return direction && direction !== "pending";
       });
 
-      // ネガティブキーワードがある場合、またはポジティブキーワードがある場合は方向性確認不要
-      if ((hasNegativeKeywords || hasPositiveKeywords) && allDirectionsConfirmed) {
+      // すでに方向性が確定している場合（IDも確定している場合）は方向性確認不要
+      if (allDirectionsConfirmed && autoConfirmedIds.length > 0) {
         // 方向性が明確な場合は次の条件を聞く
         question = "他に『ここだけは譲れない』って思う条件があったら教えてほしいな✨";
       } else if (pendingDirectionTag) {

@@ -5,6 +5,7 @@ import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from
 // hoap-up.pngは「ありがとう！」専用のため除外
 const HOAP_ANIMATION_IMAGES = [
   "/hoap-skip.png",
+  "/hoap-wide.png",
   "/10.png",
   "/11.png",
   "/12.png",
@@ -330,26 +331,16 @@ setChoices(isChoiceStep(next) ? uniqueByNormalized(inline) : []);
           return;
         }
 
-        // 1. basicからwideへ
-        setHoapSrc("/hoap-wide.png");
+        // ランダム画像を選択して表示
+        const randomImage = HOAP_ANIMATION_IMAGES[Math.floor(Math.random() * HOAP_ANIMATION_IMAGES.length)];
+        setHoapSrc(randomImage);
 
-        // 2. 0.5秒後にランダム画像へ
+        // 2秒後にbasicに戻す
         setTimeout(() => {
-          const randomImage = HOAP_ANIMATION_IMAGES[Math.floor(Math.random() * HOAP_ANIMATION_IMAGES.length)];
-          setHoapSrc(randomImage);
-
-          // 3. 2秒後にwideへ
-          setTimeout(() => {
-            setHoapSrc("/hoap-wide.png");
-
-            // 4. 0.5秒後にbasicに戻す
-            setTimeout(() => {
-              setHoapSrc("/hoap-basic.png");
-              // 次のアニメーションをスケジュール
-              scheduleNextAnimation();
-            }, 500);
-          }, 2000);
-        }, 500);
+          setHoapSrc("/hoap-basic.png");
+          // 次のアニメーションをスケジュール
+          scheduleNextAnimation();
+        }, 2000);
       }, nextDelay);
     };
 
