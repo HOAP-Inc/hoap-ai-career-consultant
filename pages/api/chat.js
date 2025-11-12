@@ -1687,7 +1687,13 @@ ${normalized}
 再構成した文章のみを出力してください。説明や前置きは不要です。`;
 
   try {
-    const openai = getOpenAI();
+    const apiKey = process.env.OPENAI_API_KEY;
+    if (!apiKey) {
+      console.warn("[reconstructSelfAnalysis] Missing API key, using fallback");
+      return polishSummaryText(normalized, 5);
+    }
+
+    const openai = new OpenAI({ apiKey });
     const response = await openai.chat.completions.create({
       model: "gpt-4o",
       messages: [
