@@ -347,7 +347,7 @@ setChoices(isChoiceStep(next) ? uniqueByNormalized(inline) : []);
         revertTimerRef.current = null;
       }, 1600);
     }
-  }, [aiText, hoapSrc]);
+  }, [aiText]);
 
   // スマホのキーボード高さを CSS 変数 --kb に同期
   useEffect(() => {
