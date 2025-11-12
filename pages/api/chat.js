@@ -371,6 +371,9 @@ async function handleStep1(session, userText) {
     session.stage.turnIndex = 0;
     resetDrill(session);
     // 資格なしの場合は「ありがとう！」だけを表示してSTEP2へ強制移行
+    // STEP2の2段階質問フェーズを初期化
+    if (!session.meta) session.meta = {};
+    session.meta.step2_intro_phase = 1;
     return {
       response: STEP_INTRO_QUESTIONS[2].first,
       status: session.status,
@@ -445,6 +448,9 @@ async function handleStep1(session, userText) {
       session.step = 2;
       session.stage.turnIndex = 0;
       resetDrill(session);
+      // STEP2の2段階質問フェーズを初期化
+      if (!session.meta) session.meta = {};
+      session.meta.step2_intro_phase = 1;
       return {
         response: STEP_INTRO_QUESTIONS[2].first,
         status: session.status,
