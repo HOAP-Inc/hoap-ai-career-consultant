@@ -705,7 +705,7 @@ html, body, #__next { height: 100%; }
     display: flex;
     flex-wrap: wrap;
     gap: 6px;
-    margin: 8px 0 12px;
+    margin: 4px 0 8px;
     padding: 6px 8px;
     background: linear-gradient(180deg, var(--bg-via) 0%, transparent 100%);
     border-radius: 12px;
@@ -716,7 +716,7 @@ html, body, #__next { height: 100%; }
 
   .status-progress{
     position: fixed;
-    top: 64px;
+    top: 60px;
     left: 0;
     right: 0;
     z-index: 18;
@@ -727,14 +727,14 @@ html, body, #__next { height: 100%; }
 
   .duo-stage{
     margin: 0;
-    margin-top: 20px !important;
+    margin-top: 8px !important;
     height: 420px !important;
     position: relative;
     overflow: hidden;
   }
   .duo-stage__bg{
     background-size: 102%;
-    background-position: center bottom -24px;
+    background-position: center bottom 20px;
   }
   .duo-stage__wrap{ padding: 6px 12px; }
 
@@ -744,19 +744,19 @@ html, body, #__next { height: 100%; }
   }
 
   .duo-stage__hoap{
-    width: min(50vw, 280px);
+    width: min(55vw, 320px);
     right: 6%;
-    bottom: 30px !important;
+    bottom: 70px !important;
     top: auto !important;
     z-index: 1;
   }
 
   .duo-stage__bubbles-container{
     left: 6%;
-    top: 6%;
-    width: 84vw;
-    max-width: 84vw;
-    max-height: calc(100% - 28px);
+    top: 8%;
+    width: 82vw;
+    max-width: 82vw;
+    max-height: calc(100% - 40px);
     overflow-y: auto;
     -webkit-overflow-scrolling: touch;
     overscroll-behavior: contain;
@@ -855,7 +855,7 @@ section[aria-label="最終確認"] details > div{ color: #374151; }
   display: flex;
   flex-wrap: wrap;
   gap: 12px;
-  margin: 16px 0;
+  margin: 12px 0;
   justify-content: center;
 }
 
