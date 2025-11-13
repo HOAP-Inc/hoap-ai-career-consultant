@@ -640,27 +640,6 @@ setChoices(isChoiceStep(next) ? uniqueByNormalized(inline) : []);
         </div>
       )}
 
-      {/* ステータスバッジ（仮シート表示時は非表示） */}
-      {!showSummary && (
-        <div className="status-row">
-          {[
-            "資格",
-            "Can",
-            "Will",
-            "Must",
-            "私はこんな人",
-            "AIの分析",
-          ].map((k) => {
-            const displayValue = getStatusRowDisplay(k, statusMeta);
-            return (
-              <span key={k} className="badge">
-                {k}：{displayValue}
-              </span>
-            );
-          })}
-        </div>
-      )}
-
       {/* ステータス進捗バー：STEP6で分析中の場合は専用表示 */}
       {step === 6 && showSummary ? (
         <div className="status-progress" style={{ position: 'relative' }}>
@@ -687,6 +666,27 @@ setChoices(isChoiceStep(next) ? uniqueByNormalized(inline) : []);
           />
         </div>
       ) : null}
+
+      {/* ステータスバッジ（仮シート表示時は非表示） */}
+      {!showSummary && (
+        <div className="status-row">
+          {[
+            "資格",
+            "Can",
+            "Will",
+            "Must",
+            "私はこんな人",
+            "AIの分析",
+          ].map((k) => {
+            const displayValue = getStatusRowDisplay(k, statusMeta);
+            return (
+              <span key={k} className="badge">
+                {k}：{displayValue}
+              </span>
+            );
+          })}
+        </div>
+      )}
 
       {/* キャリアの説明書（モーダル表示） - Instagram風 最高級UI */}
       {showSummary && summaryData && (

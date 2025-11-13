@@ -692,16 +692,22 @@ html, body, #__next { height: 100%; }
     padding: 0 8px;
     font-size: 11px;
     line-height: 1;
-    min-width: 0;
     white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
+    flex-shrink: 0;
+  }
+
+  .status-progress{
+    position: sticky;
+    top: 36px;
+    z-index: 19;
+    height: 4px;
+    margin: 4px 0 8px;
   }
 
   .status-row{
     position: sticky;
-    top: 36px;
-    z-index: 19;
+    top: 48px;
+    z-index: 18;
     display: flex;
     flex-wrap: nowrap;
     gap: 6px;
@@ -714,17 +720,9 @@ html, body, #__next { height: 100%; }
     -webkit-overflow-scrolling: touch;
   }
 
-  .status-progress{
-    position: sticky;
-    top: 64px;
-    z-index: 18;
-    height: 4px;
-    margin: 4px 0 12px;
-  }
-
   .duo-stage{
     margin: 0;
-    margin-top: 4px !important;
+    margin-top: 0 !important;
     height: 420px !important;
     position: relative;
     overflow: hidden;
