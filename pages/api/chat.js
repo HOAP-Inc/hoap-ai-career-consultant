@@ -24,11 +24,22 @@ const STEP_PROMPTS = {
 const COMMON_PROMPT = safeRead(path.join(PROMPTS_DIR, "common_instructions.txt"));
 const LLM_BRAKE_PROMPT = safeRead(path.join(PROMPTS_DIR, "llm_brake_system.txt"));
 
-// 各STEPの初回質問（プロンプトファイルから抽出）
+// ==========================================
+// 各STEPの初回質問（サーバ管理）
+// ==========================================
+// 【重要】この定数が各STEPの初回質問の唯一の管理箇所です
+// プロンプトファイルには「サーバ管理」の注記のみ記載されています
+// 修正時はここだけを変更してください（プロンプトファイルは不要）
+//
+// STEP遷移時のブリッジメッセージ（"ありがとう！"等）もサーバ管理です
+// ==========================================
 const STEP_INTRO_QUESTIONS = {
-  2: "これまでどんな職場でどんなことをしてきた？これまで経験してきたあなたの得意なことやこれからも活かしたいことも一緒に教えてね！",
-  3: "次は、今の職場ではできないけど、やってみたいことを教えて！『これができたらいいな』って思うことでOKだよ✨",
-  4: "次は、働きたい事業形態や労働条件を教えて！たとえば『クリニックがいい』『夜勤は避けたい』みたいな感じでOKだよ✨",
+  2: {
+    first: "これまでどんな職場でどんなことをしてきた？あなたの経歴を簡単でいいから教えてね。",
+    second: "その経験の中で、あなたが得意だなと感じていることや、これからも活かしていきたい強みってどんなこと？"
+  },
+  3: "次は、今後挑戦したいこと、やってみたいことを教えて！『これができたらいいな』って思うことでOKだよ✨",
+  4: "次は、働きたい事業形態や労働条件を教えて！たとえば『クリニックがいい』『夜勤は避けたい』みたいなイメージでOKだよ✨",
   5: "自分で自分ってどんなタイプの人間だと思う？周りからこんな人って言われる、っていうのでもいいよ！",
 };
 
@@ -360,8 +371,11 @@ async function handleStep1(session, userText) {
     session.stage.turnIndex = 0;
     resetDrill(session);
     // 資格なしの場合は「ありがとう！」だけを表示してSTEP2へ強制移行
+    // STEP2の2段階質問フェーズを初期化
+    if (!session.meta) session.meta = {};
+    session.meta.step2_intro_phase = 1;
     return {
-      response: STEP_INTRO_QUESTIONS[2],
+      response: STEP_INTRO_QUESTIONS[2].first,
       status: session.status,
       meta: { step: 2 },
       drill: session.drill,
@@ -434,8 +448,11 @@ async function handleStep1(session, userText) {
       session.step = 2;
       session.stage.turnIndex = 0;
       resetDrill(session);
+      // STEP2の2段階質問フェーズを初期化
+      if (!session.meta) session.meta = {};
+      session.meta.step2_intro_phase = 1;
       return {
-        response: STEP_INTRO_QUESTIONS[2],
+        response: STEP_INTRO_QUESTIONS[2].first,
         status: session.status,
         meta: { step: 2 },
         drill: session.drill,
@@ -561,10 +578,27 @@ function buildStepPayload(session, userText, recentCount) {
 }
 
 async function handleStep2(session, userText) {
-  // userTextがある場合のみturnIndexをインクリメント（STEP遷移時はインクリメントしない）
+  // session.meta 初期化
+  if (!session.meta) session.meta = {};
+  if (typeof session.meta.step2_intro_phase !== "number") {
+    session.meta.step2_intro_phase = 1; // 1: first質問, 2: second質問後
+  }
+
+  // 【Phase 1】first質問を返す（userTextが空 && phase=1）
+  if ((!userText || !userText.trim()) && session.meta.step2_intro_phase === 1) {
+    return {
+      response: STEP_INTRO_QUESTIONS[2].first,
+      status: session.status,
+      meta: { step: 2, intro_phase: 1 },
+      drill: session.drill,
+    };
+  }
+
+  // userTextがある場合のみturnIndexをインクリメント
   if (userText && userText.trim()) {
     session.stage.turnIndex += 1;
   }
+
   const payload = buildStepPayload(session, userText, 3);
   const llm = await callLLM(2, payload, session, { model: "gpt-4o" });
 
@@ -574,13 +608,29 @@ async function handleStep2(session, userText) {
 
   const parsed = llm.parsed || {};
 
-  // intro フェーズの処理（STEP2初回質問）
+  // 【Phase 1の応答処理】empathy + second質問を結合
+  if (session.meta.step2_intro_phase === 1 && parsed?.empathy) {
+    session.meta.step2_intro_phase = 2; // フェーズを2に進める
+    const combinedResponse = [
+      parsed.empathy,
+      STEP_INTRO_QUESTIONS[2].second
+    ].filter(Boolean).join("\n\n");
+
+    return {
+      response: combinedResponse,
+      status: session.status,
+      meta: { step: 2, intro_phase: 2 },
+      drill: session.drill,
+    };
+  }
+
+  // intro フェーズの処理（安全装置：LLMが予期せずintroを返した場合）
   if (parsed?.control?.phase === "intro") {
     // deepening_countをリセット
     if (!session.meta) session.meta = {};
     session.meta.step2_deepening_count = 0;
     return {
-      response: parsed.response || "次は、あなたが今までやってきたことでこれからも活かしていきたいこと、あなたの強みを教えて！",
+      response: parsed.response || STEP_INTRO_QUESTIONS[2].first,
       status: session.status,
       meta: { step: 2 },
       drill: session.drill,
@@ -790,10 +840,18 @@ async function handleStep2(session, userText) {
 
 
 async function handleStep3(session, userText) {
-  // userTextがある場合のみturnIndexをインクリメント（STEP遷移時はインクリメントしない）
-  if (userText && userText.trim()) {
-    session.stage.turnIndex += 1;
+  // 【重要】STEP遷移時（userTextが空）は、LLMを呼ばずにintro質問を返す
+  if (!userText || !userText.trim()) {
+    return {
+      response: STEP_INTRO_QUESTIONS[3],
+      status: session.status,
+      meta: { step: 3 },
+      drill: session.drill,
+    };
   }
+
+  // userTextがある場合のみturnIndexをインクリメント
+  session.stage.turnIndex += 1;
   const payload = buildStepPayload(session, userText, 5);
   const llm = await callLLM(3, payload, session, { model: "gpt-4o" });
   if (!llm.ok) {
@@ -945,6 +1003,53 @@ async function handleStep3(session, userText) {
     meta: { step: 3 },
     drill: session.drill,
   };
+}
+
+/**
+ * キーワードの周辺テキストを抽出する
+ * @param {string} userText - ユーザー発話全体
+ * @param {string} keyword - 検索するキーワード
+ * @returns {string} キーワードとその周辺テキスト
+ */
+function extractKeywordContext(userText, keyword) {
+  const index = userText.toLowerCase().indexOf(keyword.toLowerCase());
+  if (index === -1) return userText;
+
+  // キーワードの前後30文字を取得（句読点を考慮）
+  const start = Math.max(0, index - 30);
+  const end = Math.min(userText.length, index + keyword.length + 30);
+  return userText.slice(start, end);
+}
+
+/**
+ * テキストから方向性を判定する
+ * @param {string} text - 判定対象のテキスト
+ * @returns {string|null} "have" | "ng" | "pending" | null
+ */
+function judgeDirection(text) {
+  const normalized = text.replace(/\s+/g, "");
+
+  // 否定パターン（明確にngと判断できる場合のみ）
+  const negPattern = /(絶対|まったく|全然|全く|完全)\s*(なし|避け|NG|いや|いやだ|無理|したくない)/;
+  const negKeywords = /(なし|困る|避けたい|無理|いや|いやだ|遠慮|拒否|嫌|苦手|できない)/;
+
+  // 肯定パターン（明確にhaveと判断できる場合のみ）
+  const posPattern = /(絶対|必ず|どうしても|ぜひ)\s*(ほしい|欲しい|必要|あってほしい|したい)/;
+  const posKeywords = /(ほしい|欲しい|必要|希望|理想|重視|大事|重要|働きたい|やりたい|興味|魅力|がいい|できる|可能|OK|いい|したい|好き)/;
+
+  // 保留パターン
+  const neutralPattern = /(あれば|できれば|できたら|なくても|なくて|どちらでも)/;
+  const flexiblePattern = /(多少|ちょっと|少し|月\d+時間|20時間|二十時間)/;
+
+  if (negPattern.test(normalized) || negKeywords.test(normalized)) {
+    return "ng";
+  } else if (posPattern.test(normalized) || posKeywords.test(normalized)) {
+    return "have";
+  } else if (neutralPattern.test(normalized) || flexiblePattern.test(normalized)) {
+    return "pending";
+  }
+
+  return null; // 不明な場合はLLMに委ねる
 }
 
 /**
@@ -1246,36 +1351,21 @@ function finalizeMustState(session) {
   const parts = [];
   if (Array.isArray(status.must_have_ids)) {
     status.must_have_ids.forEach((id) => {
-      const tagName = TAG_NAME_BY_ID.get(Number(id));
-      if (tagName) {
-        parts.push(`have:${tagName}(ID:${id})`);
-      } else {
-        parts.push(`have:ID:${id}`);
-      }
+      parts.push(`ID:${id}/have`);
     });
   }
   if (Array.isArray(status.ng_ids)) {
     status.ng_ids.forEach((id) => {
-      const tagName = TAG_NAME_BY_ID.get(Number(id));
-      if (tagName) {
-        parts.push(`ng:${tagName}(ID:${id})`);
-      } else {
-        parts.push(`ng:ID:${id}`);
-      }
+      parts.push(`ID:${id}/ng`);
     });
   }
   if (Array.isArray(status.pending_ids)) {
     status.pending_ids.forEach((id) => {
-      const tagName = TAG_NAME_BY_ID.get(Number(id));
-      if (tagName) {
-        parts.push(`pending:${tagName}(ID:${id})`);
-      } else {
-        parts.push(`pending:ID:${id}`);
-      }
+      parts.push(`ID:${id}/pending`);
     });
   }
 
-  status.status_bar = parts.join(",");
+  status.status_bar = parts.join("，");
 }
 
 function stripQuestionSentences(text) {
@@ -1554,6 +1644,80 @@ function polishSummaryText(text, maxSentences = 3) {
   return polished.join("");
 }
 
+async function reconstructSelfAnalysis(rawText) {
+  if (!rawText) return "";
+
+  // まず基本的な整形を適用
+  const normalized = String(rawText)
+    .replace(/\r/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  if (!normalized) return "";
+
+  // 既に十分整っている文章かチェック（完全な文が3つ以上あり、不完全な語尾がない）
+  const sentences = normalized.split(/(?<=[。！？])/).filter(Boolean);
+  const hasIncompleteEndings = /[、とき]。/.test(normalized);
+  const hasFragmentation = sentences.some(s => s.length < 15 || /^[、。]/.test(s));
+
+  if (sentences.length >= 3 && !hasIncompleteEndings && !hasFragmentation) {
+    // 既に整っているのでLLM呼び出しをスキップ
+    return polishSummaryText(normalized, 5);
+  }
+
+  // LLMで文章を再構成
+  const prompt = `あなたは自己分析テキストを整形する専門家です。
+以下のテキストはユーザーが自分について語った内容の断片です。
+これを、意味が通る自然な日本語の文章に再構成してください。
+
+【入力テキスト】
+${normalized}
+
+【再構成ルール】
+1. ユーザーの言葉と内容を変えない（事実の追加・削除禁止）
+2. 不完全な文（「〜とき。」など）を完全な文に修正する
+3. 断片的な発話を接続詞で繋ぎ、滑らかな文章にする
+4. 180〜280字の一人称文章（「私は」「私の」）として整形
+5. 語尾は全て丁寧語（「〜です」「〜ます」「〜でした」）で統一
+6. 3〜4文で構成し、各文を自然に繋げる
+7. 定型文（「という性格です」「という人間です」など）は使用禁止
+8. 仕事の話ではなく、人としての性格・価値観を描く
+
+【出力】
+再構成した文章のみを出力してください。説明や前置きは不要です。`;
+
+  try {
+    const apiKey = process.env.OPENAI_API_KEY;
+    if (!apiKey) {
+      console.warn("[reconstructSelfAnalysis] Missing API key, using fallback");
+      return polishSummaryText(normalized, 5);
+    }
+
+    const openai = new OpenAI({ apiKey });
+    const response = await openai.chat.completions.create({
+      model: "gpt-4o",
+      messages: [
+        { role: "system", content: "You are a professional text editor specializing in Japanese self-analysis texts." },
+        { role: "user", content: prompt }
+      ],
+      temperature: 0.3,
+      max_tokens: 500,
+    });
+
+    const reconstructed = response.choices?.[0]?.message?.content?.trim();
+    if (reconstructed && reconstructed.length >= 50) {
+      console.log("[reconstructSelfAnalysis] Successfully reconstructed:", reconstructed);
+      return reconstructed;
+    } else {
+      console.warn("[reconstructSelfAnalysis] LLM returned insufficient text, using fallback");
+      return polishSummaryText(normalized, 5);
+    }
+  } catch (error) {
+    console.error("[reconstructSelfAnalysis] Error calling LLM:", error);
+    return polishSummaryText(normalized, 5);
+  }
+}
+
 function enforcePoliteTone(text) {
   if (!text) return "";
   const paragraphs = String(text)
@@ -1638,6 +1802,29 @@ function refineStep5Question(session, question) {
   const lastUserText = getLatestUserText(session, 5);
   const anchor = deriveAnchorText(lastUserText);
 
+  // 「〜と思う」「〜と思います」で終わる場合の不自然な「と感じたとき」を検出して修正
+  const thinkingPatterns = /(と思う|と思います|だと思う|だと思います|と感じる|と感じます)と感じたとき/;
+  if (thinkingPatterns.test(result)) {
+    // 「〜と思うと感じたとき」を「そう思うのはどんなときが多い？」などに置き換え
+    result = result.replace(thinkingPatterns, "");
+    if (anchor) {
+      result = `それって、いつ頃からそう思うようになった？`;
+    } else {
+      result = `そう思うのは、どんな場面が多い？`;
+    }
+  }
+
+  // 「〜言われます」で終わる場合の不自然な「と感じたとき」を検出して修正
+  const passivePatterns = /(言われます|言われる|されます|される)と感じたとき/;
+  if (passivePatterns.test(result)) {
+    result = result.replace(passivePatterns, "");
+    if (anchor) {
+      result = `それって、誰に一番言われる？`;
+    } else {
+      result = `そう言われるのは、どんなときが多い？`;
+    }
+  }
+
   const ambiguousPatterns = [
     /いつも/,
     /どんな場面/,
@@ -1649,7 +1836,12 @@ function refineStep5Question(session, question) {
   ];
 
   if (anchor && ambiguousPatterns.some((p) => p.test(result))) {
-    result = `${anchor}と感じたとき、具体的にどんな状況だった？`;
+    // anchorが「〜と思う/思います」で終わる場合は「と感じたとき」を使わない
+    if (/(と思う|と思います|だと思う|だと思います)$/.test(anchor)) {
+      result = `それって、いつ頃からそう思うようになった？`;
+    } else {
+      result = `${anchor}と感じたとき、具体的にどんな状況だった？`;
+    }
   }
 
   if (!hasQuestionMark) {
@@ -1702,7 +1894,7 @@ async function handleStep4(session, userText) {
     session.meta.step4_intro_shown = true;
     console.log("[STEP4] Showing intro question for the first time.");
     return {
-      response: "次は、働きたい事業形態や労働条件を教えて！たとえば『クリニックで働きたい』『夜勤は避けたい』みたいな感じでOKだよ✨",
+      response: STEP_INTRO_QUESTIONS[4],
       status: session.status,
       meta: { step: 4, phase: "intro", deepening_count: 0 },
       drill: session.drill,
@@ -1735,29 +1927,9 @@ async function handleStep4(session, userText) {
       `[STEP4 FAST] Direct ID match found: ${matchedTag.id} (${matchedTag.name})`
     );
 
-    // 方向性を判定（have/ng/pending を決める）
-    const normalized = userText.replace(/\s+/g, "");
-    let direction = null; // デフォルトをnullに変更（不明な場合はLLMに委ねる）
-
-    // 否定パターン（明確にngと判断できる場合のみ）
-    const negPattern = /(絶対|まったく|全然|全く|完全)\s*(なし|避け|NG|いや|いやだ|無理|したくない)/;
-    const negKeywords = /(なし|困る|避けたい|無理|いや|いやだ|遠慮|拒否|嫌|苦手)/;
-
-    // 肯定パターン（明確にhaveと判断できる場合のみ）
-    const posPattern = /(絶対|必ず|どうしても|ぜひ)\s*(ほしい|欲しい|必要|あってほしい|したい)/;
-    const posKeywords = /(ほしい|欲しい|必要|希望|理想|重視|大事|重要|働きたい|やりたい|興味|魅力)/;
-
-    // 保留パターン
-    const neutralPattern = /(あれば|できれば|できたら|なくても|なくて|どちらでも)/;
-    const flexiblePattern = /(多少|ちょっと|少し|月\d+時間|20時間|二十時間)/;
-
-    if (negPattern.test(normalized) || negKeywords.test(normalized)) {
-      direction = "ng";
-    } else if (posPattern.test(normalized) || posKeywords.test(normalized)) {
-      direction = "have";
-    } else if (neutralPattern.test(normalized) || flexiblePattern.test(normalized)) {
-      direction = "pending";
-    }
+    // キーワードの周辺テキストを抽出して方向性を判定
+    const context = extractKeywordContext(userText, matchedTag.name);
+    let direction = judgeDirection(context);
 
     // 方向性が確定した場合のみauto_confirmed_idsに含める
     if (direction !== null) {
@@ -1813,20 +1985,68 @@ async function handleStep4(session, userText) {
       // （LLMの共感文生成後に更新）
     }
   } else if (directMatches.length > 1) {
-    const uniqueLabels = Array.from(new Set(directMatches.map(tag => tag.name))).slice(0, 6);
-    if (uniqueLabels.length > 1) {
-      session.drill.phase = "step4_tag_choice";
-      session.drill.awaitingChoice = true;
-      session.drill.options = uniqueLabels;
+    // 複数キーワードが見つかった場合、各キーワードについて個別に方向性を判定
+    console.log(
+      `[STEP4 FAST] Multiple matches found: ${directMatches.map(t => t.name).join(", ")}`
+    );
+
+    if (!session.status.must_have_ids) session.status.must_have_ids = [];
+    if (!session.status.ng_ids) session.status.ng_ids = [];
+    if (!session.status.pending_ids) session.status.pending_ids = [];
+    if (!session.status.direction_map) session.status.direction_map = {};
+
+    const processedTags = [];
+
+    for (const tag of directMatches) {
+      // キーワードの周辺テキストを抽出
+      const context = extractKeywordContext(userText, tag.name);
+      const direction = judgeDirection(context);
+
+      if (direction !== null) {
+        // 方向性が確定した場合のみ登録
+        processedTags.push({ tag, direction });
+        autoConfirmedIds.push(tag.id);
+
+        // 他の配列から同一IDを除外
+        const removeId = (arr) => {
+          if (Array.isArray(arr)) {
+            const idx = arr.indexOf(tag.id);
+            if (idx >= 0) arr.splice(idx, 1);
+          }
+        };
+        removeId(session.status.must_have_ids);
+        removeId(session.status.ng_ids);
+        removeId(session.status.pending_ids);
+
+        // 方向性に応じて配列に追加
+        if (direction === "have") {
+          if (!session.status.must_have_ids.includes(tag.id)) {
+            session.status.must_have_ids.push(tag.id);
+          }
+        } else if (direction === "ng") {
+          if (!session.status.ng_ids.includes(tag.id)) {
+            session.status.ng_ids.push(tag.id);
+          }
+        } else if (direction === "pending") {
+          if (!session.status.pending_ids.includes(tag.id)) {
+            session.status.pending_ids.push(tag.id);
+          }
+        }
+
+        session.status.direction_map[String(tag.id)] = direction;
+        autoDirectionMap[String(tag.id)] = direction;
+
+        console.log(
+          `[STEP4 FAST] Auto-processed: ${tag.id} (${tag.name}) → ${direction}`
+        );
+      }
+    }
+
+    // 一部でも方向性が不明なタグがあれば、LLMに委ねる
+    if (processedTags.length < directMatches.length) {
       console.log(
-        `[STEP4 FAST] Presenting direct match options: ${uniqueLabels.join(", ")}`
+        `[STEP4 FAST] Some tags have unclear direction. Deferring to LLM. Processed: ${processedTags.length}/${directMatches.length}`
       );
-      return {
-        response: `どれが一番近い？『${formatOptions(uniqueLabels)}』`,
-        status: session.status,
-        meta: { step: 4, phase: "choice" },
-        drill: session.drill,
-      };
     }
   }
 
@@ -1869,7 +2089,7 @@ async function handleStep4(session, userText) {
       session.meta.step4_intro_shown = true;
       session.meta.step4_deepening_count = 0;
       return {
-        response: parsed.response || "働く上で『ここだけは譲れないな』って思うこと、ある？職場の雰囲気でも働き方でもOKだよ✨",
+        response: parsed.response || STEP_INTRO_QUESTIONS[4],
         status: session.status,
         meta: { step: 4, phase: "intro", deepening_count: 0 },
         drill: session.drill,
@@ -1992,19 +2212,19 @@ async function handleStep4(session, userText) {
         const directionMap = session.status.direction_map || {};
         session.status.must_have_ids.forEach(id => {
           const direction = directionMap[String(id)] || "have";
-          statusBarParts.push(`ID:${id}/${direction}`);
+          statusBarParts.push(`${id}:${direction}`);
         });
       }
       if (Array.isArray(session.status.ng_ids) && session.status.ng_ids.length > 0) {
         const directionMap = session.status.direction_map || {};
         session.status.ng_ids.forEach(id => {
           const direction = directionMap[String(id)] || "ng";
-          statusBarParts.push(`ID:${id}/${direction}`);
+          statusBarParts.push(`${id}:${direction}`);
         });
       }
       if (Array.isArray(session.status.pending_ids) && session.status.pending_ids.length > 0) {
         session.status.pending_ids.forEach(id => {
-          statusBarParts.push(`ID:${id}/pending`);
+          statusBarParts.push(`${id}:pending`);
         });
       }
       if (statusBarParts.length > 0) {
@@ -2100,10 +2320,6 @@ async function handleStep4(session, userText) {
       const recentTexts = session.history.slice(-3).map(item => item.text).join(" ");
       const combinedText = `${userInput} ${recentTexts}`;
 
-      // ネガティブキーワードがある場合は質問をスキップ（既に方向性が明確）
-      const hasNegativeKeywords = /嫌|避けたい|したくない|なし|いらない|不要|NG|以外|じゃなくて|ではなく/.test(combinedText);
-      const hasPositiveKeywords = /欲しい|いい|希望|理想|好き|したい|あってほしい|挑戦|やりたい/.test(combinedText);
-
       let question;
 
       // 方向性が既に明確な場合は質問をスキップ
@@ -2113,8 +2329,8 @@ async function handleStep4(session, userText) {
         return direction && direction !== "pending";
       });
 
-      // ネガティブキーワードがある場合、またはポジティブキーワードがある場合は方向性確認不要
-      if ((hasNegativeKeywords || hasPositiveKeywords) && allDirectionsConfirmed) {
+      // すでに方向性が確定している場合（IDも確定している場合）は方向性確認不要
+      if (allDirectionsConfirmed && autoConfirmedIds.length > 0) {
         // 方向性が明確な場合は次の条件を聞く
         question = "他に『ここだけは譲れない』って思う条件があったら教えてほしいな✨";
       } else if (pendingDirectionTag) {
@@ -2265,11 +2481,19 @@ async function handleStep4(session, userText) {
 }
 
 async function handleStep5(session, userText) {
-  // userTextがある場合のみturnIndexをインクリメント（STEP遷移時はインクリメントしない）
-  if (userText && userText.trim()) {
-    session.stage.turnIndex += 1;
+  // 【重要】STEP遷移時（userTextが空）は、LLMを呼ばずにintro質問を返す
+  if (!userText || !userText.trim()) {
+    return {
+      response: STEP_INTRO_QUESTIONS[5],
+      status: session.status,
+      meta: { step: 5 },
+      drill: session.drill,
+    };
   }
-  
+
+  // userTextがある場合のみturnIndexをインクリメント
+  session.stage.turnIndex += 1;
+
   // ペイロード最適化：発話履歴ではなく生成済みテキストを送る
   const payload = {
     locale: "ja",
@@ -2285,7 +2509,7 @@ async function handleStep5(session, userText) {
       self_text: session.status.self_text || "",
     },
   };
-  
+
   // STEP5はまずGPT-4oで試す（タイムアウト回避）
   let llm = await callLLM(5, payload, session, { model: "gpt-4o" });
   if (!llm.ok) {
@@ -2517,32 +2741,17 @@ async function handleStep6(session, userText) {
 
   if (
     llmResult.ok &&
-    llmResult.parsed?.status?.strength_text &&
     llmResult.parsed?.status?.doing_text &&
     llmResult.parsed?.status?.being_text
   ) {
-    session.status.strength_text = smoothAnalysisText(llmResult.parsed.status.strength_text);
     session.status.doing_text = smoothAnalysisText(llmResult.parsed.status.doing_text);
     session.status.being_text = smoothAnalysisText(llmResult.parsed.status.being_text);
-    console.log("[STEP6] LLM generated Strength:", session.status.strength_text);
     console.log("[STEP6] LLM generated Doing:", session.status.doing_text);
     console.log("[STEP6] LLM generated Being:", session.status.being_text);
   } else {
     console.warn("[STEP6 WARNING] LLM generation failed. Using fallback.");
-    const fallbackStrength =
-      session.status.can_text ||
-      (Array.isArray(session.status.can_texts) && session.status.can_texts.length > 0
-        ? session.status.can_texts.join("／")
-        : "強みについて伺いました。");
-    session.status.strength_text = smoothAnalysisText(fallbackStrength);
     session.status.doing_text = smoothAnalysisText(session.status.can_text || "行動・実践について伺いました。");
     session.status.being_text = smoothAnalysisText(session.status.self_text || "価値観・関わり方について伺いました。");
-    if (session.meta.step6_user_name) {
-      const namePrefix = `${displayName}さんは`;
-      if (session.status.strength_text && !session.status.strength_text.includes(displayName)) {
-        session.status.strength_text = `${namePrefix}${session.status.strength_text.replace(/^(さん?は|は)/, "")}`;
-      }
-    }
   }
 
   const hearingCards = [];
@@ -2556,16 +2765,32 @@ async function handleStep6(session, userText) {
       }
     }
 
-  const canSummary = Array.isArray(session.status.can_texts) && session.status.can_texts.length > 0
+  // STEP2のファースト質問への回答（経歴）を取得
+  const step2History = session.history.filter(h => h.step === 2 && h.role === "user");
+  const careerBackground = step2History.length > 0 ? step2History[0].text : "";
+
+  // CAN表示：経歴 + 強み
+  const canParts = [];
+  if (careerBackground) {
+    canParts.push(careerBackground);
+  }
+  const canStrengths = Array.isArray(session.status.can_texts) && session.status.can_texts.length > 0
     ? session.status.can_texts.join("／")
     : session.status.can_text || "";
+  if (canStrengths) {
+    canParts.push(canStrengths);
+  }
+  const canSummary = canParts.filter(Boolean).join("。");
+
   if (canSummary) {
     hearingCards.push({ title: "Can（今できること）", body: canSummary });
     }
 
-  const willSummary = Array.isArray(session.status.will_texts) && session.status.will_texts.length > 0
+  // Will表示：整形処理を適用
+  const rawWill = Array.isArray(session.status.will_texts) && session.status.will_texts.length > 0
     ? session.status.will_texts.join("／")
     : session.status.will_text || "";
+  const willSummary = rawWill ? polishSummaryText(rawWill, 3) : "";
   if (willSummary) {
     hearingCards.push({ title: "Will（やりたいこと）", body: willSummary });
     }
@@ -2577,23 +2802,31 @@ async function handleStep6(session, userText) {
     hearingCards.push({ title: "Must（譲れない条件）", body: session.status.must_text });
     }
 
-  const selfSummary = session.status.self_text || "";
+  // Self表示：LLMで文章を再構成
+  const rawSelf = session.status.self_text || "";
+  const selfSummary = rawSelf ? await reconstructSelfAnalysis(rawSelf) : "";
 
-  const strengthParts = [];
-  if (session.status.strength_text) strengthParts.push(session.status.strength_text);
-  if (session.status.doing_text) strengthParts.push(session.status.doing_text);
-  if (session.status.being_text) strengthParts.push(session.status.being_text);
-
-  if (strengthParts.length && session.meta.step6_user_name) {
-    const first = strengthParts[0] || "";
-    if (!first.includes(displayName)) {
-      strengthParts[0] = `${displayName}さんは${first.replace(/^(さん?は|は)/, "")}`;
-    }
+  // AI分析：strengthを削除し、Doing/Beingのみ表示
+  const analysisParts = [];
+  if (session.status.doing_text) {
+    analysisParts.push({
+      label: "Doing：行動・実践",
+      text: session.status.doing_text
+    });
+  }
+  if (session.status.being_text) {
+    analysisParts.push({
+      label: "Being：価値観・関わり方",
+      text: session.status.being_text
+    });
   }
 
-  const strengthBody = strengthParts
-    .map((paragraph) => escapeHtml(paragraph).replace(/\n/g, "<br />"))
-    .join("<br /><br />");
+  if (analysisParts.length && session.meta.step6_user_name) {
+    const first = analysisParts[0];
+    if (first && first.text && !first.text.includes(displayName)) {
+      first.text = `${displayName}さんは${first.text.replace(/^(さん?は|は)/, "")}`;
+    }
+  }
 
   const hearingHtml = `
     <section class="summary-panel summary-panel--hearing">
@@ -2630,19 +2863,26 @@ async function handleStep6(session, userText) {
     </section>
   `;
 
-  const strengthHtml = `
-    <section class="summary-panel summary-panel--strength">
-      <h3>🌟 あなたの強み（AI分析）</h3>
-      <div class="summary-strength__body">
-        <p>${strengthBody || "強みについて伺いました。"}</p>
-      </div>
+  // AI分析HTML：大枠の中にDoing/Beingをサブセクションとして配置
+  const analysisHtml = `
+    <section class="summary-panel summary-panel--ai-analysis">
+      <h3>🌟 AI分析</h3>
+      ${analysisParts.length > 0
+        ? analysisParts.map((part) => `
+          <div class="analysis-subsection">
+            <div class="analysis-subtitle">${escapeHtml(part.label)}</div>
+            <p>${escapeHtml(part.text).replace(/\n/g, "<br />")}</p>
+          </div>
+        `).join("")
+        : `<p>AI分析を生成中です。</p>`
+      }
     </section>
   `;
 
   const ctaHtml = `
     <div style="text-align: center; margin-bottom: 24px;">
-      <p style="color: #000; font-weight: 600; margin: 0 0 16px 0; font-size: 14px;">自分の経歴書代わりに使えるキャリアシートを作成したい人はこちらのボタンから無料作成してね！これまでの経歴や希望条件を入れたり、キャリアエージェントに相談もできるよ。</p>
-      <button type="button" class="choice-btn" style="width: auto; padding: 14px 28px; font-size: 16px;">無料で作成する</button>
+      <p style="color: #000; font-weight: 600; margin: 0 0 16px 0; font-size: 14px; line-height: 1.7;">自分の経歴書代わりに使えるキャリアシートを作成したい人はこちらのボタンから無料作成してね！<br>これまでの経歴や希望条件を入れたり、キャリアエージェントに相談もできるよ。</p>
+      <button type="button" style="background: linear-gradient(135deg, #F09433 0%, #E6683C 25%, #DC2743 50%, #CC2366 75%, #BC1888 100%); border: none; border-radius: 999px; padding: 14px 28px; font-size: 16px; font-weight: 700; color: #fff; cursor: pointer; box-shadow: 0 4px 12px rgba(236, 72, 153, 0.3); transition: transform 0.2s ease;">無料で作成する</button>
     </div>
   `;
 
@@ -2662,7 +2902,7 @@ async function handleStep6(session, userText) {
         ${hearingHtml}
         <div class="summary-report__analysis">
           ${selfHtml}
-          ${strengthHtml}
+          ${analysisHtml}
         </div>
       </div>
     </div>
@@ -2673,7 +2913,9 @@ async function handleStep6(session, userText) {
     ${summaryReportHtml}
   `.trim();
 
-  session.status.ai_analysis = strengthParts.join("\n\n").trim();
+  // ai_analysisはDoing/Beingの組み合わせ
+  const analysisTexts = analysisParts.map(part => part.text).filter(Boolean);
+  session.status.ai_analysis = analysisTexts.join("\n\n").trim();
 
   const finalMessage = [
     `${displayName}さん、ここまでたくさん話してくれて本当にありがとう！`,

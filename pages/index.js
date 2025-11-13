@@ -1,13 +1,12 @@
 import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 /* eslint-disable @next/next/no-img-element */
 
-// basic以外のアニメーション用画像（ランダムに使用）
-// hoap-up.pngは「ありがとう！」専用のため除外
+// 定期アニメーション用画像（ランダムに使用）12以外
 const HOAP_ANIMATION_IMAGES = [
+  "/hoap-wide.png",
   "/hoap-skip.png",
   "/10.png",
   "/11.png",
-  "/12.png",
   "/13.png",
   "/14.png"
 ];
@@ -161,8 +160,8 @@ function getStatusRowDisplay(key, statusMeta = {}) {
   // ポーズを元に戻すタイマー保持
   const revertTimerRef = useRef(null);
 
-  // 定期アニメーションループ用タイマー
-  const animationLoopTimerRef = useRef(null);
+  // isTyping用のランダム動きタイマー
+  const typingAnimationTimerRef = useRef(null);
 
   // 進捗バー（STEP1〜6の6段階）
   const MAX_STEP = 6;
@@ -177,7 +176,6 @@ function getStatusRowDisplay(key, statusMeta = {}) {
       "/hoap-skip.png",
       "/10.png",
       "/11.png",
-      "/12.png",
       "/13.png",
       "/14.png"
     ];
@@ -317,55 +315,7 @@ setChoices(isChoiceStep(next) ? uniqueByNormalized(inline) : []);
     }
   }, [step]);
 
-  // 定期的なランダムアニメーションループ（適度な間隔で自然に動かす）
-  useEffect(() => {
-    const scheduleNextAnimation = () => {
-      // 8〜12秒のランダムな間隔で次のアニメーションをスケジュール
-      const nextDelay = 8000 + Math.random() * 4000;
-
-      animationLoopTimerRef.current = setTimeout(() => {
-        // イベント駆動のアニメーション中（revertTimerが動いている）場合はスキップ
-        if (revertTimerRef.current !== null) {
-          scheduleNextAnimation();
-          return;
-        }
-
-        // 1. basicからwideへ
-        setHoapSrc("/hoap-wide.png");
-
-        // 2. 0.5秒後にランダム画像へ
-        setTimeout(() => {
-          const randomImage = HOAP_ANIMATION_IMAGES[Math.floor(Math.random() * HOAP_ANIMATION_IMAGES.length)];
-          setHoapSrc(randomImage);
-
-          // 3. 2秒後にwideへ
-          setTimeout(() => {
-            setHoapSrc("/hoap-wide.png");
-
-            // 4. 0.5秒後にbasicに戻す
-            setTimeout(() => {
-              setHoapSrc("/hoap-basic.png");
-              // 次のアニメーションをスケジュール
-              scheduleNextAnimation();
-            }, 500);
-          }, 2000);
-        }, 500);
-      }, nextDelay);
-    };
-
-    // 初回スケジュール
-    scheduleNextAnimation();
-
-    // クリーンアップ
-    return () => {
-      if (animationLoopTimerRef.current) {
-        clearTimeout(animationLoopTimerRef.current);
-        animationLoopTimerRef.current = null;
-      }
-    };
-  }, []);
-
-  // AI応答が更新されるたびに、ランダムで「手を広げる」を短時間表示
+  // AI応答が更新されるたびに、ランダム画像を短時間表示
   useEffect(() => {
     if (!aiText) return;
 
@@ -386,20 +336,52 @@ setChoices(isChoiceStep(next) ? uniqueByNormalized(inline) : []);
       return;
     }
 
-    // 33% くらいの確率で手を広げる
+    // 33% くらいの確率でランダム画像を表示
     if (Math.random() < 0.33) {
       if (revertTimerRef.current) {
         clearTimeout(revertTimerRef.current);
         revertTimerRef.current = null;
       }
-      setHoapSrc("/hoap-wide.png");
+      const randomImage = HOAP_ANIMATION_IMAGES[Math.floor(Math.random() * HOAP_ANIMATION_IMAGES.length)];
+      setHoapSrc(randomImage);
       revertTimerRef.current = setTimeout(() => {
         // バンザイに上書きされていない場合のみ basic に戻す
         setHoapSrc((cur) => (cur === "/hoap-up.png" ? cur : "/hoap-basic.png"));
         revertTimerRef.current = null;
       }, 1600);
     }
-  }, [aiText, hoapSrc]);
+  }, [aiText]);
+
+  // isTypingが3秒以上続く場合、ランダムで動きを入れる
+  useEffect(() => {
+    if (isTyping) {
+      // 3秒後にランダムな動きを表示
+      typingAnimationTimerRef.current = setTimeout(() => {
+        const randomPoses = ["/hoap-skip.png", "/hoap-wide.png", "/hoap-up.png"];
+        const randomPose = randomPoses[Math.floor(Math.random() * randomPoses.length)];
+
+        setHoapSrc(randomPose);
+
+        // 800ms後に基本ポーズに戻す
+        setTimeout(() => {
+          setHoapSrc("/hoap-basic.png");
+        }, 800);
+      }, 3000);
+    } else {
+      // isTypingがfalseになったらタイマークリア
+      if (typingAnimationTimerRef.current) {
+        clearTimeout(typingAnimationTimerRef.current);
+        typingAnimationTimerRef.current = null;
+      }
+    }
+
+    return () => {
+      if (typingAnimationTimerRef.current) {
+        clearTimeout(typingAnimationTimerRef.current);
+        typingAnimationTimerRef.current = null;
+      }
+    };
+  }, [isTyping]);
 
   // スマホのキーボード高さを CSS 変数 --kb に同期
   useEffect(() => {
@@ -616,96 +598,7 @@ setChoices(isChoiceStep(next) ? uniqueByNormalized(inline) : []);
         <div className="duo-stage__bg" />
         <div className="duo-stage__wrap">
           <div style={{ position: 'absolute', right: '6%', bottom: '-8%', width: 'min(380px, 38vw)', height: 'min(380px, 38vw)' }}>
-            <img
-              className="duo-stage__hoap"
-              src="/hoap-basic.png"
-              alt="ほーぷちゃん"
-              style={{
-                opacity: hoapSrc === '/hoap-basic.png' ? 1 : 0,
-                position: 'absolute',
-                transition: 'opacity 0.3s ease-in-out'
-              }}
-            />
-            <img
-              className="duo-stage__hoap"
-              src="/hoap-up.png"
-              alt="ほーぷちゃん"
-              style={{
-                opacity: hoapSrc === '/hoap-up.png' ? 1 : 0,
-                position: 'absolute',
-                transition: 'opacity 0.3s ease-in-out'
-              }}
-            />
-            <img
-              className="duo-stage__hoap"
-              src="/hoap-wide.png"
-              alt="ほーぷちゃん"
-              style={{
-                opacity: hoapSrc === '/hoap-wide.png' ? 1 : 0,
-                position: 'absolute',
-                transition: 'opacity 0.3s ease-in-out'
-              }}
-            />
-            <img
-              className="duo-stage__hoap"
-              src="/hoap-skip.png"
-              alt="ほーぷちゃん"
-              style={{
-                opacity: hoapSrc === '/hoap-skip.png' ? 1 : 0,
-                position: 'absolute',
-                transition: 'opacity 0.3s ease-in-out'
-              }}
-            />
-            <img
-              className="duo-stage__hoap"
-              src="/10.png"
-              alt="ほーぷちゃん"
-              style={{
-                opacity: hoapSrc === '/10.png' ? 1 : 0,
-                position: 'absolute',
-                transition: 'opacity 0.3s ease-in-out'
-              }}
-            />
-            <img
-              className="duo-stage__hoap"
-              src="/11.png"
-              alt="ほーぷちゃん"
-              style={{
-                opacity: hoapSrc === '/11.png' ? 1 : 0,
-                position: 'absolute',
-                transition: 'opacity 0.3s ease-in-out'
-              }}
-            />
-            <img
-              className="duo-stage__hoap"
-              src="/12.png"
-              alt="ほーぷちゃん"
-              style={{
-                opacity: hoapSrc === '/12.png' ? 1 : 0,
-                position: 'absolute',
-                transition: 'opacity 0.3s ease-in-out'
-              }}
-            />
-            <img
-              className="duo-stage__hoap"
-              src="/13.png"
-              alt="ほーぷちゃん"
-              style={{
-                opacity: hoapSrc === '/13.png' ? 1 : 0,
-                position: 'absolute',
-                transition: 'opacity 0.3s ease-in-out'
-              }}
-            />
-            <img
-              className="duo-stage__hoap"
-              src="/14.png"
-              alt="ほーぷちゃん"
-              style={{
-                opacity: hoapSrc === '/14.png' ? 1 : 0,
-                position: 'absolute',
-                transition: 'opacity 0.3s ease-in-out'
-              }}
-            />
+            <img className="duo-stage__hoap" src={hoapSrc} alt="ほーぷちゃん" />
           </div>
           <div className="duo-stage__bubbles-container">
             {isTyping ? (
