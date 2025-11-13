@@ -801,16 +801,17 @@ setChoices(isChoiceStep(next) ? uniqueByNormalized(inline) : []);
 
       {/* チャット画面 */}
       <main className="chat" ref={listRef} />
-      <div ref={bottomRef} /> 
+      <div ref={bottomRef} />
+
+     {/* ユーザーの吹き出し（入力欄の外に配置） */}
+      {userEcho && (
+        <div className="user-echo" aria-live="polite">
+          <div className="user-echo__bubble">{userEcho}</div>
+        </div>
+      )}
 
      {/* 入力欄 */}
 <footer className="input-bar">
-  {userEcho && (
-    <div className="user-echo" aria-live="polite">
-      <div className="user-echo__bubble">{userEcho}</div>
-    </div>
-  )}
-
   <div className="input-inner">
     <textarea
       ref={taRef}
