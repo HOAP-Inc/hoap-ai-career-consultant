@@ -944,10 +944,10 @@ section[aria-label="最終確認"] details > div{ color: #374151; }
 
 /* 印刷用スタイル */
 @media print {
-  /* ページ全体 */
+  /* ページ全体 - A4横向き */
   @page {
     margin: 1.5cm;
-    size: A4;
+    size: A4 landscape;
   }
 
   body {
@@ -978,6 +978,13 @@ section[aria-label="最終確認"] details > div{ color: #374151; }
     display: none !important;
   }
 
+  /* PC版レイアウトを強制（左：メモ欄、右：分析欄） */
+  .summary-report__grid {
+    display: grid !important;
+    grid-template-columns: minmax(220px, 300px) minmax(0, 1fr) !important;
+    gap: 24px !important;
+  }
+
   /* キャリアシートのコンテナ */
   .summary-html {
     page-break-inside: avoid;
@@ -987,5 +994,10 @@ section[aria-label="最終確認"] details > div{ color: #374151; }
   * {
     -webkit-print-color-adjust: exact;
     print-color-adjust: exact;
+  }
+
+  /* フォントサイズを少し小さく調整（横向きに最適化） */
+  .summary-report {
+    font-size: 13px;
   }
 }
