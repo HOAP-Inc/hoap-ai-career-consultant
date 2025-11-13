@@ -576,7 +576,7 @@ html, body, #__next { height: 100%; }
 .duo-stage{
   margin: 0 0 12px;
   position: relative;
-  height: 500px;
+  height: 400px;
   border-radius: 16px;
   overflow: visible;
   box-shadow: var(--card-shadow);
@@ -585,7 +585,7 @@ html, body, #__next { height: 100%; }
   position:absolute; inset:0;
   background: url("/beam-bg.png") center no-repeat;
   background-size: 80%;
-  background-position: center -250px;
+  background-position: center -200px;
   filter: saturate(110%);
   opacity: .95;
 }
@@ -600,7 +600,7 @@ html, body, #__next { height: 100%; }
 .duo-stage__hoap-container{
   position: absolute;
   right: 6%;
-  bottom: -8%;
+  bottom: -5%;
   width: min(380px, 38vw);
   height: min(380px, 38vw);
 }
@@ -981,13 +981,14 @@ section[aria-label="最終確認"] details > div{ color: #374151; }
   /* PC版レイアウトを強制（左：メモ欄、右：分析欄） */
   .summary-report__grid {
     display: grid !important;
-    grid-template-columns: minmax(220px, 300px) minmax(0, 1fr) !important;
-    gap: 24px !important;
+    grid-template-columns: minmax(200px, 260px) minmax(0, 1fr) !important;
+    gap: 20px !important;
   }
 
-  /* キャリアシートのコンテナ */
-  .summary-html {
+  /* 各パネルで改ページを許可、パネル内では改ページしない */
+  .summary-panel {
     page-break-inside: avoid;
+    margin-bottom: 12px;
   }
 
   /* 印刷時の色を保持 */
@@ -996,8 +997,26 @@ section[aria-label="最終確認"] details > div{ color: #374151; }
     print-color-adjust: exact;
   }
 
-  /* フォントサイズを少し小さく調整（横向きに最適化） */
+  /* フォントサイズを調整（横向きに最適化） */
   .summary-report {
-    font-size: 13px;
+    font-size: 11px;
+    line-height: 1.5;
+  }
+
+  /* 見出しのサイズも調整 */
+  .summary-panel h3 {
+    font-size: 14px !important;
+    margin-bottom: 8px !important;
+  }
+
+  /* パディングとマージンを縮小 */
+  .summary-panel {
+    padding: 12px 14px !important;
+  }
+
+  /* タイトルのマージンを調整 */
+  h2 {
+    font-size: 24px !important;
+    margin-bottom: 16px !important;
   }
 }

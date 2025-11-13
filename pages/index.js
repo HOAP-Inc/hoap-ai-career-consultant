@@ -408,8 +408,8 @@ setChoices(isChoiceStep(next) ? uniqueByNormalized(inline) : []);
 
       // 送信処理（選択肢ボタンからも呼べるように修正）
   async function onSend(forcedText) {
-    // キーボードを閉じる
-    if (taRef.current) {
+    // モバイルの時だけキーボードを閉じる
+    if (taRef.current && window.innerWidth <= 640) {
       taRef.current.blur();
     }
 
