@@ -393,10 +393,8 @@ setChoices(isChoiceStep(next) ? uniqueByNormalized(inline) : []);
     };
     syncKB();
     vv.addEventListener("resize", syncKB);
-    vv.addEventListener("scroll", syncKB);
     return () => {
       vv.removeEventListener("resize", syncKB);
-      vv.removeEventListener("scroll", syncKB);
     };
   }, []);
 
