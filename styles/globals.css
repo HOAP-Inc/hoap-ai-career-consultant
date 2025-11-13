@@ -674,7 +674,7 @@ html, body, #__next { height: 100%; }
   position: fixed;
   left: 0;
   right: 0;
-  bottom: calc(140px + env(safe-area-inset-bottom));
+  bottom: calc(120px + env(safe-area-inset-bottom));
   z-index: 40;
   display: flex;
   justify-content: flex-end;
