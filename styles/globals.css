@@ -730,8 +730,8 @@ html, body, #__next { height: 100%; }
   }
 
   .duo-stage{
-    margin: 8px 0 0 0;
-    margin-top: 8px !important;
+    margin: 4px 0 0 0;
+    margin-top: 4px !important;
     height: 320px !important;
     position: relative;
     overflow: hidden;
