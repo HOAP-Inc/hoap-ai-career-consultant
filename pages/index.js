@@ -160,6 +160,9 @@ function getStatusRowDisplay(key, statusMeta = {}) {
   // ポーズを元に戻すタイマー保持
   const revertTimerRef = useRef(null);
 
+  // isTyping用のランダム動きタイマー
+  const typingAnimationTimerRef = useRef(null);
+
   // 進捗バー（STEP1〜6の6段階）
   const MAX_STEP = 6;
   const progress = Math.min(100, Math.max(0, Math.round((Math.min(step, MAX_STEP) / MAX_STEP) * 100)));
@@ -348,6 +351,37 @@ setChoices(isChoiceStep(next) ? uniqueByNormalized(inline) : []);
       }, 1600);
     }
   }, [aiText]);
+
+  // isTypingが3秒以上続く場合、ランダムで動きを入れる
+  useEffect(() => {
+    if (isTyping) {
+      // 3秒後にランダムな動きを表示
+      typingAnimationTimerRef.current = setTimeout(() => {
+        const randomPoses = ["/hoap-skip.png", "/hoap-wide.png", "/hoap-up.png"];
+        const randomPose = randomPoses[Math.floor(Math.random() * randomPoses.length)];
+
+        setHoapSrc(randomPose);
+
+        // 800ms後に基本ポーズに戻す
+        setTimeout(() => {
+          setHoapSrc("/hoap-basic.png");
+        }, 800);
+      }, 3000);
+    } else {
+      // isTypingがfalseになったらタイマークリア
+      if (typingAnimationTimerRef.current) {
+        clearTimeout(typingAnimationTimerRef.current);
+        typingAnimationTimerRef.current = null;
+      }
+    }
+
+    return () => {
+      if (typingAnimationTimerRef.current) {
+        clearTimeout(typingAnimationTimerRef.current);
+        typingAnimationTimerRef.current = null;
+      }
+    };
+  }, [isTyping]);
 
   // スマホのキーボード高さを CSS 変数 --kb に同期
   useEffect(() => {
