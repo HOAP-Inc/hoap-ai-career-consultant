@@ -738,7 +738,7 @@ html, body, #__next { height: 100%; }
   .duo-stage__hoap{
     width: min(50vw, 280px);
     right: 6%;
-    bottom: -60px !important;
+    bottom: 60px !important;
     top: auto !important;
     z-index: 1;
   }
