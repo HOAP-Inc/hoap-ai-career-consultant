@@ -735,6 +735,11 @@ html, body, #__next { height: 100%; }
   }
   .duo-stage__wrap{ padding: 6px 12px; }
 
+  /* スマホ版：ほーぷちゃん親divのheight調整 */
+  .duo-stage__wrap > div:first-of-type {
+    height: auto !important;
+  }
+
   .duo-stage__hoap{
     width: min(50vw, 280px);
     right: 6%;
@@ -811,7 +816,8 @@ html, body, #__next { height: 100%; }
 /* PC版のみ：ほーぷちゃん位置調整 */
 @media (min-width: 721px){
   .duo-stage__wrap > div:first-of-type {
-    bottom: 10% !important;
+    bottom: 3% !important;
+    height: auto !important;
   }
 }
 
