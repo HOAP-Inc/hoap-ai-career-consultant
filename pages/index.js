@@ -599,52 +599,6 @@ setChoices(isChoiceStep(next) ? uniqueByNormalized(inline) : []);
         </div>
       </header>
 
-      <section className="duo-stage">
-        <div className="duo-stage__bg" />
-        <div className="duo-stage__wrap">
-          <div className="duo-stage__hoap-container">
-            <img className="duo-stage__hoap" src={hoapSrc} alt="ほーぷちゃん" />
-          </div>
-          <div className="duo-stage__bubbles-container">
-            {isTyping ? (
-              <div className="duo-stage__bubble typing" aria-live="polite">
-                <span className="dots"><span>・</span><span>・</span><span>・</span></span>
-              </div>
-            ) : showChoices ? (
-              <div className="duo-stage__bubble" aria-live="polite">
-                下のボタンから選んでね！
-              </div>
-            ) : aiText ? (
-              <div className="duo-stage__bubble" aria-live="polite">
-                {aiText}
-              </div>
-            ) : (
-              <div className="duo-stage__bubble" aria-live="polite">
-                …
-                </div>
-            )}
-          </div>
-        </div>
-      </section>
-
-      {isChoiceStep(step) && choices.length > 0 && !isTyping && (
-        <div className="choice-wrap">
-          {choices.map((c) => (
-            <button
-              key={c}
-              type="button"
-              className="choice-btn"
-              onClick={() => {
-                onSend(c); 
-                setChoices([]);
-              }}
-            >
-              {c}
-            </button>
-          ))}
-        </div>
-      )}
-
       {/* ステータス進捗バー：STEP6で分析中の場合は専用表示 */}
       {step === 6 && showSummary ? (
         <div className="status-progress" style={{ position: 'relative' }}>
@@ -690,6 +644,52 @@ setChoices(isChoiceStep(next) ? uniqueByNormalized(inline) : []);
               </span>
             );
           })}
+        </div>
+      )}
+
+      <section className="duo-stage">
+        <div className="duo-stage__bg" />
+        <div className="duo-stage__wrap">
+          <div className="duo-stage__hoap-container">
+            <img className="duo-stage__hoap" src={hoapSrc} alt="ほーぷちゃん" />
+          </div>
+          <div className="duo-stage__bubbles-container">
+            {isTyping ? (
+              <div className="duo-stage__bubble typing" aria-live="polite">
+                <span className="dots"><span>・</span><span>・</span><span>・</span></span>
+              </div>
+            ) : showChoices ? (
+              <div className="duo-stage__bubble" aria-live="polite">
+                下のボタンから選んでね！
+              </div>
+            ) : aiText ? (
+              <div className="duo-stage__bubble" aria-live="polite">
+                {aiText}
+              </div>
+            ) : (
+              <div className="duo-stage__bubble" aria-live="polite">
+                …
+                </div>
+            )}
+          </div>
+        </div>
+      </section>
+
+      {isChoiceStep(step) && choices.length > 0 && !isTyping && (
+        <div className="choice-wrap">
+          {choices.map((c) => (
+            <button
+              key={c}
+              type="button"
+              className="choice-btn"
+              onClick={() => {
+                onSend(c);
+                setChoices([]);
+              }}
+            >
+              {c}
+            </button>
+          ))}
         </div>
       )}
 
