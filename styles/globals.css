@@ -703,7 +703,7 @@ html, body, #__next { height: 100%; }
     top: 36px;
     z-index: 19;
     display: flex;
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
     gap: 6px;
     margin: 8px 0 12px;
     padding: 6px 8px;
