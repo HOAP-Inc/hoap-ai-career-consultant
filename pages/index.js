@@ -597,7 +597,7 @@ setChoices(isChoiceStep(next) ? uniqueByNormalized(inline) : []);
       <section className="duo-stage">
         <div className="duo-stage__bg" />
         <div className="duo-stage__wrap">
-          <div style={{ position: 'absolute', right: '6%', bottom: '-8%', width: 'min(380px, 38vw)', height: 'min(380px, 38vw)' }}>
+          <div style={{ position: 'absolute', right: '6%', bottom: '-8%', width: 'min(380px, 38vw)' }} className="hoap-container">
             <img className="duo-stage__hoap" src={hoapSrc} alt="ほーぷちゃん" />
           </div>
           <div className="duo-stage__bubbles-container">
