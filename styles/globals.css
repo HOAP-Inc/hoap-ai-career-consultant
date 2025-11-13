@@ -578,14 +578,14 @@ html, body, #__next { height: 100%; }
   position: relative;
   height: 400px;
   border-radius: 16px;
-  overflow: visible;
+  overflow: hidden;
   box-shadow: var(--card-shadow);
 }
 .duo-stage__bg{
   position:absolute; inset:0;
   background: url("/beam-bg.png") center no-repeat;
-  background-size: 80%;
-  background-position: center -200px;
+  background-size: 70%;
+  background-position: center -150px;
   filter: saturate(110%);
   opacity: .95;
 }
@@ -600,7 +600,7 @@ html, body, #__next { height: 100%; }
 .duo-stage__hoap-container{
   position: absolute;
   right: 6%;
-  bottom: -5%;
+  bottom: -10%;
   width: min(380px, 38vw);
   height: min(380px, 38vw);
 }
@@ -674,13 +674,15 @@ html, body, #__next { height: 100%; }
   position: fixed;
   left: 0;
   right: 0;
-  bottom: calc(120px + env(safe-area-inset-bottom));
+  bottom: calc(140px + env(safe-area-inset-bottom));
   z-index: 40;
   display: flex;
   justify-content: flex-end;
   padding: 0 48px;
   padding-bottom: 12px;
   pointer-events: none;
+  max-width: 66%;
+  margin-left: auto;
 }
 
 .user-echo__bubble{
@@ -946,22 +948,17 @@ section[aria-label="最終確認"] details > div{ color: #374151; }
 @media print {
   /* ページ全体 - A4横向き */
   @page {
-    margin: 1.5cm;
+    margin: 1cm;
     size: A4 landscape;
   }
 
   body {
-    background: white;
-  }
-
-  /* モーダルの背景を非表示 */
-  .container > div[style*="position: fixed"][style*="backgroundColor"] {
     background: white !important;
-    position: static !important;
-    backdrop-filter: none !important;
+    margin: 0 !important;
+    padding: 0 !important;
   }
 
-  /* キャリアシート以外を非表示 */
+  /* キャリアシート以外を完全に非表示 */
   .header,
   .status-row,
   .status-progress,
@@ -969,54 +966,100 @@ section[aria-label="最終確認"] details > div{ color: #374151; }
   .choice-wrap,
   .chat,
   .input-bar,
-  .user-echo {
-    display: none !important;
-  }
-
-  /* 閉じるボタンとPDFボタンを非表示 */
+  .user-echo,
   button {
     display: none !important;
   }
 
-  /* PC版レイアウトを強制（左：メモ欄、右：分析欄） */
-  .summary-report__grid {
-    display: grid !important;
-    grid-template-columns: minmax(200px, 260px) minmax(0, 1fr) !important;
-    gap: 20px !important;
+  /* モーダルの背景と装飾を削除 */
+  .container > div[style*="position: fixed"] {
+    background: white !important;
+    position: static !important;
+    backdrop-filter: none !important;
+    padding: 0 !important;
+    overflow: visible !important;
   }
 
-  /* 各パネルで改ページを許可、パネル内では改ページしない */
+  /* モーダルの内側のdivも装飾削除 */
+  .container > div > div {
+    background: white !important;
+    border-radius: 0 !important;
+    padding: 0 !important;
+    box-shadow: none !important;
+    border: none !important;
+    max-width: 100% !important;
+    max-height: none !important;
+    overflow: visible !important;
+  }
+
+  /* タイトル「Your Unique Career Profile」とフッターを非表示 */
+  .summary-html ~ div,
+  .summary-html + div {
+    display: none !important;
+  }
+
+  /* summary-html以外の兄弟要素を非表示 */
+  .container > div > div > *:not(.summary-html) {
+    display: none !important;
+  }
+
+  /* summary-htmlのみ表示 */
+  .summary-html {
+    display: block !important;
+    background: white !important;
+    padding: 0 !important;
+    margin: 0 !important;
+  }
+
+  /* PC版2列レイアウトを強制 */
+  .summary-report__grid {
+    display: grid !important;
+    grid-template-columns: 280px 1fr !important;
+    gap: 16px !important;
+  }
+
+  /* パネルのスタイル調整 */
   .summary-panel {
     page-break-inside: avoid;
-    margin-bottom: 12px;
+    background: white !important;
+    padding: 10px 12px !important;
+    margin-bottom: 10px !important;
+    border: 1px solid #e5e7eb !important;
+    border-radius: 8px !important;
+    box-shadow: none !important;
+  }
+
+  /* 見出しサイズ調整 */
+  .summary-panel h3 {
+    font-size: 13px !important;
+    margin: 0 0 6px 0 !important;
+    font-weight: 700 !important;
+  }
+
+  /* 全体のフォントサイズ */
+  .summary-report,
+  .summary-html {
+    font-size: 10px !important;
+    line-height: 1.4 !important;
+  }
+
+  /* シートヘッダー（◎◎さんのキャリア分析シート）*/
+  .summary-report h2 {
+    font-size: 18px !important;
+    margin: 0 0 12px 0 !important;
+    text-align: center !important;
   }
 
   /* 印刷時の色を保持 */
   * {
-    -webkit-print-color-adjust: exact;
-    print-color-adjust: exact;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
   }
 
-  /* フォントサイズを調整（横向きに最適化） */
-  .summary-report {
-    font-size: 11px;
-    line-height: 1.5;
-  }
-
-  /* 見出しのサイズも調整 */
-  .summary-panel h3 {
-    font-size: 14px !important;
-    margin-bottom: 8px !important;
-  }
-
-  /* パディングとマージンを縮小 */
-  .summary-panel {
-    padding: 12px 14px !important;
-  }
-
-  /* タイトルのマージンを調整 */
-  h2 {
-    font-size: 24px !important;
-    margin-bottom: 16px !important;
+  /* テキストのグラデーションを単色に */
+  .summary-report h2 {
+    background: none !important;
+    -webkit-text-fill-color: #1f2937 !important;
+    color: #1f2937 !important;
   }
 }
