@@ -1,6 +1,7 @@
 const fs = require("fs");
 const path = require("path");
 const { OpenAI } = require("openai");
+const { kv } = require("@vercel/kv");
 
 const PROMPTS_DIR = path.join(process.cwd(), "prompts");
 
@@ -220,7 +221,8 @@ function mapLicenseLabelToQualificationId(label) {
   return resolveQualificationIdByName(label);
 }
 
-const sessions = new Map();
+// セッションの有効期限（秒）: 24時間
+const SESSION_TTL = 60 * 60 * 24;
 
 function createSession(sessionId) {
   const base = {
@@ -337,18 +339,28 @@ async function callLLM(stepKey, payload, session, opts = {}) {
   }
 }
 
-function getSession(sessionId) {
+async function getSession(sessionId) {
   if (!sessionId) return createSession();
-  const existing = sessions.get(sessionId);
-  if (existing) return normalizeSession(existing);
+
+  try {
+    const existing = await kv.get(`session:${sessionId}`);
+    if (existing) return normalizeSession(existing);
+  } catch (err) {
+    console.error(`[KV ERROR] Failed to get session ${sessionId}:`, err);
+  }
+
   const created = createSession(sessionId);
-  sessions.set(created.id, created);
+  await saveSession(created);
   return created;
 }
 
-function saveSession(session) {
-  if (session?.id) {
-    sessions.set(session.id, session);
+async function saveSession(session) {
+  if (!session?.id) return;
+
+  try {
+    await kv.set(`session:${session.id}`, session, { ex: SESSION_TTL });
+  } catch (err) {
+    console.error(`[KV ERROR] Failed to save session ${session.id}:`, err);
   }
 }
 
@@ -2967,8 +2979,8 @@ async function handler(req, res) {
   // body 取得の保険（Edge/Node 両対応）
   const body = (await req.json?.().catch(() => null)) || req.body || {};
   const { message, sessionId } = body;
-  const session = getSession(sessionId);
-  saveSession(session);
+  const session = await getSession(sessionId);
+  await saveSession(session);
 
   try {
     console.log(`[HANDLER] Received message: "${message}", session.step: ${session.step}`);
@@ -3064,7 +3076,7 @@ async function handler(req, res) {
       }
     }
     if (result.drill) session.drill = result.drill;
-    saveSession(session);
+    await saveSession(session);
 
     res.status(200).json(result);
   } catch (err) {
