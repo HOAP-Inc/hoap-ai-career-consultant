@@ -695,7 +695,7 @@ setChoices(isChoiceStep(next) ? uniqueByNormalized(inline) : []);
 
       {/* キャリアの説明書（モーダル表示） - Instagram風 最高級UI */}
       {showSummary && summaryData && (
-        <div style={{
+        <div className="summary-modal-overlay" style={{
           position: "fixed",
           top: 0,
           left: 0,
@@ -711,7 +711,7 @@ setChoices(isChoiceStep(next) ? uniqueByNormalized(inline) : []);
           overflow: "auto",
           animation: "fadeIn 0.3s ease-out"
         }}>
-          <div style={{
+          <div className="summary-modal-container" style={{
             background: "linear-gradient(135deg, #fdf2f8 0%, #f5f3ff 50%, #eff6ff 100%)",
             borderRadius: "24px",
             padding: "clamp(20px, 4vw, 40px)",
@@ -725,6 +725,7 @@ setChoices(isChoiceStep(next) ? uniqueByNormalized(inline) : []);
           }}>
             {/* PDFダウンロードボタン */}
             <button
+              className="summary-modal-btn"
               onClick={() => {
                 window.print();
               }}
@@ -763,6 +764,7 @@ setChoices(isChoiceStep(next) ? uniqueByNormalized(inline) : []);
 
             {/* 閉じるボタン */}
             <button
+              className="summary-modal-btn"
               onClick={() => {
                 setShowSummary(false);
                 setSummaryData(null);
@@ -800,7 +802,7 @@ setChoices(isChoiceStep(next) ? uniqueByNormalized(inline) : []);
             </button>
 
             {/* タイトル */}
-            <div style={{
+            <div className="summary-modal-title" style={{
               textAlign: "center",
               marginBottom: "clamp(24px, 4vw, 40px)"
             }}>
@@ -822,7 +824,7 @@ setChoices(isChoiceStep(next) ? uniqueByNormalized(inline) : []);
             <div className="summary-html" dangerouslySetInnerHTML={{ __html: summaryData }} />
 
             {/* フッター */}
-            <div style={{
+            <div className="summary-modal-footer" style={{
               marginTop: "clamp(24px, 4vw, 32px)",
               paddingTop: "20px",
               borderTop: "1px solid rgba(236, 72, 153, 0.1)",

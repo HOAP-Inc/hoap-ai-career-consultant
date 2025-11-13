@@ -968,22 +968,30 @@ section[aria-label="最終確認"] details > div{ color: #374151; }
   .choice-wrap,
   .chat,
   .input-bar,
-  .user-echo,
-  button {
+  .user-echo {
     display: none !important;
   }
 
-  /* モーダルの背景と装飾を削除 */
-  .container > div[style*="position: fixed"] {
+  /* モーダルの装飾要素を非表示 */
+  .summary-modal-btn,
+  .summary-modal-title,
+  .summary-modal-footer,
+  .summary-cta {
+    display: none !important;
+  }
+
+  /* モーダルの背景を白に */
+  .summary-modal-overlay {
     background: white !important;
     position: static !important;
     backdrop-filter: none !important;
     padding: 0 !important;
     overflow: visible !important;
+    display: block !important;
   }
 
-  /* モーダルの内側のdivも装飾削除 */
-  .container > div > div {
+  /* モーダルのコンテナを白背景に */
+  .summary-modal-container {
     background: white !important;
     border-radius: 0 !important;
     padding: 0 !important;
@@ -992,17 +1000,6 @@ section[aria-label="最終確認"] details > div{ color: #374151; }
     max-width: 100% !important;
     max-height: none !important;
     overflow: visible !important;
-  }
-
-  /* タイトル「Your Unique Career Profile」とフッターを非表示 */
-  .summary-html ~ div,
-  .summary-html + div {
-    display: none !important;
-  }
-
-  /* summary-html以外の兄弟要素を非表示 */
-  .container > div > div > *:not(.summary-html) {
-    display: none !important;
   }
 
   /* summary-htmlのみ表示 */
