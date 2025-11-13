@@ -725,7 +725,7 @@ html, body, #__next { height: 100%; }
   .duo-stage{
     margin: 0;
     margin-top: 4px !important;
-    height: 420px !important;
+    height: 350px !important;
     position: relative;
     overflow: hidden;
   }
@@ -734,11 +734,6 @@ html, body, #__next { height: 100%; }
     background-position: center bottom -24px;
   }
   .duo-stage__wrap{ padding: 6px 12px; }
-
-  /* スマホ版：ほーぷちゃん親divのheight調整 */
-  .duo-stage__wrap > div:first-of-type {
-    height: auto !important;
-  }
 
   .duo-stage__hoap{
     width: min(50vw, 280px);
@@ -791,7 +786,7 @@ html, body, #__next { height: 100%; }
     margin: 0;
     display: flex;
     justify-content: flex-end;
-    z-index: 25;
+    z-index: 15;
     transform: translateY(calc(var(--kb, 0px) * -1));
     pointer-events: none;
   }
