@@ -941,3 +941,51 @@ section[aria-label="最終確認"] details > div{ color: #374151; }
   outline: 2px solid #8b5cf6;
   outline-offset: 2px;
 }
+
+/* 印刷用スタイル */
+@media print {
+  /* ページ全体 */
+  @page {
+    margin: 1.5cm;
+    size: A4;
+  }
+
+  body {
+    background: white;
+  }
+
+  /* モーダルの背景を非表示 */
+  .container > div[style*="position: fixed"][style*="backgroundColor"] {
+    background: white !important;
+    position: static !important;
+    backdrop-filter: none !important;
+  }
+
+  /* キャリアシート以外を非表示 */
+  .header,
+  .status-row,
+  .status-progress,
+  .duo-stage,
+  .choice-wrap,
+  .chat,
+  .input-bar,
+  .user-echo {
+    display: none !important;
+  }
+
+  /* 閉じるボタンとPDFボタンを非表示 */
+  button {
+    display: none !important;
+  }
+
+  /* キャリアシートのコンテナ */
+  .summary-html {
+    page-break-inside: avoid;
+  }
+
+  /* 印刷時の色を保持 */
+  * {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+}
