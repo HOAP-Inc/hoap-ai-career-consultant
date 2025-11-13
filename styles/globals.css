@@ -692,10 +692,8 @@ html, body, #__next { height: 100%; }
     padding: 0 8px;
     font-size: 11px;
     line-height: 1;
-    min-width: 0;
+    flex-shrink: 0;
     white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
   }
 
   .status-row{
@@ -703,9 +701,9 @@ html, body, #__next { height: 100%; }
     top: 36px;
     z-index: 19;
     display: flex;
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
     gap: 6px;
-    margin: 4px 0 8px;
+    margin: 4px 0 4px;
     padding: 6px 8px;
     background: linear-gradient(180deg, var(--bg-via) 0%, transparent 100%);
     border-radius: 12px;
@@ -716,7 +714,7 @@ html, body, #__next { height: 100%; }
 
   .status-progress{
     position: fixed;
-    top: 60px;
+    top: 56px;
     left: 0;
     right: 0;
     z-index: 18;
@@ -727,7 +725,7 @@ html, body, #__next { height: 100%; }
 
   .duo-stage{
     margin: 0;
-    margin-top: 8px !important;
+    margin-top: 12px !important;
     height: 420px !important;
     position: relative;
     overflow: hidden;
@@ -746,17 +744,17 @@ html, body, #__next { height: 100%; }
   .duo-stage__hoap{
     width: min(55vw, 320px);
     right: 6%;
-    bottom: 70px !important;
+    bottom: 110px !important;
     top: auto !important;
     z-index: 1;
   }
 
   .duo-stage__bubbles-container{
     left: 6%;
-    top: 8%;
+    top: 6%;
     width: 82vw;
     max-width: 82vw;
-    max-height: calc(100% - 40px);
+    max-height: calc(100% - 50px);
     overflow-y: auto;
     -webkit-overflow-scrolling: touch;
     overscroll-behavior: contain;
