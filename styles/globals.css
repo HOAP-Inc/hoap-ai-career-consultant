@@ -715,16 +715,19 @@ html, body, #__next { height: 100%; }
   }
 
   .status-progress{
-    position: sticky;
+    position: fixed;
     top: 64px;
+    left: 0;
+    right: 0;
     z-index: 18;
     height: 4px;
-    margin: 4px 0 12px;
+    margin: 0;
+    padding: 0 8px;
   }
 
   .duo-stage{
     margin: 0;
-    margin-top: 4px !important;
+    margin-top: 20px !important;
     height: 420px !important;
     position: relative;
     overflow: hidden;
@@ -743,7 +746,7 @@ html, body, #__next { height: 100%; }
   .duo-stage__hoap{
     width: min(50vw, 280px);
     right: 6%;
-    bottom: -2px !important;
+    bottom: 30px !important;
     top: auto !important;
     z-index: 1;
   }
@@ -778,7 +781,7 @@ html, body, #__next { height: 100%; }
   .send{ width:44px; height:44px; }
 
   .input-bar{
-    transform: translateY(calc(var(--kb, 0px) * -1));
+    /* transform削除: モバイルブラウザは自動的にキーボード対応 */
     z-index: 30;
   }
 
@@ -786,13 +789,13 @@ html, body, #__next { height: 100%; }
   .user-echo{
     position: fixed;
     right: 16px;
-    bottom: calc(112px + env(safe-area-inset-bottom));
+    bottom: calc(120px + env(safe-area-inset-bottom));
     padding: 0;
     margin: 0;
     display: flex;
     justify-content: flex-end;
     z-index: 25;
-    transform: translateY(calc(var(--kb, 0px) * -1));
+    /* transform削除: 自然な位置に固定 */
     pointer-events: none;
   }
 
@@ -816,7 +819,7 @@ html, body, #__next { height: 100%; }
 /* PC版のみ：ほーぷちゃん位置調整 */
 @media (min-width: 721px){
   .duo-stage__wrap > div:first-of-type {
-    bottom: 3% !important;
+    bottom: 8% !important;
     height: auto !important;
   }
 }

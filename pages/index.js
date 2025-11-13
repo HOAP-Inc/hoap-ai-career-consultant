@@ -383,20 +383,8 @@ setChoices(isChoiceStep(next) ? uniqueByNormalized(inline) : []);
     };
   }, [isTyping]);
 
-  // スマホのキーボード高さを CSS 変数 --kb に同期
-  useEffect(() => {
-    const vv = window.visualViewport;
-    if (!vv) return;
-    const syncKB = () => {
-      const kb = Math.max(0, window.innerHeight - vv.height - vv.offsetTop);
-      document.documentElement.style.setProperty("--kb", `${kb}px`);
-    };
-    syncKB();
-    vv.addEventListener("resize", syncKB);
-    return () => {
-      vv.removeEventListener("resize", syncKB);
-    };
-  }, []);
+  // visualViewportコードは不要になったため削除
+  // モバイルブラウザは position: fixed 要素を自動的にキーボード対応させる
 
   // 最下部へスクロール（レイアウト確定後に実行）
   useLayoutEffect(() => {
