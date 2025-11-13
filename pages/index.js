@@ -408,6 +408,11 @@ setChoices(isChoiceStep(next) ? uniqueByNormalized(inline) : []);
 
       // 送信処理（選択肢ボタンからも呼べるように修正）
   async function onSend(forcedText) {
+    // キーボードを閉じる
+    if (taRef.current) {
+      taRef.current.blur();
+    }
+
     // クリック時などに渡ってくる MouseEvent を無効化
     if (
       forcedText &&
@@ -597,7 +602,7 @@ setChoices(isChoiceStep(next) ? uniqueByNormalized(inline) : []);
       <section className="duo-stage">
         <div className="duo-stage__bg" />
         <div className="duo-stage__wrap">
-          <div style={{ position: 'absolute', right: '6%', bottom: '-8%', width: 'min(380px, 38vw)', height: 'min(380px, 38vw)' }}>
+          <div className="duo-stage__hoap-container">
             <img className="duo-stage__hoap" src={hoapSrc} alt="ほーぷちゃん" />
           </div>
           <div className="duo-stage__bubbles-container">
