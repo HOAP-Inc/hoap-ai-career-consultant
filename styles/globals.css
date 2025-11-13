@@ -507,11 +507,14 @@ body{
 
 html, body, #__next { height: 100%; }
 
+body {
+  overflow-y: auto;
+}
+
 .container {
   display: flex;
   flex-direction: column;
-  height: 100vh;
-  overflow-y: auto;
+  min-height: 100vh;
 }
 
 .chat.list {
@@ -668,10 +671,13 @@ html, body, #__next { height: 100%; }
 }
 
 @media (max-width: 640px){
-  .container{
-    height: 100dvh;
+  body {
     overflow-y: auto;
-    padding-bottom: 112px;
+  }
+
+  .container{
+    min-height: 100dvh;
+    padding-bottom: calc(112px + env(safe-area-inset-bottom));
     padding-top: 0;
   }
 
@@ -725,7 +731,7 @@ html, body, #__next { height: 100%; }
   .duo-stage{
     margin: 0;
     margin-top: 4px !important;
-    height: 350px !important;
+    height: 300px !important;
     position: relative;
     overflow: hidden;
   }
@@ -818,7 +824,7 @@ html, body, #__next { height: 100%; }
 /* スマホ版：ほーぷちゃん位置調整 */
 @media (max-width: 720px){
   .hoap-container {
-    bottom: 5% !important;
+    bottom: 8% !important;
   }
 }
 
