@@ -672,15 +672,21 @@ html, body, #__next { height: 100%; }
     height: 100dvh;
     overflow-y: auto;
     padding-bottom: 112px;
-    padding-top: 0;
+    padding-top: 88px;
+    padding-left: 8px;
+    padding-right: 8px;
   }
 
   .header{
-    position: sticky;
+    position: fixed;
     top: 0;
+    left: 0;
+    right: 0;
     z-index: 20;
     padding-top: 3px;
     padding-bottom: 3px;
+    padding-left: 8px;
+    padding-right: 8px;
     margin-bottom: 0;
     background: linear-gradient(180deg, var(--bg-from) 0%, var(--bg-via) 70%, transparent 100%);
   }
@@ -692,46 +698,49 @@ html, body, #__next { height: 100%; }
     padding: 0 8px;
     font-size: 11px;
     line-height: 1;
-    min-width: 0;
+    flex-shrink: 0;
     white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
   }
 
   .status-row{
-    position: sticky;
-    top: 36px;
+    position: fixed;
+    top: 38px;
+    left: 0;
+    right: 0;
     z-index: 19;
     display: flex;
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
     gap: 6px;
-    margin: 8px 0 12px;
+    margin: 0;
     padding: 6px 8px;
     background: linear-gradient(180deg, var(--bg-via) 0%, transparent 100%);
-    border-radius: 12px;
+    border-radius: 0;
     overflow-x: auto;
     overflow-y: hidden;
     -webkit-overflow-scrolling: touch;
   }
 
   .status-progress{
-    position: sticky;
-    top: 64px;
+    position: fixed;
+    top: 80px;
+    left: 0;
+    right: 0;
     z-index: 18;
     height: 4px;
-    margin: 4px 0 12px;
+    margin: 0;
+    padding: 0 8px;
   }
 
   .duo-stage{
     margin: 0;
-    margin-top: 4px !important;
+    margin-top: 8px !important;
     height: 420px !important;
     position: relative;
     overflow: hidden;
   }
   .duo-stage__bg{
     background-size: 102%;
-    background-position: center bottom -24px;
+    background-position: center bottom 20px;
   }
   .duo-stage__wrap{ padding: 6px 12px; }
 
@@ -741,9 +750,9 @@ html, body, #__next { height: 100%; }
   }
 
   .duo-stage__hoap{
-    width: min(50vw, 280px);
+    width: min(55vw, 320px);
     right: 6%;
-    bottom: -2px !important;
+    bottom: 110px !important;
     top: auto !important;
     z-index: 1;
   }
@@ -751,9 +760,9 @@ html, body, #__next { height: 100%; }
   .duo-stage__bubbles-container{
     left: 6%;
     top: 6%;
-    width: 84vw;
-    max-width: 84vw;
-    max-height: calc(100% - 28px);
+    width: 82vw;
+    max-width: 82vw;
+    max-height: calc(100% - 50px);
     overflow-y: auto;
     -webkit-overflow-scrolling: touch;
     overscroll-behavior: contain;
@@ -778,7 +787,7 @@ html, body, #__next { height: 100%; }
   .send{ width:44px; height:44px; }
 
   .input-bar{
-    transform: translateY(calc(var(--kb, 0px) * -1));
+    /* transform削除: モバイルブラウザは自動的にキーボード対応 */
     z-index: 30;
   }
 
@@ -786,13 +795,13 @@ html, body, #__next { height: 100%; }
   .user-echo{
     position: fixed;
     right: 16px;
-    bottom: calc(112px + env(safe-area-inset-bottom));
+    bottom: calc(120px + env(safe-area-inset-bottom));
     padding: 0;
     margin: 0;
     display: flex;
     justify-content: flex-end;
     z-index: 25;
-    transform: translateY(calc(var(--kb, 0px) * -1));
+    /* transform削除: 自然な位置に固定 */
     pointer-events: none;
   }
 
@@ -816,7 +825,7 @@ html, body, #__next { height: 100%; }
 /* PC版のみ：ほーぷちゃん位置調整 */
 @media (min-width: 721px){
   .duo-stage__wrap > div:first-of-type {
-    bottom: 3% !important;
+    bottom: 8% !important;
     height: auto !important;
   }
 }
@@ -852,7 +861,7 @@ section[aria-label="最終確認"] details > div{ color: #374151; }
   display: flex;
   flex-wrap: wrap;
   gap: 12px;
-  margin: 16px 0;
+  margin: 12px 0;
   justify-content: center;
 }
 
