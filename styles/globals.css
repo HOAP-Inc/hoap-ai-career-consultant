@@ -514,9 +514,30 @@ html, body, #__next { height: 100%; }
   overflow-y: auto;
 }
 
+/* PC版の表示順序 */
+.header {
+  order: 1;
+}
+
+.duo-stage {
+  order: 2;
+}
+
+.choice-wrap {
+  order: 3;
+}
+
+.status-progress {
+  order: 4;
+}
+
+.status-row {
+  order: 5;
+}
+
 .chat.list {
   flex: 1 1 auto;
-  min-height: 0; 
+  min-height: 0;
   overflow-y: auto;
   overflow-x: hidden;
 }
@@ -682,6 +703,27 @@ html, body, #__next { height: 100%; }
     overflow-y: auto;
     padding-bottom: 112px;
     padding-top: 0;
+  }
+
+  /* モバイル版の表示順序 */
+  .header {
+    order: 1;
+  }
+
+  .status-progress {
+    order: 2;
+  }
+
+  .status-row {
+    order: 3;
+  }
+
+  .duo-stage {
+    order: 4;
+  }
+
+  .choice-wrap {
+    order: 5;
   }
 
   .header{
