@@ -731,19 +731,19 @@ html, body, #__next { height: 100%; }
 
   .duo-stage{
     margin: 0;
-    margin-top: 0 !important;
+    margin-top: 8px !important;
     height: 320px !important;
     position: relative;
     overflow: hidden;
   }
   .duo-stage__bg{
     background-size: 102%;
-    background-position: center bottom 40px;
+    background-position: center bottom 30px;
   }
   .duo-stage__wrap{ padding: 6px 12px; }
 
   .duo-stage__hoap-container{
-    bottom: 10% !important;
+    bottom: 6% !important;
     width: min(50vw, 280px);
     height: min(50vw, 280px);
   }
