@@ -3147,6 +3147,9 @@ async function handleStep6(session, userText) {
   function blurAnalysisText(text) {
     if (!text) return '';
     
+    // CTAボタンのHTML（無料で作成するボタンと同じスタイル）
+    const ctaButton = `<a href="https://hoap-ai-career-sheet.vercel.app/" target="_blank" rel="noopener noreferrer" style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); display: inline-block; background: linear-gradient(135deg, #F09433 0%, #E6683C 25%, #DC2743 50%, #CC2366 75%, #BC1888 100%); border: 2px solid transparent; border-image: linear-gradient(135deg, #F09433 0%, #E6683C 25%, #DC2743 50%, #CC2366 75%, #BC1888 100%) 1; border-radius: 999px; padding: 10px 20px; font-size: 14px; font-weight: 700; color: #fff; white-space: nowrap; text-decoration: none; box-shadow: 0 4px 12px rgba(236, 72, 153, 0.3); cursor: pointer; transition: transform 0.2s ease;">続きを表示</a>`;
+    
     // 改行で段落分割
     const paragraphs = text.split(/\n+/).filter(p => p.trim());
     
@@ -3155,7 +3158,7 @@ async function handleStep6(session, userText) {
       const visible = escapeHtml(paragraphs[0]);
       const blurred = paragraphs.slice(1).join('\n');
       
-      return `${visible}<br /><br /><div style="position: relative; display: inline-block; width: 100%;"><span style="filter: blur(8px); opacity: 0.4; user-select: none; -webkit-user-select: none;">${escapeHtml(blurred).replace(/\n/g, "<br />")}</span><div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: #fff; border: 2px solid #000; border-radius: 12px; padding: 8px 16px; font-size: 12px; font-weight: 600; color: #000; white-space: nowrap; pointer-events: none;">続きを表示させるには無料作成に進んでね</div></div>`;
+      return `${visible}<br /><br /><div style="position: relative; display: inline-block; width: 100%;"><span style="filter: blur(8px); opacity: 0.4; user-select: none; -webkit-user-select: none;">${escapeHtml(blurred).replace(/\n/g, "<br />")}</span>${ctaButton}</div>`;
     }
     
     // 1段落の場合：文章を。で分割
@@ -3181,7 +3184,7 @@ async function handleStep6(session, userText) {
         blurredText += '。';
       }
       
-      result += `<div style="position: relative; display: inline-block;"><span style="filter: blur(8px); opacity: 0.4; user-select: none; -webkit-user-select: none;">${escapeHtml(blurredText)}</span><div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: #fff; border: 2px solid #000; border-radius: 12px; padding: 8px 16px; font-size: 12px; font-weight: 600; color: #000; white-space: nowrap; pointer-events: none;">続きを表示させるには無料作成に進んでね</div></div>`;
+      result += `<div style="position: relative; display: inline-block;"><span style="filter: blur(8px); opacity: 0.4; user-select: none; -webkit-user-select: none;">${escapeHtml(blurredText)}</span>${ctaButton}</div>`;
       
       return result;
     }
@@ -3191,7 +3194,7 @@ async function handleStep6(session, userText) {
     const visible = escapeHtml(text.substring(0, visibleLength));
     const blurred = escapeHtml(text.substring(visibleLength));
     
-    return `${visible}<div style="position: relative; display: inline-block;"><span style="filter: blur(8px); opacity: 0.4; user-select: none; -webkit-user-select: none;">${blurred}</span><div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: #fff; border: 2px solid #000; border-radius: 12px; padding: 8px 16px; font-size: 12px; font-weight: 600; color: #000; white-space: nowrap; pointer-events: none;">続きを表示させるには無料作成に進んでね</div></div>`;
+    return `${visible}<div style="position: relative; display: inline-block;"><span style="filter: blur(8px); opacity: 0.4; user-select: none; -webkit-user-select: none;">${blurred}</span>${ctaButton}</div>`;
   }
 
   // AI分析HTML：大枠の中にDoing/Beingをサブセクションとして配置
