@@ -3158,7 +3158,7 @@ async function handleStep6(session, userText) {
       const visible = escapeHtml(paragraphs[0]);
       const blurred = paragraphs.slice(1).join('\n');
       
-      return `${visible}<br /><br /><div style="position: relative; display: inline-block; width: 100%;"><span style="filter: blur(8px); opacity: 0.4; user-select: none; -webkit-user-select: none;">${escapeHtml(blurred).replace(/\n/g, "<br />")}</span>${ctaButton}</div>`;
+      return `${visible}<br /><br /><div style="position: relative;"><span style="filter: blur(8px); opacity: 0.4; user-select: none; -webkit-user-select: none;">${escapeHtml(blurred).replace(/\n/g, "<br />")}</span>${ctaButton}</div>`;
     }
     
     // 1段落の場合：文章を。で分割
@@ -3184,7 +3184,7 @@ async function handleStep6(session, userText) {
         blurredText += '。';
       }
       
-      result += `<div style="position: relative; display: inline-block;"><span style="filter: blur(8px); opacity: 0.4; user-select: none; -webkit-user-select: none;">${escapeHtml(blurredText)}</span>${ctaButton}</div>`;
+      result += `<span style="position: relative; display: inline-block;"><span style="filter: blur(8px); opacity: 0.4; user-select: none; -webkit-user-select: none;">${escapeHtml(blurredText)}</span>${ctaButton}</span>`;
       
       return result;
     }
@@ -3194,7 +3194,7 @@ async function handleStep6(session, userText) {
     const visible = escapeHtml(text.substring(0, visibleLength));
     const blurred = escapeHtml(text.substring(visibleLength));
     
-    return `${visible}<div style="position: relative; display: inline-block;"><span style="filter: blur(8px); opacity: 0.4; user-select: none; -webkit-user-select: none;">${blurred}</span>${ctaButton}</div>`;
+    return `${visible}<span style="position: relative; display: inline-block;"><span style="filter: blur(8px); opacity: 0.4; user-select: none; -webkit-user-select: none;">${blurred}</span>${ctaButton}</span>`;
   }
 
   // AI分析HTML：大枠の中にDoing/Beingをサブセクションとして配置
