@@ -566,7 +566,7 @@ async function handleStep1(session, userText) {
 if (uniqueLabels.length === 1 && resolved.length === 0) {
   const label = uniqueLabels[0];
   if (!Array.isArray(session.status.licenses)) session.status.licenses = [];
-  if (!session.status.licenses.includes(label)) session.statu.licenses.push(label);
+  if (!session.status.licenses.includes(label)) session.status.licenses.push(label);
   session.stage.turnIndex = 0;
   resetDrill(session);
   return {
@@ -608,6 +608,7 @@ if (uniqueLabels.length === 1 && resolved.length === 0) {
     };
   }
 
+  console.log(`[STEP1 ERROR] License not found. User input: "${trimmed}", Current step: ${session.step}`);
   return {
     response: "ごめん、その資格名が見つからなかったよ。正式名称で教えてくれる？（まだ資格の登録中だよ）",
     status: session.status,
@@ -3233,10 +3234,14 @@ async function handler(req, res) {
   const body = (await req.json?.().catch(() => null)) || req.body || {};
   const { message, sessionId } = body;
   const session = await getSession(sessionId);
+  
+  console.log(`[HANDLER] Received request - sessionId: ${sessionId}, message: "${message}"`);
+  console.log(`[HANDLER] Session state - step: ${session.step}, qual_ids: ${JSON.stringify(session.status.qual_ids)}, licenses: ${JSON.stringify(session.status.licenses)}`);
+  
   await saveSession(session);
 
   try {
-    console.log(`[HANDLER] Received message: "${message}", sessionId: ${sessionId}, session.step: ${session.step}`);
+    console.log(`[HANDLER] Processing message: "${message}", sessionId: ${sessionId}, session.step: ${session.step}`);
     
     // STEP6では空メッセージでも処理を続行（自動開始のため）
     if ((!message || message.trim() === "") && session.step !== 6) {
@@ -3319,8 +3324,12 @@ async function handler(req, res) {
       // 【安全装置】result.meta.step が現在のステップより小さい値の場合は拒否
       // ステップは必ず前進するか維持されるべきで、後退してはならない
       if (proposedStep < beforeStep) {
-        console.error(`[HANDLER ERROR] Attempted to go backwards: ${beforeStep} -> ${proposedStep}. REJECTING step change.`);
-        // ステップ変更を拒否して現在のステップを維持
+        console.error(`[HANDLER ERROR] Attempted to go backwards: ${beforeStep} -> ${proposedStep}. REJECTING step change and response.`);
+        console.error(`[HANDLER ERROR] User message: "${message}"`);
+        console.error(`[HANDLER ERROR] Response was: "${result.response}"`);
+        // ステップ変更を拒否して現在のステップを維持し、エラーレスポンスを上書き
+        result.response = "処理中にエラーが発生しました。もう一度入力してみてね。";
+        result.meta.step = beforeStep;
       } else {
         session.step = proposedStep;
         if (beforeStep !== session.step) {
