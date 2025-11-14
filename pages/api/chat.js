@@ -3166,7 +3166,7 @@ async function handleStep6(session, userText) {
       </h2>
       <div style="position: relative; display: inline-block; text-align: left; max-width: 90%;">
         <span style="display: inline-block; background: linear-gradient(135deg, #fde2f3, #e9e7ff 50%, #e6f0ff); color: #000; font-size: 11px; font-weight: 600; padding: 4px 12px; border-radius: 999px; margin-bottom: 8px;">キャッチコピー</span>
-        <p style="margin: 0; font-size: clamp(20px, 4.5vw, 28px); font-weight: 900; line-height: 1.5; letter-spacing: 0.02em; background: linear-gradient(135deg, #F09433 0%, #E6683C 25%, #DC2743 50%, #CC2366 75%, #BC1888 100%); -webkit-background-clip: text; background-clip: text; color: transparent; font-family: 'Hiragino Kaku Gothic ProN', 'Hiragino Kaku Gothic Pro', 'ヒラギノ角ゴ ProN W3', 'Noto Sans JP', 'Yu Gothic', 'Meiryo', sans-serif;">
+        <p style="margin: 0; font-size: clamp(20px, 4.5vw, 28px); font-weight: 900; line-height: 1.5; letter-spacing: 0.02em; background: linear-gradient(135deg, #F09433 0%, #E6683C 25%, #DC2743 50%, #CC2366 75%, #BC1888 100%); -webkit-background-clip: text; background-clip: text; color: transparent; font-family: 'Klee', 'Hiragino Maru Gothic ProN', 'ヒラギノ丸ゴ ProN W4', 'HG正楷書体-PRO', 'HGP行書体', 'HG丸ｺﾞｼｯｸM-PRO', 'Segoe Print', 'Comic Sans MS', cursive, sans-serif;">
           ${escapeHtml(catchcopy)}
         </p>
       </div>
@@ -3187,11 +3187,11 @@ async function handleStep6(session, userText) {
   `.trim();
 
   const ctaHtml = `
-    <div class="summary-cta" style="text-align: center; margin: 0 auto; max-width: 600px;">
-      <p style="color: #000; font-weight: 600; margin: 0 auto 12px auto; font-size: 14px; line-height: 1.7; text-align: center;">
+    <div class="summary-cta" style="text-align: center; margin: 0 auto; max-width: 600px; display: flex; flex-direction: column; align-items: center;">
+      <p style="color: #000; font-weight: 600; margin: 0 0 12px 0; font-size: 14px; line-height: 1.7; text-align: center; width: 100%;">
         AIによる分析を全部見たり、<br>オリジナルキャリアシートを無料作成するにはここから！
       </p>
-      <a href="https://hoap-ai-career-sheet.vercel.app/" target="_blank" rel="noopener noreferrer" style="display: block; margin: 0 auto; width: fit-content; background: linear-gradient(135deg, #F09433 0%, #E6683C 25%, #DC2743 50%, #CC2366 75%, #BC1888 100%); border: none; border-radius: 999px; padding: 14px 32px; font-size: 16px; font-weight: 700; color: #fff; cursor: pointer; box-shadow: 0 4px 12px rgba(236, 72, 153, 0.3); transition: transform 0.2s ease; text-decoration: none;">無料で作成する</a>
+      <a href="https://hoap-ai-career-sheet.vercel.app/" target="_blank" rel="noopener noreferrer" style="display: inline-block; background: linear-gradient(135deg, #F09433 0%, #E6683C 25%, #DC2743 50%, #CC2366 75%, #BC1888 100%); border: none; border-radius: 999px; padding: 14px 32px; font-size: 16px; font-weight: 700; color: #fff; cursor: pointer; box-shadow: 0 4px 12px rgba(236, 72, 153, 0.3); transition: transform 0.2s ease; text-decoration: none;">無料で作成する</a>
     </div>
   `.trim();
 
