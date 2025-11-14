@@ -772,7 +772,7 @@ setChoices(isChoiceStep(next) ? uniqueByNormalized(inline) : []);
             {/* タイトル */}
             <div className="summary-modal-title" style={{
               textAlign: "center",
-              marginBottom: "clamp(24px, 4vw, 40px)"
+              marginBottom: "clamp(16px, 3vw, 24px)"
             }}>
               <h2 style={{
                 margin: 0,
@@ -783,7 +783,7 @@ setChoices(isChoiceStep(next) ? uniqueByNormalized(inline) : []);
                 backgroundClip: "text",
                 color: "transparent",
                 letterSpacing: "0.02em",
-                marginBottom: "8px"
+                marginBottom: "0"
               }}>
                 Your Unique Career Profile
               </h2>
@@ -791,7 +791,7 @@ setChoices(isChoiceStep(next) ? uniqueByNormalized(inline) : []);
 
             {/* CTAボタン（キャリアシートの外） */}
             {ctaHtml && (
-              <div dangerouslySetInnerHTML={{ __html: ctaHtml }} />
+              <div style={{ textAlign: "center", marginBottom: "clamp(24px, 4vw, 40px)" }} dangerouslySetInnerHTML={{ __html: ctaHtml }} />
             )}
 
             <div className="summary-html" dangerouslySetInnerHTML={{ __html: summaryData }} />
