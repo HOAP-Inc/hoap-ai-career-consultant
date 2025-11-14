@@ -3165,8 +3165,8 @@ async function handleStep6(session, userText) {
         ${escapeHtml(displayName)}さんのキャリア分析シート
       </h2>
       <div style="position: relative; display: inline-block; text-align: left; max-width: 90%;">
-        <span style="display: inline-block; background: linear-gradient(45deg, #F09433 0%, #E6683C 25%, #DC2743 50%, #CC2366 75%, #BC1888 100%); color: #fff; font-size: 11px; font-weight: 600; padding: 4px 12px; border-radius: 999px; margin-bottom: 8px;">キャッチコピー</span>
-        <p style="margin: 0; font-size: clamp(20px, 4.5vw, 28px); font-weight: 900; line-height: 1.5; letter-spacing: 0.02em; background: linear-gradient(135deg, #F09433 0%, #E6683C 25%, #DC2743 50%, #CC2366 75%, #BC1888 100%); -webkit-background-clip: text; background-clip: text; color: transparent; font-family: 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', 'Noto Sans JP', 'Yu Gothic', 'Meiryo', sans-serif;">
+        <span style="display: inline-block; background: linear-gradient(135deg, #fde2f3, #e9e7ff 50%, #e6f0ff); color: #000; font-size: 11px; font-weight: 600; padding: 4px 12px; border-radius: 999px; margin-bottom: 8px;">キャッチコピー</span>
+        <p style="margin: 0; font-size: clamp(20px, 4.5vw, 28px); font-weight: 900; line-height: 1.5; letter-spacing: 0.02em; background: linear-gradient(135deg, #F09433 0%, #E6683C 25%, #DC2743 50%, #CC2366 75%, #BC1888 100%); -webkit-background-clip: text; background-clip: text; color: transparent; font-family: 'Hiragino Kaku Gothic ProN', 'Hiragino Kaku Gothic Pro', 'ヒラギノ角ゴ ProN W3', 'Noto Sans JP', 'Yu Gothic', 'Meiryo', sans-serif;">
           ${escapeHtml(catchcopy)}
         </p>
       </div>
