@@ -3143,6 +3143,21 @@ async function handleStep6(session, userText) {
     </section>
   `;
 
+  // AI分析テキストの一部をぼかす処理（1段落目は表示、2段落目以降をぼかす）
+  function blurAnalysisText(text) {
+    const paragraphs = text.split(/\n+/);
+    if (paragraphs.length <= 1) {
+      return escapeHtml(text).replace(/\n/g, "<br />");
+    }
+    
+    // 1段落目は表示
+    const visible = escapeHtml(paragraphs[0]);
+    // 2段落目以降をぼかす
+    const blurred = paragraphs.slice(1).join('\n');
+    
+    return `${visible}<br /><span style="filter: blur(8px); opacity: 0.4; user-select: none;">${escapeHtml(blurred).replace(/\n/g, "<br />")}</span>`;
+  }
+
   // AI分析HTML：大枠の中にDoing/Beingをサブセクションとして配置
   const analysisHtml = `
     <section class="summary-panel summary-panel--ai-analysis">
@@ -3151,13 +3166,43 @@ async function handleStep6(session, userText) {
         ? analysisParts.map((part) => `
           <div class="analysis-subsection">
             <div class="analysis-subtitle">${escapeHtml(part.label)}</div>
-            <p>${escapeHtml(part.text).replace(/\n/g, "<br />")}</p>
+            <p>${blurAnalysisText(part.text)}</p>
       </div>
         `).join("")
         : `<p>AI分析を生成中です。</p>`
       }
     </section>
   `;
+
+  // キャッチコピーの一部をぼかす処理
+  function blurCatchcopy(text) {
+    // 「◎◎な職業名」形式を想定
+    // 最後の職業名（看護師など）を残し、それ以外の修飾部分をぼかす
+    const parts = text.split(/、|。|する|な/);
+    if (parts.length <= 1) {
+      // 分割できない場合は後半をぼかす
+      const mid = Math.floor(text.length * 0.4);
+      const visible = text.substring(0, mid);
+      const blurred = text.substring(mid);
+      return `${escapeHtml(visible)}<span style="filter: blur(8px); opacity: 0.4; user-select: none;">${escapeHtml(blurred)}</span>`;
+    }
+    
+    // 最初の部分は表示、中間部分をぼかし、最後の職業名は表示
+    const visible1 = parts[0] || '';
+    const blurredParts = parts.slice(1, -1);
+    const visible2 = parts[parts.length - 1] || '';
+    
+    let result = escapeHtml(visible1);
+    if (blurredParts.length > 0) {
+      const blurredText = blurredParts.join('、') + (text.includes('な') ? 'な' : '');
+      result += `<span style="filter: blur(8px); opacity: 0.4; user-select: none;">${escapeHtml(blurredText)}</span>`;
+    }
+    result += escapeHtml(visible2);
+    
+    return result;
+  }
+
+  const blurredCatchcopy = blurCatchcopy(catchcopy);
 
   const sheetHeaderHtml = `
     <div style="text-align: center; margin-bottom: 32px;">
@@ -3167,7 +3212,7 @@ async function handleStep6(session, userText) {
       <div style="position: relative; display: inline-block; text-align: left; max-width: 90%;">
         <span style="display: inline-block; background: linear-gradient(135deg, #fde2f3, #e9e7ff 50%, #e6f0ff); color: #000; font-size: 11px; font-weight: 600; padding: 4px 12px; border-radius: 999px; margin-bottom: 8px;">キャッチコピー</span>
         <p style="margin: 0; font-size: clamp(20px, 4.5vw, 28px); font-weight: 900; line-height: 1.5; letter-spacing: 0.02em; background: linear-gradient(135deg, #F09433 0%, #E6683C 25%, #DC2743 50%, #CC2366 75%, #BC1888 100%); -webkit-background-clip: text; background-clip: text; color: transparent; font-family: 'Klee', 'Hiragino Maru Gothic ProN', 'ヒラギノ丸ゴ ProN W4', 'HG正楷書体-PRO', 'HGP行書体', 'HG丸ｺﾞｼｯｸM-PRO', 'Segoe Print', 'Comic Sans MS', cursive, sans-serif;">
-          ${escapeHtml(catchcopy)}
+          ${blurredCatchcopy}
         </p>
       </div>
     </div>
