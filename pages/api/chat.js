@@ -3148,7 +3148,7 @@ async function handleStep6(session, userText) {
     if (!text) return '';
     
     // CTAボタンのHTML（無料で作成するボタンと同じスタイル）
-    const ctaButton = `<a href="https://hoap-ai-career-sheet.vercel.app/" target="_blank" rel="noopener noreferrer" style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); display: inline-block; background: linear-gradient(135deg, #F09433 0%, #E6683C 25%, #DC2743 50%, #CC2366 75%, #BC1888 100%); border: 2px solid transparent; border-image: linear-gradient(135deg, #F09433 0%, #E6683C 25%, #DC2743 50%, #CC2366 75%, #BC1888 100%) 1; border-radius: 999px; padding: 10px 20px; font-size: 14px; font-weight: 700; color: #fff; white-space: nowrap; text-decoration: none; box-shadow: 0 4px 12px rgba(236, 72, 153, 0.3); cursor: pointer; transition: transform 0.2s ease;">続きを表示</a>`;
+    const ctaButton = `<a href="https://hoap-ai-career-sheet.vercel.app/" target="_blank" rel="noopener noreferrer" style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); display: inline-block; background: linear-gradient(135deg, #F09433 0%, #E6683C 25%, #DC2743 50%, #CC2366 75%, #BC1888 100%); border: none; border-radius: 999px; padding: 10px 20px; font-size: 14px; font-weight: 700; color: #fff; white-space: nowrap; text-decoration: none; box-shadow: 0 4px 12px rgba(236, 72, 153, 0.3); cursor: pointer; transition: transform 0.2s ease;">続きを表示</a>`;
     
     // 改行で段落分割
     const paragraphs = text.split(/\n+/).filter(p => p.trim());

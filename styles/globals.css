@@ -679,11 +679,12 @@ html, body, #__next { height: 100%; }
   z-index: 40;
   display: flex;
   justify-content: flex-end;
-  padding: 0 48px;
+  padding: 0 20px;
   padding-bottom: 12px;
   pointer-events: none;
-  max-width: 55%;
+  max-width: 1040px;
   margin-left: auto;
+  margin-right: auto;
 }
 
 .user-echo__bubble{
@@ -697,9 +698,9 @@ html, body, #__next { height: 100%; }
   white-space: pre-wrap;
   line-height: 1.8;
 
-  width: calc(100% - 40px);
+  width: 100%;
   max-width: 1000px;
-  margin: 0 auto;
+  margin: 0;
 }
 
 @media (max-width: 640px){
@@ -861,9 +862,9 @@ html, body, #__next { height: 100%; }
   white-space: pre-wrap;
   line-height: 1.8;
 
-  width: calc(100% - 40px);
+  width: 100%;
   max-width: 1000px;
-  margin: 0 auto;
+  margin: 0;
 }
 
 }
