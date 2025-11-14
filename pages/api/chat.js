@@ -358,18 +358,25 @@ async function callLLM(stepKey, payload, session, opts = {}) {
 async function getSession(sessionId) {
   if (!sessionId) return createSession();
 
+  const kvAvailable = isKVAvailable();
+  console.log(`[SESSION DEBUG] Getting session ${sessionId}, KV available: ${kvAvailable}`);
+
   // KVが利用可能な場合
-  if (isKVAvailable()) {
+  if (kvAvailable) {
     try {
       const existing = await kv.get(`session:${sessionId}`);
       if (existing) {
         console.log(`[SESSION] Retrieved from KV: ${sessionId}, step: ${existing.step}`);
         return normalizeSession(existing);
+      } else {
+        console.warn(`[SESSION] Not found in KV: ${sessionId}`);
       }
     } catch (err) {
       console.error(`[KV ERROR] Failed to get session ${sessionId}:`, err);
       // KVエラー時もフォールバックとしてメモリを試す
     }
+  } else {
+    console.warn(`[SESSION] KV not available, using memory storage`);
   }
 
   // メモリストレージから取得（KVが利用不可、またはKVにセッションがない場合）
@@ -380,8 +387,9 @@ async function getSession(sessionId) {
   }
 
   // 新規セッション作成
-  console.warn(`[SESSION WARNING] Session not found, creating new session: ${sessionId}`);
+  console.warn(`[SESSION WARNING] Session not found in KV or memory, creating new session: ${sessionId}`);
   console.warn(`[SESSION WARNING] This may indicate session loss. Check KV/memory storage.`);
+  console.warn(`[SESSION WARNING] Memory storage size: ${memoryStorage.size}`);
   const created = createSession(sessionId);
   await saveSession(created);
   return created;
@@ -390,11 +398,18 @@ async function getSession(sessionId) {
 async function saveSession(session) {
   if (!session?.id) return;
 
+  const kvAvailable = isKVAvailable();
+  console.log(`[SESSION DEBUG] Saving session ${session.id}, step: ${session.step}, KV available: ${kvAvailable}`);
+
   // KVが利用可能な場合
-  if (isKVAvailable()) {
+  if (kvAvailable) {
     try {
       await kv.set(`session:${session.id}`, session, { ex: SESSION_TTL });
       console.log(`[SESSION] Saved to KV: ${session.id}, step: ${session.step}`);
+      // KVに保存成功した場合もメモリにバックアップ（同一インスタンス内での高速アクセス用）
+      memoryStorage.set(session.id, session);
+      console.log(`[SESSION] Also cached in memory: ${session.id}`);
+      return;
     } catch (err) {
       console.error(`[KV ERROR] Failed to save session ${session.id}:`, err);
       // KVエラー時もフォールバックとしてメモリに保存
@@ -407,6 +422,7 @@ async function saveSession(session) {
   // メモリストレージに保存（KVが利用不可の場合）
   memoryStorage.set(session.id, session);
   console.log(`[SESSION] Saved to memory: ${session.id}, step: ${session.step}`);
+  console.warn(`[SESSION WARNING] KV not available, memory storage is not persistent across serverless instances!`);
 }
 
 function buildSchemaError(step, session, message, errorCode = "schema_mismatch") {
