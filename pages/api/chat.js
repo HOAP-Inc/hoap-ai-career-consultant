@@ -913,8 +913,10 @@ async function handleStep2(session, userText) {
 
 
 async function handleStep3(session, userText) {
+  console.log(`[STEP3] Called with userText: "${userText}", session.step: ${session.step}, turnIndex: ${session.stage.turnIndex}`);
   // 【重要】STEP遷移時（userTextが空）は、LLMを呼ばずにintro質問を返す
   if (!userText || !userText.trim()) {
+    console.log(`[STEP3] Returning intro question (empty userText)`);
     return {
       response: STEP_INTRO_QUESTIONS[3],
       status: session.status,
@@ -931,6 +933,7 @@ async function handleStep3(session, userText) {
     return buildSchemaError(3, session, "あなたの「これから挑戦したいこと」の生成でエラーが発生したよ。少し時間を置いてみてね。", llm.error);
   }
   const parsed = llm.parsed || {};
+  console.log(`[STEP3] LLM response phase: ${parsed?.control?.phase}, meta.step: ${parsed?.meta?.step}`);
 
   // intro フェーズ（初回質問）
   if (parsed?.control?.phase === "intro") {
@@ -1062,6 +1065,7 @@ async function handleStep3(session, userText) {
 
     // 通常の会話フェーズ（empathy と ask_next を \n\n で結合）
     const message = [empathy, ask_next].filter(Boolean).join("\n\n") || empathy || "ありがとう。もう少し教えて。";
+    console.log(`[STEP3] Returning empathy+deepening. session.step: ${session.step}, nextStep: ${nextStep}`);
     return {
       response: message,
       status: session.status,
@@ -1070,6 +1074,7 @@ async function handleStep3(session, userText) {
     };
   }
 
+  console.log(`[STEP3] Fallback response. session.step: ${session.step}`);
   return {
     response: "これから挑戦したいことについて、もう少し具体的に教えてほしい。短くで良いから、やってみたいことの概要を教えて。",
     status: session.status,
@@ -3324,13 +3329,21 @@ async function handler(req, res) {
       // 【安全装置】result.meta.step が現在のステップより小さい値の場合は拒否
       // ステップは必ず前進するか維持されるべきで、後退してはならない
       if (proposedStep < beforeStep) {
-        console.error(`[HANDLER ERROR] Step regression detected!`);
+        console.error(`[HANDLER ERROR] ========== STEP REGRESSION DETECTED ==========`);
         console.error(`[HANDLER ERROR] Current step: ${beforeStep}, Proposed step: ${proposedStep}`);
         console.error(`[HANDLER ERROR] User message: "${message}"`);
         console.error(`[HANDLER ERROR] Original response: "${result.response}"`);
         console.error(`[HANDLER ERROR] SessionId: ${sessionId}`);
         console.error(`[HANDLER ERROR] Session history length: ${session.history.length}`);
+        console.error(`[HANDLER ERROR] Session licenses: ${JSON.stringify(session.status?.licenses || [])}`);
+        console.error(`[HANDLER ERROR] Session qual_ids: ${JSON.stringify(session.status?.qual_ids || [])}`);
+        console.error(`[HANDLER ERROR] Last 3 history entries:`);
+        const lastThree = session.history.slice(-3);
+        lastThree.forEach((h, i) => {
+          console.error(`[HANDLER ERROR]   [${i}] step=${h.step}, role=${h.role}, text="${h.text?.substring(0, 50)}..."`);
+        });
         console.error(`[HANDLER ERROR] This likely indicates session loss or incorrect handler call.`);
+        console.error(`[HANDLER ERROR] ===============================================`);
         // ステップ変更を拒否して現在のステップを維持し、エラーレスポンスを上書き
         result.response = "ごめん、処理中にエラーが起きちゃった💦 さっきの続きから話してくれる？";
         result.meta.step = beforeStep;
