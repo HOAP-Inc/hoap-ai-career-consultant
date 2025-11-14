@@ -3145,17 +3145,35 @@ async function handleStep6(session, userText) {
 
   // AI分析テキストの一部をぼかす処理（1段落目は表示、2段落目以降をぼかす）
   function blurAnalysisText(text) {
-    const paragraphs = text.split(/\n+/);
-    if (paragraphs.length <= 1) {
-      return escapeHtml(text).replace(/\n/g, "<br />");
+    if (!text) return '';
+    
+    // 改行で段落分割
+    const paragraphs = text.split(/\n+/).filter(p => p.trim());
+    
+    if (paragraphs.length > 1) {
+      // 複数段落の場合：1段落目は表示、2段落目以降をぼかす
+      const visible = escapeHtml(paragraphs[0]);
+      const blurred = paragraphs.slice(1).join('\n');
+      
+      return `${visible}<br /><br /><span style="filter: blur(8px); opacity: 0.4; user-select: none; -webkit-user-select: none;">${escapeHtml(blurred).replace(/\n/g, "<br />")}</span>`;
     }
     
-    // 1段落目は表示
-    const visible = escapeHtml(paragraphs[0]);
-    // 2段落目以降をぼかす
-    const blurred = paragraphs.slice(1).join('\n');
+    // 1段落しかない場合：文章を。で分割して後半をぼかす
+    const sentences = text.split(/。/).filter(s => s.trim());
+    if (sentences.length > 2) {
+      // 最初の2文を表示、残りをぼかす
+      const visible = escapeHtml(sentences.slice(0, 2).join('。') + '。');
+      const blurred = sentences.slice(2).join('。') + (text.endsWith('。') ? '。' : '');
+      
+      return `${visible}<span style="filter: blur(8px); opacity: 0.4; user-select: none; -webkit-user-select: none;">${escapeHtml(blurred)}</span>`;
+    }
     
-    return `${visible}<br /><span style="filter: blur(8px); opacity: 0.4; user-select: none;">${escapeHtml(blurred).replace(/\n/g, "<br />")}</span>`;
+    // 短い文章の場合：後半60%をぼかす
+    const visibleLength = Math.floor(text.length * 0.4);
+    const visible = escapeHtml(text.substring(0, visibleLength));
+    const blurred = escapeHtml(text.substring(visibleLength));
+    
+    return `${visible}<span style="filter: blur(8px); opacity: 0.4; user-select: none; -webkit-user-select: none;">${blurred}</span>`;
   }
 
   // AI分析HTML：大枠の中にDoing/Beingをサブセクションとして配置
@@ -3176,30 +3194,31 @@ async function handleStep6(session, userText) {
 
   // キャッチコピーの一部をぼかす処理
   function blurCatchcopy(text) {
-    // 「◎◎な職業名」形式を想定
-    // 最後の職業名（看護師など）を残し、それ以外の修飾部分をぼかす
-    const parts = text.split(/、|。|する|な/);
-    if (parts.length <= 1) {
-      // 分割できない場合は後半をぼかす
-      const mid = Math.floor(text.length * 0.4);
-      const visible = text.substring(0, mid);
-      const blurred = text.substring(mid);
-      return `${escapeHtml(visible)}<span style="filter: blur(8px); opacity: 0.4; user-select: none;">${escapeHtml(blurred)}</span>`;
+    // 最後の職業名（看護師、保育士など）を検出
+    const occupationMatch = text.match(/(看護師|保育士|介護士|医師|薬剤師|理学療法士|作業療法士|栄養士|ケアマネージャー|社会福祉士)$/);
+    
+    if (occupationMatch) {
+      const occupation = occupationMatch[1];
+      const beforeOccupation = text.substring(0, text.lastIndexOf(occupation));
+      
+      // 職業名の前の「な」を探す
+      const naMatch = beforeOccupation.match(/^(.+)(な)$/);
+      if (naMatch) {
+        const beforeNa = naMatch[1];
+        // 最初の10文字程度を表示、中間をぼかし、「な職業名」を表示
+        const visibleStart = beforeNa.substring(0, Math.min(10, beforeNa.length));
+        const toBlur = beforeNa.substring(visibleStart.length);
+        
+        return `${escapeHtml(visibleStart)}<span style="filter: blur(8px); opacity: 0.4; user-select: none; -webkit-user-select: none;">${escapeHtml(toBlur)}</span>${escapeHtml('な' + occupation)}`;
+      }
     }
     
-    // 最初の部分は表示、中間部分をぼかし、最後の職業名は表示
-    const visible1 = parts[0] || '';
-    const blurredParts = parts.slice(1, -1);
-    const visible2 = parts[parts.length - 1] || '';
+    // フォールバック：文字数の40%を表示、残りをぼかす
+    const visibleLength = Math.floor(text.length * 0.4);
+    const visible = text.substring(0, visibleLength);
+    const blurred = text.substring(visibleLength);
     
-    let result = escapeHtml(visible1);
-    if (blurredParts.length > 0) {
-      const blurredText = blurredParts.join('、') + (text.includes('な') ? 'な' : '');
-      result += `<span style="filter: blur(8px); opacity: 0.4; user-select: none;">${escapeHtml(blurredText)}</span>`;
-    }
-    result += escapeHtml(visible2);
-    
-    return result;
+    return `${escapeHtml(visible)}<span style="filter: blur(8px); opacity: 0.4; user-select: none; -webkit-user-select: none;">${escapeHtml(blurred)}</span>`;
   }
 
   const blurredCatchcopy = blurCatchcopy(catchcopy);
