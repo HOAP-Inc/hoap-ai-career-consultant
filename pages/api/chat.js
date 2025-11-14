@@ -3156,6 +3156,7 @@ async function handleStep6(session, userText) {
 
   const summaryReportHtml = `
     <div class="summary-report">
+      ${ctaHtml}
       ${sheetHeaderHtml}
       <div class="summary-report__grid">
         ${hearingHtml}
@@ -3167,10 +3168,7 @@ async function handleStep6(session, userText) {
     </div>
   `.trim();
 
-  const summaryData = `
-    ${ctaHtml}
-    ${summaryReportHtml}
-  `.trim();
+  const summaryData = summaryReportHtml;
 
   // ai_analysisはDoing/Beingの組み合わせ
   const analysisTexts = analysisParts.map(part => part.text).filter(Boolean);
