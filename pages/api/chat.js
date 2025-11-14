@@ -3143,14 +3143,13 @@ async function handleStep6(session, userText) {
   `;
 
   const sheetHeaderHtml = `
-    <div style="text-align: center; margin-bottom: 24px;">
-      <h2 style="margin: 0 0 8px 0; font-size: clamp(24px, 5vw, 36px); font-weight: 900; background: linear-gradient(135deg, #F09433 0%, #E6683C 25%, #DC2743 50%, #CC2366 75%, #BC1888 100%); -webkit-background-clip: text; background-clip: text; color: transparent;">
+    <div style="text-align: center; margin-bottom: 32px;">
+      <h2 style="margin: 0 0 16px 0; font-size: clamp(24px, 5vw, 36px); font-weight: 900; background: linear-gradient(135deg, #F09433 0%, #E6683C 25%, #DC2743 50%, #CC2366 75%, #BC1888 100%); -webkit-background-clip: text; background-clip: text; color: transparent;">
         ${escapeHtml(displayName)}さんのキャリア分析シート
       </h2>
-      <p style="margin: 12px 0 0 0; font-size: clamp(15px, 3vw, 18px); font-weight: 700; color: #1f2937; line-height: 1.6;">
+      <p style="margin: 0; font-size: clamp(18px, 4vw, 24px); font-weight: 900; color: #1f2937; line-height: 1.5; letter-spacing: 0.02em;">
         ${escapeHtml(catchcopy)}
       </p>
-      <p style="margin: 8px 0 0 0; font-size: 14px; color: #64748b;">あなたのキャリアにおける強みと価値観をAIが分析してまとめたよ。</p>
     </div>
   `;
 
