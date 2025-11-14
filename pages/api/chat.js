@@ -2938,6 +2938,78 @@ async function handleStep6(session, userText) {
     session.status.being_text = smoothAnalysisText(session.status.self_text || "価値観・関わり方について伺いました。");
   }
 
+  // 職業を決定（STEP1の資格から）
+  let occupation = "専門職";
+  if (Array.isArray(session.status.qual_ids) && session.status.qual_ids.length > 0) {
+    // STEP2〜5で最も多く言及された資格を探す
+    const step2to5History = session.history.filter(h => h.step >= 2 && h.step <= 5 && h.role === "user");
+    const qualMentionCounts = new Map();
+    
+    for (const qualId of session.status.qual_ids) {
+      const qualName = QUAL_NAME_BY_ID.get(Number(qualId));
+      if (!qualName) continue;
+      
+      let count = 0;
+      for (const historyItem of step2to5History) {
+        if (historyItem.text && historyItem.text.includes(qualName)) {
+          count++;
+        }
+      }
+      qualMentionCounts.set(qualId, count);
+    }
+    
+    // 最も多く言及された資格を選択
+    let maxCount = -1;
+    let selectedQualId = null;
+    for (const [qualId, count] of qualMentionCounts.entries()) {
+      if (count > maxCount) {
+        maxCount = count;
+        selectedQualId = qualId;
+      }
+    }
+    
+    // 言及がない場合は最初の資格を使用
+    if (selectedQualId === null || maxCount === 0) {
+      selectedQualId = session.status.qual_ids[0];
+    }
+    
+    const selectedQualName = QUAL_NAME_BY_ID.get(Number(selectedQualId));
+    if (selectedQualName) {
+      occupation = selectedQualName;
+    }
+  }
+  
+  // キャッチコピーを生成
+  const catchcopyPayload = {
+    locale: "ja",
+    occupation: occupation,
+    can_text: session.status.can_text || "",
+    will_text: session.status.will_text || "",
+    must_text: session.status.must_text || "",
+    self_text: session.status.self_text || "",
+    doing_text: session.status.doing_text || "",
+    being_text: session.status.being_text || "",
+  };
+  
+  let catchcopy = `${occupation}として働く人`;
+  try {
+    const catchcopyLLM = await callLLM(6, {
+      ...catchcopyPayload,
+      request_type: "generate_catchcopy"
+    }, session, { model: "gpt-4o" });
+    
+    if (catchcopyLLM.ok && catchcopyLLM.parsed?.catchcopy) {
+      catchcopy = catchcopyLLM.parsed.catchcopy;
+      console.log("[STEP6] Generated catchcopy:", catchcopy);
+    } else {
+      console.warn("[STEP6 WARNING] Catchcopy generation failed. Using fallback.");
+    }
+  } catch (err) {
+    console.error("[STEP6 ERROR] Catchcopy generation error:", err);
+  }
+  
+  session.status.catchcopy = catchcopy;
+
   const hearingCards = [];
     if (Array.isArray(session.status.qual_ids) && session.status.qual_ids.length > 0) {
       const qualNames = session.status.qual_ids
@@ -3075,7 +3147,10 @@ async function handleStep6(session, userText) {
       <h2 style="margin: 0 0 8px 0; font-size: clamp(24px, 5vw, 36px); font-weight: 900; background: linear-gradient(135deg, #F09433 0%, #E6683C 25%, #DC2743 50%, #CC2366 75%, #BC1888 100%); -webkit-background-clip: text; background-clip: text; color: transparent;">
         ${escapeHtml(displayName)}さんのキャリア分析シート
       </h2>
-      <p style="margin: 0; font-size: 14px; color: #64748b;">あなたのキャリアにおける強みと価値観をAIが分析してまとめたよ。</p>
+      <p style="margin: 12px 0 0 0; font-size: clamp(15px, 3vw, 18px); font-weight: 700; color: #1f2937; line-height: 1.6;">
+        ${escapeHtml(catchcopy)}
+      </p>
+      <p style="margin: 8px 0 0 0; font-size: 14px; color: #64748b;">あなたのキャリアにおける強みと価値観をAIが分析してまとめたよ。</p>
     </div>
   `;
 
