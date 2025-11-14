@@ -380,7 +380,8 @@ async function getSession(sessionId) {
   }
 
   // 新規セッション作成
-  console.log(`[SESSION] Creating new session: ${sessionId}`);
+  console.warn(`[SESSION WARNING] Session not found, creating new session: ${sessionId}`);
+  console.warn(`[SESSION WARNING] This may indicate session loss. Check KV/memory storage.`);
   const created = createSession(sessionId);
   await saveSession(created);
   return created;
@@ -419,6 +420,7 @@ function buildSchemaError(step, session, message, errorCode = "schema_mismatch")
 }
 
 async function handleStep1(session, userText) {
+  console.log(`[STEP1] Called with userText: "${userText}", session.step: ${session.step}, turnIndex: ${session.stage.turnIndex}`);
   session.stage.turnIndex += 1;
   const trimmed = String(userText || "").trim();
 
@@ -639,6 +641,7 @@ function buildStepPayload(session, userText, recentCount) {
 }
 
 async function handleStep2(session, userText) {
+  console.log(`[STEP2] Called with userText: "${userText}", session.step: ${session.step}, turnIndex: ${session.stage.turnIndex}`);
   // session.meta 初期化
   if (!session.meta) session.meta = {};
   if (typeof session.meta.step2_intro_phase !== "number") {
@@ -3247,9 +3250,7 @@ async function handler(req, res) {
   const session = await getSession(sessionId);
   
   console.log(`[HANDLER] Received request - sessionId: ${sessionId}, message: "${message}"`);
-  console.log(`[HANDLER] Session state - step: ${session.step}, qual_ids: ${JSON.stringify(session.status.qual_ids)}, licenses: ${JSON.stringify(session.status.licenses)}`);
-  
-  await saveSession(session);
+  console.log(`[HANDLER] Session state - step: ${session.step}, qual_ids: ${JSON.stringify(session.status.qual_ids)}, licenses: ${JSON.stringify(session.status.licenses)}, history length: ${session.history.length}`);
 
   try {
     console.log(`[HANDLER] Processing message: "${message}", sessionId: ${sessionId}, session.step: ${session.step}`);
@@ -3335,11 +3336,15 @@ async function handler(req, res) {
       // 【安全装置】result.meta.step が現在のステップより小さい値の場合は拒否
       // ステップは必ず前進するか維持されるべきで、後退してはならない
       if (proposedStep < beforeStep) {
-        console.error(`[HANDLER ERROR] Attempted to go backwards: ${beforeStep} -> ${proposedStep}. REJECTING step change and response.`);
+        console.error(`[HANDLER ERROR] Step regression detected!`);
+        console.error(`[HANDLER ERROR] Current step: ${beforeStep}, Proposed step: ${proposedStep}`);
         console.error(`[HANDLER ERROR] User message: "${message}"`);
-        console.error(`[HANDLER ERROR] Response was: "${result.response}"`);
+        console.error(`[HANDLER ERROR] Original response: "${result.response}"`);
+        console.error(`[HANDLER ERROR] SessionId: ${sessionId}`);
+        console.error(`[HANDLER ERROR] Session history length: ${session.history.length}`);
+        console.error(`[HANDLER ERROR] This likely indicates session loss or incorrect handler call.`);
         // ステップ変更を拒否して現在のステップを維持し、エラーレスポンスを上書き
-        result.response = "処理中にエラーが発生しました。もう一度入力してみてね。";
+        result.response = "ごめん、処理中にエラーが起きちゃった💦 さっきの続きから話してくれる？";
         result.meta.step = beforeStep;
       } else {
         session.step = proposedStep;
