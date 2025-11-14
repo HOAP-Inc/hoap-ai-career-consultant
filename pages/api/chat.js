@@ -608,9 +608,20 @@ if (uniqueLabels.length === 1 && resolved.length === 0) {
     };
   }
 
-  console.log(`[STEP1 ERROR] License not found. User input: "${trimmed}", Current step: ${session.step}`);
+  // 資格が見つからない場合でも、ユーザーの入力をそのまま登録して次に進む
+  // これにより、離脱を防ぎ、ユーザー体験を向上させる
+  console.log(`[STEP1 INFO] License not found in database, registering as-is. User input: "${trimmed}"`);
+  
+  if (!Array.isArray(session.status.licenses)) session.status.licenses = [];
+  if (!session.status.licenses.includes(trimmed)) {
+    session.status.licenses.push(trimmed);
+  }
+  
+  session.stage.turnIndex = 0;
+  resetDrill(session);
+  
   return {
-    response: "ごめん、その資格名が見つからなかったよ。正式名称で教えてくれる？（まだ資格の登録中だよ）",
+    response: `「${trimmed}」だね！他にもある？あれば教えて！なければ「ない」と言ってね`,
     status: session.status,
     meta: { step: 1 },
     drill: session.drill,
