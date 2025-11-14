@@ -426,16 +426,12 @@ async function handleStep1(session, userText) {
     session.step = 2;
     session.stage.turnIndex = 0;
     resetDrill(session);
-    // 資格なしの場合は「ありがとう！」だけを表示してSTEP2へ強制移行
-    // STEP2の2段階質問フェーズを初期化
+    // 資格なしの場合はSTEP2へ遷移
     if (!session.meta) session.meta = {};
     session.meta.step2_intro_phase = 1;
-    return {
-      response: STEP_INTRO_QUESTIONS[2].first,
-      status: session.status,
-      meta: { step: 2 },
-      drill: session.drill,
-    };
+    session.meta.step2_deepening_count = 0;
+    const step2Response = await handleStep2(session, "");
+    return step2Response;
   }
 
     if (session.drill.awaitingChoice) {
@@ -504,15 +500,12 @@ async function handleStep1(session, userText) {
       session.step = 2;
       session.stage.turnIndex = 0;
       resetDrill(session);
-      // STEP2の2段階質問フェーズを初期化
+      // STEP2の2段階質問フェーズを1に設定（first質問から開始）
       if (!session.meta) session.meta = {};
       session.meta.step2_intro_phase = 1;
-      return {
-        response: STEP_INTRO_QUESTIONS[2].first,
-        status: session.status,
-        meta: { step: 2 },
-        drill: session.drill,
-      };
+      session.meta.step2_deepening_count = 0;
+      const step2Response = await handleStep2(session, "");
+      return step2Response;
     }
 
     const qualName = QUAL_NAME_BY_ID.get(directId) || trimmed;
@@ -637,15 +630,26 @@ async function handleStep2(session, userText) {
   // session.meta 初期化
   if (!session.meta) session.meta = {};
   if (typeof session.meta.step2_intro_phase !== "number") {
-    session.meta.step2_intro_phase = 1; // 1: first質問, 2: second質問後
+    session.meta.step2_intro_phase = 1; // デフォルトはfirst質問から開始
+  }
+  if (typeof session.meta.step2_deepening_count !== "number") {
+    session.meta.step2_deepening_count = 0;
   }
 
-  // 【Phase 1】first質問を返す（userTextが空 && phase=1）
-  if ((!userText || !userText.trim()) && session.meta.step2_intro_phase === 1) {
+  // STEP遷移時（userTextが空）は、introフェーズに応じた質問を返す
+  if (!userText || !userText.trim()) {
+    if (session.meta.step2_intro_phase === 1) {
+      return {
+        response: STEP_INTRO_QUESTIONS[2].first,
+        status: session.status,
+        meta: { step: 2, intro_phase: 1 },
+        drill: session.drill,
+      };
+    }
     return {
-      response: STEP_INTRO_QUESTIONS[2].first,
+      response: STEP_INTRO_QUESTIONS[2].second,
       status: session.status,
-      meta: { step: 2, intro_phase: 1 },
+      meta: { step: 2, intro_phase: 2 },
       drill: session.drill,
     };
   }
@@ -666,11 +670,10 @@ async function handleStep2(session, userText) {
 
   // 【Phase 1の応答処理】empathy + second質問を結合
   if (session.meta.step2_intro_phase === 1 && parsed?.empathy) {
-    session.meta.step2_intro_phase = 2; // フェーズを2に進める
-    const combinedResponse = [
-      parsed.empathy,
-      STEP_INTRO_QUESTIONS[2].second
-    ].filter(Boolean).join("\n\n");
+    session.meta.step2_intro_phase = 2;
+    const combinedResponse = [parsed.empathy, STEP_INTRO_QUESTIONS[2].second]
+      .filter(Boolean)
+      .join("\n\n");
 
     return {
       response: combinedResponse,
@@ -682,7 +685,6 @@ async function handleStep2(session, userText) {
 
   // intro フェーズの処理（安全装置：LLMが予期せずintroを返した場合）
   if (parsed?.control?.phase === "intro") {
-    // deepening_countをリセット
     if (!session.meta) session.meta = {};
     session.meta.step2_deepening_count = 0;
     return {
