@@ -287,11 +287,11 @@ body{
 }
 
 .analysis-subsection{
-  background:linear-gradient(135deg,#e0f2fe 0%,#ddd6fe 45%,#fce7f3 100%);
-  border-radius:16px;
-  padding:16px;
+  background:transparent;
+  border-radius:0;
+  padding:0;
   margin-top:8px;
-  border:1px solid rgba(139,92,246,0.2);
+  border:none;
 }
 
 .analysis-subtitle{
