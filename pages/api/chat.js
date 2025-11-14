@@ -3063,6 +3063,13 @@ async function handleStep6(session, userText) {
     </section>
   `;
 
+  const ctaHtml = `
+    <div class="summary-cta" style="text-align: center; margin-bottom: 24px;">
+      <p style="color: #000; font-weight: 600; margin: 0 0 16px 0; font-size: 14px; line-height: 1.7;">自分の経歴書代わりに使えるキャリアシートを作成したい人はこちらのボタンから無料作成してね！<br>これまでの経歴や希望条件を入れたり、キャリアエージェントに相談もできるよ。</p>
+      <a href="https://hoap-ai-career-sheet.vercel.app/" target="_blank" rel="noopener noreferrer" style="display: inline-block; background: linear-gradient(135deg, #F09433 0%, #E6683C 25%, #DC2743 50%, #CC2366 75%, #BC1888 100%); border: none; border-radius: 999px; padding: 14px 28px; font-size: 16px; font-weight: 700; color: #fff; cursor: pointer; box-shadow: 0 4px 12px rgba(236, 72, 153, 0.3); transition: transform 0.2s ease; text-decoration: none;">無料で作成する</a>
+    </div>
+  `;
+
   const sheetHeaderHtml = `
     <div style="text-align: center; margin-bottom: 24px;">
       <h2 style="margin: 0 0 8px 0; font-size: clamp(24px, 5vw, 36px); font-weight: 900; background: linear-gradient(135deg, #F09433 0%, #E6683C 25%, #DC2743 50%, #CC2366 75%, #BC1888 100%); -webkit-background-clip: text; background-clip: text; color: transparent;">
@@ -3085,7 +3092,10 @@ async function handleStep6(session, userText) {
     </div>
   `.trim();
 
-  const summaryData = summaryReportHtml.trim();
+  const summaryData = `
+    ${ctaHtml}
+    ${summaryReportHtml}
+  `.trim();
 
   // ai_analysisはDoing/Beingの組み合わせ
   const analysisTexts = analysisParts.map(part => part.text).filter(Boolean);

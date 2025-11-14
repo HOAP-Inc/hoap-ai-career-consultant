@@ -784,20 +784,6 @@ setChoices(isChoiceStep(next) ? uniqueByNormalized(inline) : []);
 
             <div className="summary-html" dangerouslySetInnerHTML={{ __html: summaryData }} />
 
-            <div className="summary-modal-cta">
-              <p className="summary-modal-cta__note">
-                自分の経歴書代わりに使えるキャリアシートを作成したい人はこちらのボタンから無料作成してね！これまでの経歴や希望条件を入れたり、キャリアエージェントに相談もできるよ。
-              </p>
-              <a
-                className="summary-modal-cta__button"
-                href="https://hoap-ai-career-sheet.vercel.app/"
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                無料で作成する
-              </a>
-            </div>
-
             {/* フッター */}
             <div className="summary-modal-footer" style={{
               marginTop: "clamp(24px, 4vw, 32px)",
