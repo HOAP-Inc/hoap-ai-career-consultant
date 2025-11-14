@@ -3197,7 +3197,7 @@ async function handleStep6(session, userText) {
 
 function initialGreeting(session) {
   return {
-    response: "こんにちは！AIキャリアデザイナーのほーぷちゃんだよ✨\n今日はあなたのこれまでキャリアの説明書をあなたの言葉とAIの分析で作っていくね！\n\nそれじゃあ、まずは持っている資格を教えて欲しいな🌱\n複数ある場合は1つずつ教えてね。\n資格がない場合は「資格なし」でOKだよ！",
+    response: "こんにちは！AIキャリアデザイナーのほーぷちゃんだよ✨\n今日はあなたのキャリア分析シートを作っていくね！\n\nまずは持っている資格を教えて欲しいな🌱\n複数ある場合は1つずつ教えてね。\n資格がない場合は「資格なし」でOKだよ！",
     status: session.status,
     meta: { step: session.step },
     drill: session.drill,
