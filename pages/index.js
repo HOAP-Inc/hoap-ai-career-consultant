@@ -723,45 +723,6 @@ setChoices(isChoiceStep(next) ? uniqueByNormalized(inline) : []);
             boxShadow: "0 25px 80px rgba(236, 72, 153, 0.15), 0 10px 40px rgba(0, 0, 0, 0.1)",
             border: "1px solid rgba(236, 72, 153, 0.1)"
           }}>
-            {/* PDFダウンロードボタン */}
-            <button
-              className="summary-modal-btn"
-              onClick={() => {
-                window.print();
-              }}
-              style={{
-                position: "absolute",
-                top: "20px",
-                right: "76px",
-                background: "linear-gradient(135deg, #3b82f6, #8b5cf6)",
-                border: "none",
-                borderRadius: "12px",
-                padding: "10px 20px",
-                fontSize: "14px",
-                fontWeight: 600,
-                cursor: "pointer",
-                boxShadow: "0 4px 12px rgba(59, 130, 246, 0.3)",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                gap: "8px",
-                color: "white",
-                transition: "all 0.2s ease",
-                zIndex: 10
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.transform = "translateY(-2px)";
-                e.currentTarget.style.boxShadow = "0 6px 16px rgba(59, 130, 246, 0.4)";
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.transform = "translateY(0)";
-                e.currentTarget.style.boxShadow = "0 4px 12px rgba(59, 130, 246, 0.3)";
-              }}
-            >
-              <span>📄</span>
-              <span>PDF保存</span>
-            </button>
-
             {/* 閉じるボタン */}
             <button
               className="summary-modal-btn"
@@ -822,6 +783,20 @@ setChoices(isChoiceStep(next) ? uniqueByNormalized(inline) : []);
             </div>
 
             <div className="summary-html" dangerouslySetInnerHTML={{ __html: summaryData }} />
+
+            <div className="summary-modal-cta">
+              <p className="summary-modal-cta__note">
+                自分の経歴書代わりに使えるキャリアシートを作成したい人はこちらのボタンから無料作成してね！これまでの経歴や希望条件を入れたり、キャリアエージェントに相談もできるよ。
+              </p>
+              <a
+                className="summary-modal-cta__button"
+                href="https://hoap-ai-career-sheet.vercel.app/"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                無料で作成する
+              </a>
+            </div>
 
             {/* フッター */}
             <div className="summary-modal-footer" style={{
