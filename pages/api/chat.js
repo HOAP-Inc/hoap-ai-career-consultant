@@ -3140,10 +3140,10 @@ async function handleStep6(session, userText) {
 
   const sheetHeaderHtml = `
     <div style="text-align: center; margin-bottom: 32px;">
-      <h2 style="margin: 0 0 16px 0; font-size: clamp(24px, 5vw, 36px); font-weight: 900; background: linear-gradient(135deg, #F09433 0%, #E6683C 25%, #DC2743 50%, #CC2366 75%, #BC1888 100%); -webkit-background-clip: text; background-clip: text; color: transparent;">
+      <h2 style="margin: 0 0 16px 0; font-size: 18px; font-weight: 700; color: #000;">
         ${escapeHtml(displayName)}さんのキャリア分析シート
       </h2>
-      <p style="margin: 0; font-size: clamp(18px, 4vw, 24px); font-weight: 900; color: #1f2937; line-height: 1.5; letter-spacing: 0.02em;">
+      <p style="margin: 0; padding: 16px 24px; font-size: clamp(20px, 4.5vw, 28px); font-weight: 900; line-height: 1.5; letter-spacing: 0.02em; background: linear-gradient(135deg, #F09433 0%, #E6683C 25%, #DC2743 50%, #CC2366 75%, #BC1888 100%); -webkit-background-clip: text; background-clip: text; color: transparent; border: 2px solid; border-image: linear-gradient(135deg, #F09433 0%, #E6683C 25%, #DC2743 50%, #CC2366 75%, #BC1888 100%) 1; border-radius: 12px;">
         ${escapeHtml(catchcopy)}
       </p>
     </div>
@@ -3163,12 +3163,12 @@ async function handleStep6(session, userText) {
   `.trim();
 
   const ctaHtml = `
-    <div class="summary-cta" style="text-align: center; margin-top: 32px;">
-      <p style="color: #000; font-weight: 600; margin: 0 0 16px 0; font-size: 14px; line-height: 1.7;">
+    <div class="summary-cta" style="text-align: center; margin-top: 32px; margin-bottom: 32px;">
+      <p style="color: #000; font-weight: 600; margin: 0 0 20px 0; font-size: 14px; line-height: 1.7; max-width: 600px; margin-left: auto; margin-right: auto;">
         自分の経歴書代わりに使えるキャリアシートを作成したい人はこちらのボタンから無料作成してね！<br>
         これまでの経歴や希望条件を入れたり、キャリアエージェントに相談もできるよ。
       </p>
-      <a href="https://hoap-ai-career-sheet.vercel.app/" target="_blank" rel="noopener noreferrer" style="display: block; margin: 0 auto; max-width: 280px; background: linear-gradient(135deg, #F09433 0%, #E6683C 25%, #DC2743 50%, #CC2366 75%, #BC1888 100%); border: none; border-radius: 999px; padding: 14px 28px; font-size: 16px; font-weight: 700; color: #fff; cursor: pointer; box-shadow: 0 4px 12px rgba(236, 72, 153, 0.3); transition: transform 0.2s ease; text-decoration: none;">無料で作成する</a>
+      <a href="https://hoap-ai-career-sheet.vercel.app/" target="_blank" rel="noopener noreferrer" style="display: block; margin: 0 auto; width: fit-content; background: linear-gradient(135deg, #F09433 0%, #E6683C 25%, #DC2743 50%, #CC2366 75%, #BC1888 100%); border: none; border-radius: 999px; padding: 14px 32px; font-size: 16px; font-weight: 700; color: #fff; cursor: pointer; box-shadow: 0 4px 12px rgba(236, 72, 153, 0.3); transition: transform 0.2s ease; text-decoration: none;">無料で作成する</a>
     </div>
   `.trim();
 
