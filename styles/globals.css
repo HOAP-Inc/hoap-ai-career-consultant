@@ -683,7 +683,7 @@ html, body, #__next { height: 100%; }
 
 .user-echo__bubble{
   pointer-events: auto;
-  display: inline-block;
+  display: block;
   background: linear-gradient(135deg, var(--user-grad-from), var(--user-grad-via) 50%, var(--user-grad-to));
   border: 1px solid #e9d5ff;
   border-radius: 16px;
@@ -692,8 +692,8 @@ html, body, #__next { height: 100%; }
   white-space: pre-wrap;
   line-height: 1.8;
 
-  width: 100%;
-  max-width: 1040px;
+  width: calc(100% - 40px);
+  max-width: 1000px;
   margin: 0 auto;
 }
 
@@ -847,7 +847,7 @@ html, body, #__next { height: 100%; }
 
 .user-echo__bubble{
   pointer-events: auto;
-  display: inline-block;
+  display: block;
   background: linear-gradient(135deg, var(--user-grad-from), var(--user-grad-via) 50%, var(--user-grad-to));
   border: 1px solid #e9d5ff;
   border-radius: 16px;
@@ -856,8 +856,8 @@ html, body, #__next { height: 100%; }
   white-space: pre-wrap;
   line-height: 1.8;
 
-  width: 100%;
-  max-width: 1040px;
+  width: calc(100% - 40px);
+  max-width: 1000px;
   margin: 0 auto;
 }
 
