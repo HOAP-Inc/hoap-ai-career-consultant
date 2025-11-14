@@ -3210,57 +3210,7 @@ async function handleStep6(session, userText) {
     </section>
   `;
 
-  // キャッチコピーの一部をぼかす処理
-  function blurCatchcopy(text) {
-    if (!text) return '';
-    
-    // 最後の職業名（看護師、保育士など）を検出
-    const occupationMatch = text.match(/(看護師|保育士|介護士|医師|薬剤師|理学療法士|作業療法士|栄養士|ケアマネージャー|社会福祉士)$/);
-    
-    if (occupationMatch) {
-      const occupation = occupationMatch[1];
-      const beforeOccupation = text.substring(0, text.lastIndexOf(occupation));
-      
-      // 職業名の前の「な」を探す
-      const naMatch = beforeOccupation.match(/^(.+)(な)$/);
-      if (naMatch) {
-        const beforeNa = naMatch[1];
-        // 最初の10文字程度を表示、中間をぼかし、「な職業名」を表示
-        const visibleStart = beforeNa.substring(0, Math.min(10, beforeNa.length));
-        const toBlur = beforeNa.substring(visibleStart.length);
-        
-        // toBlurが空でないことを確認
-        if (toBlur) {
-          return `${escapeHtml(visibleStart)}<span style="filter: blur(8px); opacity: 0.4; user-select: none; -webkit-user-select: none;">${escapeHtml(toBlur)}</span>${escapeHtml('な' + occupation)}`;
-        } else {
-          // ぼかす部分がない場合は全体を表示
-          return `${escapeHtml(beforeNa)}<span style="filter: blur(8px); opacity: 0.4; user-select: none; -webkit-user-select: none;">${escapeHtml('な')}</span>${escapeHtml(occupation)}`;
-        }
-      }
-      
-      // 「な」がない場合：職業名の前をぼかす
-      const visibleStart = beforeOccupation.substring(0, Math.min(10, beforeOccupation.length));
-      const toBlur = beforeOccupation.substring(visibleStart.length);
-      
-      if (toBlur) {
-        return `${escapeHtml(visibleStart)}<span style="filter: blur(8px); opacity: 0.4; user-select: none; -webkit-user-select: none;">${escapeHtml(toBlur)}</span>${escapeHtml(occupation)}`;
-      }
-    }
-    
-    // フォールバック：文字数の40%を表示、残りをぼかす
-    const visibleLength = Math.floor(text.length * 0.4);
-    const visible = text.substring(0, visibleLength);
-    const blurred = text.substring(visibleLength);
-    
-    if (blurred) {
-      return `${escapeHtml(visible)}<span style="filter: blur(8px); opacity: 0.4; user-select: none; -webkit-user-select: none;">${escapeHtml(blurred)}</span>`;
-    }
-    
-    // ぼかす部分がない場合は全体を表示
-    return escapeHtml(text);
-  }
-
-  const blurredCatchcopy = blurCatchcopy(catchcopy);
+  // キャッチコピーはぼかさず全文表示
 
   const sheetHeaderHtml = `
     <div style="text-align: center; margin-bottom: 32px;">
@@ -3270,7 +3220,7 @@ async function handleStep6(session, userText) {
       <div style="position: relative; display: inline-block; text-align: left; max-width: 90%;">
         <span style="display: inline-block; background: linear-gradient(135deg, #fde2f3, #e9e7ff 50%, #e6f0ff); color: #000; font-size: 11px; font-weight: 600; padding: 4px 12px; border-radius: 999px; margin-bottom: 8px;">キャッチコピー</span>
         <p style="margin: 0; font-size: clamp(20px, 4.5vw, 28px); font-weight: 900; line-height: 1.5; letter-spacing: 0.02em; background: linear-gradient(135deg, #F09433 0%, #E6683C 25%, #DC2743 50%, #CC2366 75%, #BC1888 100%); -webkit-background-clip: text; background-clip: text; color: transparent; font-family: 'Klee', 'Hiragino Maru Gothic ProN', 'ヒラギノ丸ゴ ProN W4', 'HG正楷書体-PRO', 'HGP行書体', 'HG丸ｺﾞｼｯｸM-PRO', 'Segoe Print', 'Comic Sans MS', cursive, sans-serif;">
-          ${blurredCatchcopy}
+          ${escapeHtml(catchcopy)}
         </p>
       </div>
     </div>
