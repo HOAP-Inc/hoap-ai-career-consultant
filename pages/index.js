@@ -26,6 +26,7 @@ export default function Home() {
   const [choices, setChoices] = useState([]);
   const [showSummary, setShowSummary] = useState(false);
   const [summaryData, setSummaryData] = useState(null);
+  const [ctaHtml, setCtaHtml] = useState(null);
 
   // STEP到達時に1度だけポーズを切り替えるためのフラグ
   const cheeredIdRef = useRef(false);   // STEP2
@@ -487,6 +488,7 @@ setChoices(isChoiceStep(next) ? uniqueByNormalized(inline) : []);
           const sheetDelay = Math.max(5000, accumulatedDelay + lastReadTime);
           setTimeout(() => {
             setSummaryData(data.meta.summary_data);
+            setCtaHtml(data.meta.cta_html);
             setShowSummary(true);
           }, sheetDelay);
         } else {
@@ -495,6 +497,7 @@ setChoices(isChoiceStep(next) ? uniqueByNormalized(inline) : []);
           setIsTyping(false);
           setTimeout(() => {
             setSummaryData(data.meta.summary_data);
+            setCtaHtml(data.meta.cta_html);
             setShowSummary(true);
           }, data.meta.show_summary_after_delay);
         }
@@ -729,6 +732,7 @@ setChoices(isChoiceStep(next) ? uniqueByNormalized(inline) : []);
               onClick={() => {
                 setShowSummary(false);
                 setSummaryData(null);
+                setCtaHtml(null);
               }}
               style={{
                 position: "absolute",
@@ -781,6 +785,11 @@ setChoices(isChoiceStep(next) ? uniqueByNormalized(inline) : []);
                 Your Unique Career Profile
               </h2>
             </div>
+
+            {/* CTAボタン（キャリアシートの外） */}
+            {ctaHtml && (
+              <div dangerouslySetInnerHTML={{ __html: ctaHtml }} />
+            )}
 
             <div className="summary-html" dangerouslySetInnerHTML={{ __html: summaryData }} />
 
