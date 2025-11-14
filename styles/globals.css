@@ -298,17 +298,12 @@ body{
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  padding: 8px 16px;
+  padding: 0;
   font-size: 14px;
   font-weight: 700;
-  border-radius: 999px;
-  background: #fff;
-  border: 2px solid transparent;
-  background-clip: padding-box, border-box;
-  background-origin: border-box;
-  background-image:
-    linear-gradient(#fff, #fff),
-    linear-gradient(90deg,#ec4899,#8b5cf6,#3b82f6);
+  border-radius: 0;
+  background: transparent;
+  border: none;
   margin-bottom:12px;
   color:#333;
 }
