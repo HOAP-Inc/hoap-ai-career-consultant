@@ -1,7 +1,15 @@
 const fs = require("fs");
 const path = require("path");
 const { OpenAI } = require("openai");
-const { kv } = require("@vercel/kv");
+
+// Vercel KVのインポート（環境変数がない場合はundefinedになる）
+let kv;
+try {
+  kv = require("@vercel/kv").kv;
+} catch (err) {
+  console.warn("[SESSION] Vercel KV not available, using memory storage");
+  kv = null;
+}
 
 const PROMPTS_DIR = path.join(process.cwd(), "prompts");
 
@@ -224,6 +232,14 @@ function mapLicenseLabelToQualificationId(label) {
 // セッションの有効期限（秒）: 24時間
 const SESSION_TTL = 60 * 60 * 24;
 
+// メモリベースのフォールバックストレージ（KVが利用できない場合）
+const memoryStorage = new Map();
+
+// KVが利用可能かチェック
+function isKVAvailable() {
+  return kv !== null && kv !== undefined && process.env.KV_REST_API_URL;
+}
+
 function createSession(sessionId) {
   const base = {
     id: sessionId || `s_${Math.random().toString(36).slice(2)}`,
@@ -342,13 +358,29 @@ async function callLLM(stepKey, payload, session, opts = {}) {
 async function getSession(sessionId) {
   if (!sessionId) return createSession();
 
-  try {
-    const existing = await kv.get(`session:${sessionId}`);
-    if (existing) return normalizeSession(existing);
-  } catch (err) {
-    console.error(`[KV ERROR] Failed to get session ${sessionId}:`, err);
+  // KVが利用可能な場合
+  if (isKVAvailable()) {
+    try {
+      const existing = await kv.get(`session:${sessionId}`);
+      if (existing) {
+        console.log(`[SESSION] Retrieved from KV: ${sessionId}, step: ${existing.step}`);
+        return normalizeSession(existing);
+      }
+    } catch (err) {
+      console.error(`[KV ERROR] Failed to get session ${sessionId}:`, err);
+      // KVエラー時もフォールバックとしてメモリを試す
+    }
   }
 
+  // メモリストレージから取得（KVが利用不可、またはKVにセッションがない場合）
+  const existingMemory = memoryStorage.get(sessionId);
+  if (existingMemory) {
+    console.log(`[SESSION] Retrieved from memory: ${sessionId}, step: ${existingMemory.step}`);
+    return normalizeSession(existingMemory);
+  }
+
+  // 新規セッション作成
+  console.log(`[SESSION] Creating new session: ${sessionId}`);
   const created = createSession(sessionId);
   await saveSession(created);
   return created;
@@ -357,11 +389,23 @@ async function getSession(sessionId) {
 async function saveSession(session) {
   if (!session?.id) return;
 
-  try {
-    await kv.set(`session:${session.id}`, session, { ex: SESSION_TTL });
-  } catch (err) {
-    console.error(`[KV ERROR] Failed to save session ${session.id}:`, err);
+  // KVが利用可能な場合
+  if (isKVAvailable()) {
+    try {
+      await kv.set(`session:${session.id}`, session, { ex: SESSION_TTL });
+      console.log(`[SESSION] Saved to KV: ${session.id}, step: ${session.step}`);
+    } catch (err) {
+      console.error(`[KV ERROR] Failed to save session ${session.id}:`, err);
+      // KVエラー時もフォールバックとしてメモリに保存
+      memoryStorage.set(session.id, session);
+      console.log(`[SESSION] Fallback to memory: ${session.id}, step: ${session.step}`);
+      return;
+    }
   }
+
+  // メモリストレージに保存（KVが利用不可の場合）
+  memoryStorage.set(session.id, session);
+  console.log(`[SESSION] Saved to memory: ${session.id}, step: ${session.step}`);
 }
 
 function buildSchemaError(step, session, message, errorCode = "schema_mismatch") {
@@ -2976,6 +3020,15 @@ async function handler(req, res) {
     return;
   }
 
+  // ストレージの状態をログ出力（初回のみ）
+  if (!handler.storageLogged) {
+    console.log(`[SESSION STORAGE] Using: ${isKVAvailable() ? 'Vercel KV' : 'Memory (fallback)'}`);
+    if (isKVAvailable()) {
+      console.log(`[SESSION STORAGE] KV URL: ${process.env.KV_REST_API_URL ? 'configured' : 'not configured'}`);
+    }
+    handler.storageLogged = true;
+  }
+
   // body 取得の保険（Edge/Node 両対応）
   const body = (await req.json?.().catch(() => null)) || req.body || {};
   const { message, sessionId } = body;
@@ -2983,7 +3036,7 @@ async function handler(req, res) {
   await saveSession(session);
 
   try {
-    console.log(`[HANDLER] Received message: "${message}", session.step: ${session.step}`);
+    console.log(`[HANDLER] Received message: "${message}", sessionId: ${sessionId}, session.step: ${session.step}`);
     
     // STEP6では空メッセージでも処理を続行（自動開始のため）
     if ((!message || message.trim() === "") && session.step !== 6) {
