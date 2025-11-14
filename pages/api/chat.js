@@ -1935,6 +1935,27 @@ async function handleStep4(session, userText) {
     userText = selectedLabel;
   }
 
+  // 方向性選択の場合（残業、休日などの選択肢）
+  if (session.drill.awaitingChoice && session.drill.phase === "step4_direction_choice") {
+    const options = Array.isArray(session.drill.options) ? session.drill.options : [];
+    const normalized = normKey(userText || "");
+    const selectedOption = options.find(opt => normKey(opt) === normalized || normalizePick(opt) === normalizePick(userText || ""));
+    if (!selectedOption) {
+      return {
+        response: `候補から選んでね。『${formatOptions(options)}』`,
+        status: session.status,
+        meta: { step: 4, phase: "choice" },
+        drill: session.drill,
+      };
+    }
+    session.drill.awaitingChoice = false;
+    session.drill.phase = null;
+    session.drill.options = [];
+    
+    // 選択肢に基づいてuserTextを再構成（LLMに渡すため）
+    userText = selectedOption;
+  }
+
   // 【重要】STEP遷移時（userTextが空）は、LLMを呼ばずにintro質問を返す
   if (!userText || !userText.trim()) {
     // intro質問を既に表示済みの場合は空応答を返す（重複防止）
@@ -2411,10 +2432,37 @@ async function handleStep4(session, userText) {
 
       if (isShortWord && serverCount === 0) {
         // 初回：方向性を確認（あってほしいのか、なしにしてほしいのか）
+        // 選択肢をボタン形式で提示
         if (userInput.includes("残業")) {
-            question = "残業については『残業なし』と『多少の残業はOK』のどちらが合うか教えてほしいな。";
+          session.drill.phase = "step4_direction_choice";
+          session.drill.awaitingChoice = true;
+          session.drill.options = ["残業なし", "多少の残業はOK"];
+          return {
+            response: `${responseText ? `${responseText}\n\n` : ""}残業については、どちらが合うか教えてほしいな。`,
+            status: session.status,
+            meta: { step: 4, phase: "choice", deepening_count: serverCount },
+            drill: session.drill,
+          };
         } else if (userInput.includes("休み") || userInput.includes("休日")) {
-            question = "休日面では『完全週休2日』と『月6日以上あればOK』のどちらが理想かな？";
+          session.drill.phase = "step4_direction_choice";
+          session.drill.awaitingChoice = true;
+          session.drill.options = ["完全週休2日", "月6日以上あればOK"];
+          return {
+            response: `${responseText ? `${responseText}\n\n` : ""}休日面では、どちらが理想かな？`,
+            status: session.status,
+            meta: { step: 4, phase: "choice", deepening_count: serverCount },
+            drill: session.drill,
+          };
+        } else if (userInput.includes("給料") || userInput.includes("給与") || userInput.includes("年収") || userInput.includes("昇給") || userInput.includes("アップ")) {
+          session.drill.phase = "step4_direction_choice";
+          session.drill.awaitingChoice = true;
+          session.drill.options = ["年収300万円以上", "年収350万円以上", "年収400万円以上", "年収450万円以上", "年収500万円以上"];
+          return {
+            response: `${responseText ? `${responseText}\n\n` : ""}年収については、どのくらいを希望するか教えてほしいな。`,
+            status: session.status,
+            meta: { step: 4, phase: "choice", deepening_count: serverCount },
+            drill: session.drill,
+          };
         } else {
             question = "その条件は『絶対あってほしい』『絶対なしにしてほしい』のどちらかで教えてほしいな。";
         }
@@ -2423,9 +2471,35 @@ async function handleStep4(session, userText) {
         if (serverCount === 1) {
           // 残業の場合
           if (combinedText.includes("残業")) {
-            question = "残業については『残業なし』と『多少の残業はOK』のどちらが合うか教えてほしいな。";
+            session.drill.phase = "step4_direction_choice";
+            session.drill.awaitingChoice = true;
+            session.drill.options = ["残業なし", "多少の残業はOK"];
+            return {
+              response: `${responseText ? `${responseText}\n\n` : ""}残業については、どちらが合うか教えてほしいな。`,
+              status: session.status,
+              meta: { step: 4, phase: "choice", deepening_count: serverCount },
+              drill: session.drill,
+            };
           } else if (combinedText.includes("休み") || combinedText.includes("休日")) {
-            question = "休日面では『完全週休2日』と『月6日以上あればOK』のどちらが理想かな？";
+            session.drill.phase = "step4_direction_choice";
+            session.drill.awaitingChoice = true;
+            session.drill.options = ["完全週休2日", "月6日以上あればOK"];
+            return {
+              response: `${responseText ? `${responseText}\n\n` : ""}休日面では、どちらが理想かな？`,
+              status: session.status,
+              meta: { step: 4, phase: "choice", deepening_count: serverCount },
+              drill: session.drill,
+            };
+          } else if (combinedText.includes("給料") || combinedText.includes("給与") || combinedText.includes("年収") || combinedText.includes("昇給") || combinedText.includes("アップ")) {
+            session.drill.phase = "step4_direction_choice";
+            session.drill.awaitingChoice = true;
+            session.drill.options = ["年収300万円以上", "年収350万円以上", "年収400万円以上", "年収450万円以上", "年収500万円以上"];
+            return {
+              response: `${responseText ? `${responseText}\n\n` : ""}年収については、どのくらいを希望するか教えてほしいな。`,
+              status: session.status,
+              meta: { step: 4, phase: "choice", deepening_count: serverCount },
+              drill: session.drill,
+            };
           } else {
             // デフォルト：方向性を確認
             question = "その条件は『絶対あってほしい』『絶対なしにしてほしい』のどちらかで教えてほしいな。";
@@ -2470,13 +2544,37 @@ async function handleStep4(session, userText) {
       if (serverCount === 0) {
         responseText = "例えば働き方で言うと、『リモートワークができる』『フレックスタイム』『残業なし』などの中で、どれが一番大事か教えてほしいな。";
       } else if (serverCount === 1) {
-        // 方向性を確認する質問
+        // 方向性を確認する質問（選択肢形式）
         if (combinedText.includes("残業")) {
-        responseText = "残業については『残業なし』と『多少の残業はOK』のどちらが合うか教えてほしいな。";
+          session.drill.phase = "step4_direction_choice";
+          session.drill.awaitingChoice = true;
+          session.drill.options = ["残業なし", "多少の残業はOK"];
+          return {
+            response: "残業については、どちらが合うか教えてほしいな。",
+            status: session.status,
+            meta: { step: 4, phase: "choice", deepening_count: serverCount },
+            drill: session.drill,
+          };
         } else if (combinedText.includes("給料") || combinedText.includes("給与") || combinedText.includes("年収") || combinedText.includes("収入") || combinedText.includes("昇給")) {
-          responseText = "給与については『高めの給与』と『平均的でも安定』のどちらに惹かれるか教えてほしいな。";
+          session.drill.phase = "step4_direction_choice";
+          session.drill.awaitingChoice = true;
+          session.drill.options = ["年収300万円以上", "年収350万円以上", "年収400万円以上", "年収450万円以上", "年収500万円以上"];
+          return {
+            response: "年収については、どのくらいを希望するか教えてほしいな。",
+            status: session.status,
+            meta: { step: 4, phase: "choice", deepening_count: serverCount },
+            drill: session.drill,
+          };
         } else if (combinedText.includes("休み") || combinedText.includes("休日")) {
-          responseText = "休日面では『完全週休2日』と『月6日以上あればOK』のどちらが理想かな？";
+          session.drill.phase = "step4_direction_choice";
+          session.drill.awaitingChoice = true;
+          session.drill.options = ["完全週休2日", "月6日以上あればOK"];
+          return {
+            response: "休日面では、どちらが理想かな？",
+            status: session.status,
+            meta: { step: 4, phase: "choice", deepening_count: serverCount },
+            drill: session.drill,
+          };
         } else {
           responseText = "その条件は『絶対あってほしい』『絶対なしにしてほしい』のどちらかで教えてほしいな。";
         }
@@ -2491,11 +2589,37 @@ async function handleStep4(session, userText) {
         
         // 方向性が確定していない場合
         if (!hasPositiveKeywords && !hasNegativeKeywords) {
-          // 方向性を確認する質問
+          // 方向性を確認する質問（選択肢形式）
           if (combinedText.includes("残業")) {
-            comparisonQuestion = "残業については『残業なし』と『多少の残業はOK』のどちらが合うか教えてほしいな。";
+            session.drill.phase = "step4_direction_choice";
+            session.drill.awaitingChoice = true;
+            session.drill.options = ["残業なし", "多少の残業はOK"];
+            return {
+              response: "残業については、どちらが合うか教えてほしいな。",
+              status: session.status,
+              meta: { step: 4, phase: "choice", deepening_count: serverCount },
+              drill: session.drill,
+            };
+          } else if (combinedText.includes("給料") || combinedText.includes("給与") || combinedText.includes("年収") || combinedText.includes("収入") || combinedText.includes("昇給")) {
+            session.drill.phase = "step4_direction_choice";
+            session.drill.awaitingChoice = true;
+            session.drill.options = ["年収300万円以上", "年収350万円以上", "年収400万円以上", "年収450万円以上", "年収500万円以上"];
+            return {
+              response: "年収については、どのくらいを希望するか教えてほしいな。",
+              status: session.status,
+              meta: { step: 4, phase: "choice", deepening_count: serverCount },
+              drill: session.drill,
+            };
           } else if (combinedText.includes("休み") || combinedText.includes("休日")) {
-            comparisonQuestion = "休日面では『完全週休2日』と『月6日以上あればOK』のどちらが理想かな？";
+            session.drill.phase = "step4_direction_choice";
+            session.drill.awaitingChoice = true;
+            session.drill.options = ["完全週休2日", "月6日以上あればOK"];
+            return {
+              response: "休日面では、どちらが理想かな？",
+              status: session.status,
+              meta: { step: 4, phase: "choice", deepening_count: serverCount },
+              drill: session.drill,
+            };
           } else {
             comparisonQuestion = "その条件は『絶対あってほしい』『絶対なしにしてほしい』のどちらかで教えてほしいな。";
           }
@@ -2503,7 +2627,9 @@ async function handleStep4(session, userText) {
           // 方向性が確定している場合は重要度を確認
           comparisonQuestion = "それって、どのくらい譲れない条件？『絶対必須』レベル？";
         }
-        responseText = comparisonQuestion;
+        if (comparisonQuestion) {
+          responseText = comparisonQuestion;
+        }
       }
     }
 
