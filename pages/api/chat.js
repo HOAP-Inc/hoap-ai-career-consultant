@@ -3267,6 +3267,29 @@ async function handler(req, res) {
   try {
     console.log(`[HANDLER] Processing message: "${message}", sessionId: ${sessionId}, session.step: ${session.step}`);
     
+    // 【開発用】テストモード：STEP6を直接表示
+    if (message === "__TEST_STEP6__") {
+      console.log("[TEST MODE] Generating STEP6 with dummy data");
+      // ダミーデータでセッションを初期化
+      session.step = 6;
+      session.status.qual_ids = [1]; // 看護師
+      session.status.licenses = ["看護師"];
+      session.status.can_text = "病棟、外来、クリニックでの勤務経験があります。患者さんだけでなくご家族とのコミュニケーションも得意です。";
+      session.status.will_text = "患者さんとご家族をトータルでケアできる看護師になりたいです。";
+      session.status.must_text = "残業は少なめ、年収450万円以上希望";
+      session.status.self_text = "プライベートと仕事をしっかり区別して、どちらも楽しんでいます。周りからは「あなたは上手に両立しているよね」と言われます。";
+      session.history = [
+        { role: "user", text: "看護師", step: 1 },
+        { role: "ai", text: "ありがとう！", step: 2 },
+        { role: "user", text: "病棟で働いています", step: 2 },
+      ];
+      const result = await handleStep6(session, "");
+      session.step = result.meta?.step || session.step;
+      await saveSession(session);
+      res.status(200).json(result);
+      return;
+    }
+    
     // STEP6では空メッセージでも処理を続行（自動開始のため）
     if ((!message || message.trim() === "") && session.step !== 6) {
       console.log("[HANDLER] Empty message and not STEP6, returning greeting");
