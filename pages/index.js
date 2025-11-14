@@ -26,6 +26,7 @@ export default function Home() {
   const [choices, setChoices] = useState([]);
   const [showSummary, setShowSummary] = useState(false);
   const [summaryData, setSummaryData] = useState(null);
+  const [ctaHtml, setCtaHtml] = useState(null);
 
   // STEP到達時に1度だけポーズを切り替えるためのフラグ
   const cheeredIdRef = useRef(false);   // STEP2
@@ -203,7 +204,7 @@ function getStatusRowDisplay(key, statusMeta = {}) {
     messageTimersRef.current = [];
   }, []);
 
-  const showAiSequence = useCallback((parts) => {
+  const showAiSequence = useCallback((parts, isInitial = false) => {
     clearMessageTimers();
     if (!Array.isArray(parts) || parts.length === 0) {
       setAiText("");
@@ -218,7 +219,10 @@ function getStatusRowDisplay(key, statusMeta = {}) {
     for (let i = 1; i < parts.length; i++) {
       const prev = parts[i - 1] || "";
       const prevLength = prev.length || 0;
-      const segmentDelay = Math.min(8000, 2600 + prevLength * 45);
+      // 初回メッセージは短い時間で表示
+      const segmentDelay = isInitial 
+        ? Math.min(3000, 1000 + prevLength * 20)
+        : Math.min(8000, 2600 + prevLength * 45);
       delay += segmentDelay;
       const timerId = setTimeout(() => {
         setAiText(parts[i]);
@@ -246,7 +250,7 @@ const data = raw ? JSON.parse(raw) : null;
         if (responseParts.length === 0) {
           setAiText("");
         } else {
-          showAiSequence(responseParts);
+          showAiSequence(responseParts, true);
         }
 
         const next = data?.meta?.step ?? 0;
@@ -408,6 +412,11 @@ setChoices(isChoiceStep(next) ? uniqueByNormalized(inline) : []);
 
       // 送信処理（選択肢ボタンからも呼べるように修正）
   async function onSend(forcedText) {
+    // モバイルの時だけキーボードを閉じる
+    if (taRef.current && window.innerWidth <= 640) {
+      taRef.current.blur();
+    }
+
     // クリック時などに渡ってくる MouseEvent を無効化
     if (
       forcedText &&
@@ -482,6 +491,7 @@ setChoices(isChoiceStep(next) ? uniqueByNormalized(inline) : []);
           const sheetDelay = Math.max(5000, accumulatedDelay + lastReadTime);
           setTimeout(() => {
             setSummaryData(data.meta.summary_data);
+            setCtaHtml(data.meta.cta_html);
             setShowSummary(true);
           }, sheetDelay);
         } else {
@@ -490,6 +500,7 @@ setChoices(isChoiceStep(next) ? uniqueByNormalized(inline) : []);
           setIsTyping(false);
           setTimeout(() => {
             setSummaryData(data.meta.summary_data);
+            setCtaHtml(data.meta.cta_html);
             setShowSummary(true);
           }, data.meta.show_summary_after_delay);
         }
@@ -594,10 +605,58 @@ setChoices(isChoiceStep(next) ? uniqueByNormalized(inline) : []);
         </div>
       </header>
 
+      {/* ステータス進捗バー：STEP6で分析中の場合は専用表示 */}
+      {step === 6 && showSummary ? (
+        <div className="status-progress" style={{ position: 'relative' }}>
+          <div style={{
+            position: 'absolute',
+            top: '50%',
+            left: '50%',
+            transform: 'translate(-50%, -50%)',
+            fontSize: '14px',
+            fontWeight: 'bold',
+            color: '#ec4899',
+            zIndex: 1
+          }}>分析中...</div>
+          <div
+            className="status-progress__inner"
+            style={{ width: `${progress}%` }}
+          />
+        </div>
+      ) : step <= 6 ? (
+        <div className="status-progress">
+          <div
+            className="status-progress__inner"
+            style={{ width: `${progress}%` }}
+          />
+        </div>
+      ) : null}
+
+      {/* ステータスバッジ（仮シート表示時は非表示） */}
+      {!showSummary && (
+        <div className="status-row">
+          {[
+            "資格",
+            "Can",
+            "Will",
+            "Must",
+            "私はこんな人",
+            "AIの分析",
+          ].map((k) => {
+            const displayValue = getStatusRowDisplay(k, statusMeta);
+            return (
+              <span key={k} className="badge">
+                {k}：{displayValue}
+              </span>
+            );
+          })}
+        </div>
+      )}
+
       <section className="duo-stage">
         <div className="duo-stage__bg" />
         <div className="duo-stage__wrap">
-          <div style={{ position: 'absolute', right: '6%', bottom: '-8%', width: 'min(380px, 38vw)', height: 'min(380px, 38vw)' }}>
+          <div className="duo-stage__hoap-container">
             <img className="duo-stage__hoap" src={hoapSrc} alt="ほーぷちゃん" />
           </div>
           <div className="duo-stage__bubbles-container">
@@ -630,7 +689,7 @@ setChoices(isChoiceStep(next) ? uniqueByNormalized(inline) : []);
               type="button"
               className="choice-btn"
               onClick={() => {
-                onSend(c); 
+                onSend(c);
                 setChoices([]);
               }}
             >
@@ -640,57 +699,9 @@ setChoices(isChoiceStep(next) ? uniqueByNormalized(inline) : []);
         </div>
       )}
 
-      {/* ステータスバッジ（仮シート表示時は非表示） */}
-      {!showSummary && (
-        <div className="status-row">
-          {[
-            "資格",
-            "Can",
-            "Will",
-            "Must",
-            "私はこんな人",
-            "AIの分析",
-          ].map((k) => {
-            const displayValue = getStatusRowDisplay(k, statusMeta);
-            return (
-              <span key={k} className="badge">
-                {k}：{displayValue}
-              </span>
-            );
-          })}
-        </div>
-      )}
-
-      {/* ステータス進捗バー：STEP6で分析中の場合は専用表示 */}
-      {step === 6 && showSummary ? (
-        <div className="status-progress" style={{ position: 'relative' }}>
-          <div style={{
-            position: 'absolute',
-            top: '50%',
-            left: '50%',
-            transform: 'translate(-50%, -50%)',
-            fontSize: '14px',
-            fontWeight: 'bold',
-            color: '#ec4899',
-            zIndex: 1
-          }}>分析中...</div>
-          <div
-            className="status-progress__inner"
-            style={{ width: `${progress}%` }}
-          />
-        </div>
-      ) : step <= 6 ? (
-        <div className="status-progress">
-          <div
-            className="status-progress__inner"
-            style={{ width: `${progress}%` }}
-          />
-        </div>
-      ) : null}
-
       {/* キャリアの説明書（モーダル表示） - Instagram風 最高級UI */}
       {showSummary && summaryData && (
-        <div style={{
+        <div className="summary-modal-overlay" style={{
           position: "fixed",
           top: 0,
           left: 0,
@@ -706,7 +717,7 @@ setChoices(isChoiceStep(next) ? uniqueByNormalized(inline) : []);
           overflow: "auto",
           animation: "fadeIn 0.3s ease-out"
         }}>
-          <div style={{
+          <div className="summary-modal-container" style={{
             background: "linear-gradient(135deg, #fdf2f8 0%, #f5f3ff 50%, #eff6ff 100%)",
             borderRadius: "24px",
             padding: "clamp(20px, 4vw, 40px)",
@@ -720,9 +731,11 @@ setChoices(isChoiceStep(next) ? uniqueByNormalized(inline) : []);
           }}>
             {/* 閉じるボタン */}
             <button
+              className="summary-modal-btn"
               onClick={() => {
                 setShowSummary(false);
                 setSummaryData(null);
+                setCtaHtml(null);
               }}
               style={{
                 position: "absolute",
@@ -757,9 +770,9 @@ setChoices(isChoiceStep(next) ? uniqueByNormalized(inline) : []);
             </button>
 
             {/* タイトル */}
-            <div style={{
+            <div className="summary-modal-title" style={{
               textAlign: "center",
-              marginBottom: "clamp(24px, 4vw, 40px)"
+              marginBottom: "clamp(16px, 3vw, 24px)"
             }}>
               <h2 style={{
                 margin: 0,
@@ -770,16 +783,21 @@ setChoices(isChoiceStep(next) ? uniqueByNormalized(inline) : []);
                 backgroundClip: "text",
                 color: "transparent",
                 letterSpacing: "0.02em",
-                marginBottom: "8px"
+                marginBottom: "0"
               }}>
                 Your Unique Career Profile
               </h2>
             </div>
 
+            {/* CTAボタン（キャリアシートの外） */}
+            {ctaHtml && (
+              <div style={{ textAlign: "center", marginBottom: "clamp(24px, 4vw, 40px)" }} dangerouslySetInnerHTML={{ __html: ctaHtml }} />
+            )}
+
             <div className="summary-html" dangerouslySetInnerHTML={{ __html: summaryData }} />
 
             {/* フッター */}
-            <div style={{
+            <div className="summary-modal-footer" style={{
               marginTop: "clamp(24px, 4vw, 32px)",
               paddingTop: "20px",
               borderTop: "1px solid rgba(236, 72, 153, 0.1)",
@@ -801,16 +819,17 @@ setChoices(isChoiceStep(next) ? uniqueByNormalized(inline) : []);
 
       {/* チャット画面 */}
       <main className="chat" ref={listRef} />
-      <div ref={bottomRef} /> 
+      <div ref={bottomRef} />
+
+     {/* ユーザーの吹き出し（入力欄の外に配置） */}
+      {userEcho && (
+        <div className="user-echo" aria-live="polite">
+          <div className="user-echo__bubble">{userEcho}</div>
+        </div>
+      )}
 
      {/* 入力欄 */}
 <footer className="input-bar">
-  {userEcho && (
-    <div className="user-echo" aria-live="polite">
-      <div className="user-echo__bubble">{userEcho}</div>
-    </div>
-  )}
-
   <div className="input-inner">
     <textarea
       ref={taRef}

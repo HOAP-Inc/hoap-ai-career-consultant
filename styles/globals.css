@@ -161,6 +161,7 @@ body{
   font-weight:800;
   letter-spacing:0.01em;
   background:linear-gradient(90deg,#f97316 0%,#ec4899 55%,#8b5cf6 100%);
+  background-clip:text;
   -webkit-background-clip:text;
   -webkit-text-fill-color:transparent;
 }
@@ -286,11 +287,11 @@ body{
 }
 
 .analysis-subsection{
-  background:linear-gradient(135deg,#e0f2fe 0%,#ddd6fe 45%,#fce7f3 100%);
-  border-radius:16px;
-  padding:16px;
+  background:transparent;
+  border-radius:0;
+  padding:0;
   margin-top:8px;
-  border:1px solid rgba(139,92,246,0.2);
+  border:none;
 }
 
 .analysis-subtitle{
@@ -361,11 +362,11 @@ body{
 }
 
 .summary-cta{
-  background:linear-gradient(135deg,#fff7ed 0%,#fde68a 24%,#f0abfc 92%);
-  border-radius:22px;
-  padding:20px clamp(16px,3.4vw,32px);
-  border:1px solid rgba(249,115,22,0.28);
-  box-shadow:0 18px 36px rgba(249,115,22,0.18);
+  background:transparent;
+  border-radius:0;
+  padding:0;
+  border:none;
+  box-shadow:none;
   display:flex;
   flex-wrap:wrap;
   gap:18px;
@@ -514,9 +515,30 @@ html, body, #__next { height: 100%; }
   overflow-y: auto;
 }
 
+/* PC版の表示順序 */
+.header {
+  order: 1;
+}
+
+.duo-stage {
+  order: 2;
+}
+
+.choice-wrap {
+  order: 3;
+}
+
+.status-progress {
+  order: 4;
+}
+
+.status-row {
+  order: 5;
+}
+
 .chat.list {
   flex: 1 1 auto;
-  min-height: 0; 
+  min-height: 0;
   overflow-y: auto;
   overflow-x: hidden;
 }
@@ -555,16 +577,16 @@ html, body, #__next { height: 100%; }
 .duo-stage{
   margin: 0 0 12px;
   position: relative;
-  height: 500px;
+  height: 400px;
   border-radius: 16px;
-  overflow: visible;
+  overflow: hidden;
   box-shadow: var(--card-shadow);
 }
 .duo-stage__bg{
   position:absolute; inset:0;
   background: url("/beam-bg.png") center no-repeat;
-  background-size: 80%;
-  background-position: center -250px;
+  background-size: 70%;
+  background-position: center -150px;
   filter: saturate(110%);
   opacity: .95;
 }
@@ -575,6 +597,15 @@ html, body, #__next { height: 100%; }
  height: 100%;
  padding: 12px 20px;
 }
+
+.duo-stage__hoap-container{
+  position: absolute;
+  right: 6%;
+  bottom: -10%;
+  width: min(380px, 38vw);
+  height: min(380px, 38vw);
+}
+
 .duo-stage__hoap{
   width: 100%;
   height: 100%;
@@ -641,30 +672,35 @@ html, body, #__next { height: 100%; }
   40%           { opacity: 1; }
 }
 .user-echo{
-  position: absolute;
+  position: fixed;
   left: 0;
   right: 0;
-  bottom: calc(100% + 24px); 
-  z-index: 40; 
+  bottom: calc(140px + env(safe-area-inset-bottom));
+  z-index: 40;
   display: flex;
-  justify-content: flex-end; 
-  padding: 0 48px;
-  pointer-events: none; 
+  justify-content: flex-end;
+  padding: 0 20px;
+  padding-bottom: 12px;
+  pointer-events: none;
+  max-width: 1040px;
+  margin-left: auto;
+  margin-right: auto;
 }
 
 .user-echo__bubble{
   pointer-events: auto;
-  display: inline-block;
+  display: block;
   background: linear-gradient(135deg, var(--user-grad-from), var(--user-grad-via) 50%, var(--user-grad-to));
   border: 1px solid #e9d5ff;
   border-radius: 16px;
-  padding: 10px 12px;
+  padding: 14px 16px;
   box-shadow: var(--card-shadow);
   white-space: pre-wrap;
+  line-height: 1.8;
 
   width: 100%;
-  max-width: 1040px;
-  margin: 0 auto;
+  max-width: 1000px;
+  margin: 0;
 }
 
 @media (max-width: 640px){
@@ -673,6 +709,27 @@ html, body, #__next { height: 100%; }
     overflow-y: auto;
     padding-bottom: 112px;
     padding-top: 0;
+  }
+
+  /* モバイル版の表示順序 */
+  .header {
+    order: 1;
+  }
+
+  .status-progress {
+    order: 2;
+  }
+
+  .status-row {
+    order: 3;
+  }
+
+  .duo-stage {
+    order: 4;
+  }
+
+  .choice-wrap {
+    order: 5;
   }
 
   .header{
@@ -692,18 +749,24 @@ html, body, #__next { height: 100%; }
     padding: 0 8px;
     font-size: 11px;
     line-height: 1;
-    min-width: 0;
     white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
+    flex-shrink: 0;
+  }
+
+  .status-progress{
+    position: sticky;
+    top: 36px;
+    z-index: 19;
+    height: 4px;
+    margin: 4px 0 8px;
   }
 
   .status-row{
     position: sticky;
-    top: 36px;
-    z-index: 19;
+    top: 48px;
+    z-index: 18;
     display: flex;
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
     gap: 6px;
     margin: 8px 0 12px;
     padding: 6px 8px;
@@ -714,38 +777,28 @@ html, body, #__next { height: 100%; }
     -webkit-overflow-scrolling: touch;
   }
 
-  .status-progress{
-    position: sticky;
-    top: 64px;
-    z-index: 18;
-    height: 4px;
-    margin: 4px 0 12px;
-  }
-
   .duo-stage{
     margin: 0;
-    margin-top: 4px !important;
-    height: 420px !important;
+    margin-top: 20px !important;
+    height: 320px !important;
     position: relative;
     overflow: hidden;
   }
   .duo-stage__bg{
     background-size: 102%;
-    background-position: center bottom -24px;
+    background-position: center bottom 10px;
   }
   .duo-stage__wrap{ padding: 6px 12px; }
 
-  /* スマホ版：ほーぷちゃん親divのheight調整 */
-  .duo-stage__wrap > div:first-of-type {
-    height: auto !important;
+  .duo-stage__hoap-container{
+    bottom: 0% !important;
+    width: min(50vw, 280px);
+    height: min(50vw, 280px);
   }
 
   .duo-stage__hoap{
-    width: min(50vw, 280px);
-    right: 6%;
-    bottom: -2px !important;
-    top: auto !important;
-    z-index: 1;
+    width: 100%;
+    height: 100%;
   }
 
   .duo-stage__bubbles-container{
@@ -794,21 +847,24 @@ html, body, #__next { height: 100%; }
     z-index: 25;
     transform: translateY(calc(var(--kb, 0px) * -1));
     pointer-events: none;
+    max-width: 80%;
+    left: auto;
   }
 
 .user-echo__bubble{
   pointer-events: auto;
-  display: inline-block;
+  display: block;
   background: linear-gradient(135deg, var(--user-grad-from), var(--user-grad-via) 50%, var(--user-grad-to));
   border: 1px solid #e9d5ff;
   border-radius: 16px;
-  padding: 10px 12px;
+  padding: 14px 16px;
   box-shadow: var(--card-shadow);
   white-space: pre-wrap;
+  line-height: 1.8;
 
   width: 100%;
-  max-width: 1040px;
-  margin: 0 auto;
+  max-width: 1000px;
+  margin: 0;
 }
 
 }
@@ -892,4 +948,121 @@ section[aria-label="最終確認"] details > div{ color: #374151; }
 .choice-btn:focus-visible {
   outline: 2px solid #8b5cf6;
   outline-offset: 2px;
+}
+
+/* 印刷用スタイル */
+@media print {
+  /* ページ全体 - A4横向き */
+  @page {
+    margin: 1cm;
+    size: A4 landscape;
+  }
+
+  body {
+    background: white !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  /* キャリアシート以外を完全に非表示 */
+  .header,
+  .status-row,
+  .status-progress,
+  .duo-stage,
+  .choice-wrap,
+  .chat,
+  .input-bar,
+  .user-echo {
+    display: none !important;
+  }
+
+  /* モーダルの装飾要素を非表示 */
+  .summary-modal-btn,
+  .summary-modal-title,
+  .summary-modal-footer,
+  .summary-cta {
+    display: none !important;
+  }
+
+  /* モーダルの背景を白に */
+  .summary-modal-overlay {
+    background: white !important;
+    position: static !important;
+    backdrop-filter: none !important;
+    padding: 0 !important;
+    overflow: visible !important;
+    display: block !important;
+  }
+
+  /* モーダルのコンテナを白背景に */
+  .summary-modal-container {
+    background: white !important;
+    border-radius: 0 !important;
+    padding: 0 !important;
+    box-shadow: none !important;
+    border: none !important;
+    max-width: 100% !important;
+    max-height: none !important;
+    overflow: visible !important;
+  }
+
+  /* summary-htmlのみ表示 */
+  .summary-html {
+    display: block !important;
+    background: white !important;
+    padding: 0 !important;
+    margin: 0 !important;
+  }
+
+  /* PC版2列レイアウトを強制 */
+  .summary-report__grid {
+    display: grid !important;
+    grid-template-columns: 280px 1fr !important;
+    gap: 16px !important;
+  }
+
+  /* パネルのスタイル調整 */
+  .summary-panel {
+    page-break-inside: avoid;
+    background: white !important;
+    padding: 10px 12px !important;
+    margin-bottom: 10px !important;
+    border: 1px solid #e5e7eb !important;
+    border-radius: 8px !important;
+    box-shadow: none !important;
+  }
+
+  /* 見出しサイズ調整 */
+  .summary-panel h3 {
+    font-size: 13px !important;
+    margin: 0 0 6px 0 !important;
+    font-weight: 700 !important;
+  }
+
+  /* 全体のフォントサイズ */
+  .summary-report,
+  .summary-html {
+    font-size: 10px !important;
+    line-height: 1.4 !important;
+  }
+
+  /* シートヘッダー（◎◎さんのキャリア分析シート）*/
+  .summary-report h2 {
+    font-size: 18px !important;
+    margin: 0 0 12px 0 !important;
+    text-align: center !important;
+  }
+
+  /* 印刷時の色を保持 */
+  * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  /* テキストのグラデーションを単色に */
+  .summary-report h2 {
+    background: none !important;
+    -webkit-text-fill-color: #1f2937 !important;
+    color: #1f2937 !important;
+  }
 }

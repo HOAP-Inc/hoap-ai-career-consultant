@@ -2,6 +2,15 @@ const fs = require("fs");
 const path = require("path");
 const { OpenAI } = require("openai");
 
+// Vercel KVのインポート（環境変数がない場合はundefinedになる）
+let kv;
+try {
+  kv = require("@vercel/kv").kv;
+} catch (err) {
+  console.warn("[SESSION] Vercel KV not available, using memory storage");
+  kv = null;
+}
+
 const PROMPTS_DIR = path.join(process.cwd(), "prompts");
 
 function safeRead(filePath) {
@@ -220,7 +229,16 @@ function mapLicenseLabelToQualificationId(label) {
   return resolveQualificationIdByName(label);
 }
 
-const sessions = new Map();
+// セッションの有効期限（秒）: 24時間
+const SESSION_TTL = 60 * 60 * 24;
+
+// メモリベースのフォールバックストレージ（KVが利用できない場合）
+const memoryStorage = new Map();
+
+// KVが利用可能かチェック
+function isKVAvailable() {
+  return kv !== null && kv !== undefined && process.env.KV_REST_API_URL;
+}
 
 function createSession(sessionId) {
   const base = {
@@ -337,19 +355,74 @@ async function callLLM(stepKey, payload, session, opts = {}) {
   }
 }
 
-function getSession(sessionId) {
+async function getSession(sessionId) {
   if (!sessionId) return createSession();
-  const existing = sessions.get(sessionId);
-  if (existing) return normalizeSession(existing);
+
+  const kvAvailable = isKVAvailable();
+  console.log(`[SESSION DEBUG] Getting session ${sessionId}, KV available: ${kvAvailable}`);
+
+  // KVが利用可能な場合
+  if (kvAvailable) {
+    try {
+      const existing = await kv.get(`session:${sessionId}`);
+      if (existing) {
+        console.log(`[SESSION] Retrieved from KV: ${sessionId}, step: ${existing.step}`);
+        return normalizeSession(existing);
+      } else {
+        console.warn(`[SESSION] Not found in KV: ${sessionId}`);
+      }
+    } catch (err) {
+      console.error(`[KV ERROR] Failed to get session ${sessionId}:`, err);
+      // KVエラー時もフォールバックとしてメモリを試す
+    }
+  } else {
+    console.warn(`[SESSION] KV not available, using memory storage`);
+  }
+
+  // メモリストレージから取得（KVが利用不可、またはKVにセッションがない場合）
+  const existingMemory = memoryStorage.get(sessionId);
+  if (existingMemory) {
+    console.log(`[SESSION] Retrieved from memory: ${sessionId}, step: ${existingMemory.step}`);
+    return normalizeSession(existingMemory);
+  }
+
+  // 新規セッション作成
+  console.warn(`[SESSION WARNING] Session not found in KV or memory, creating new session: ${sessionId}`);
+  console.warn(`[SESSION WARNING] This may indicate session loss. Check KV/memory storage.`);
+  console.warn(`[SESSION WARNING] Memory storage size: ${memoryStorage.size}`);
   const created = createSession(sessionId);
-  sessions.set(created.id, created);
+  await saveSession(created);
   return created;
 }
 
-function saveSession(session) {
-  if (session?.id) {
-    sessions.set(session.id, session);
+async function saveSession(session) {
+  if (!session?.id) return;
+
+  const kvAvailable = isKVAvailable();
+  console.log(`[SESSION DEBUG] Saving session ${session.id}, step: ${session.step}, KV available: ${kvAvailable}`);
+
+  // KVが利用可能な場合
+  if (kvAvailable) {
+    try {
+      await kv.set(`session:${session.id}`, session, { ex: SESSION_TTL });
+      console.log(`[SESSION] Saved to KV: ${session.id}, step: ${session.step}`);
+      // KVに保存成功した場合もメモリにバックアップ（同一インスタンス内での高速アクセス用）
+      memoryStorage.set(session.id, session);
+      console.log(`[SESSION] Also cached in memory: ${session.id}`);
+      return;
+    } catch (err) {
+      console.error(`[KV ERROR] Failed to save session ${session.id}:`, err);
+      // KVエラー時もフォールバックとしてメモリに保存
+      memoryStorage.set(session.id, session);
+      console.log(`[SESSION] Fallback to memory: ${session.id}, step: ${session.step}`);
+      return;
+    }
   }
+
+  // メモリストレージに保存（KVが利用不可の場合）
+  memoryStorage.set(session.id, session);
+  console.log(`[SESSION] Saved to memory: ${session.id}, step: ${session.step}`);
+  console.warn(`[SESSION WARNING] KV not available, memory storage is not persistent across serverless instances!`);
 }
 
 function buildSchemaError(step, session, message, errorCode = "schema_mismatch") {
@@ -363,6 +436,7 @@ function buildSchemaError(step, session, message, errorCode = "schema_mismatch")
 }
 
 async function handleStep1(session, userText) {
+  console.log(`[STEP1] Called with userText: "${userText}", session.step: ${session.step}, turnIndex: ${session.stage.turnIndex}`);
   session.stage.turnIndex += 1;
   const trimmed = String(userText || "").trim();
 
@@ -370,16 +444,12 @@ async function handleStep1(session, userText) {
     session.step = 2;
     session.stage.turnIndex = 0;
     resetDrill(session);
-    // 資格なしの場合は「ありがとう！」だけを表示してSTEP2へ強制移行
-    // STEP2の2段階質問フェーズを初期化
+    // 資格なしの場合はSTEP2へ遷移
     if (!session.meta) session.meta = {};
     session.meta.step2_intro_phase = 1;
-    return {
-      response: STEP_INTRO_QUESTIONS[2].first,
-      status: session.status,
-      meta: { step: 2 },
-      drill: session.drill,
-    };
+    session.meta.step2_deepening_count = 0;
+    const step2Response = await handleStep2(session, "");
+    return step2Response;
   }
 
     if (session.drill.awaitingChoice) {
@@ -448,15 +518,12 @@ async function handleStep1(session, userText) {
       session.step = 2;
       session.stage.turnIndex = 0;
       resetDrill(session);
-      // STEP2の2段階質問フェーズを初期化
+      // STEP2の2段階質問フェーズを1に設定（first質問から開始）
       if (!session.meta) session.meta = {};
       session.meta.step2_intro_phase = 1;
-      return {
-        response: STEP_INTRO_QUESTIONS[2].first,
-        status: session.status,
-        meta: { step: 2 },
-        drill: session.drill,
-      };
+      session.meta.step2_deepening_count = 0;
+      const step2Response = await handleStep2(session, "");
+      return step2Response;
     }
 
     const qualName = QUAL_NAME_BY_ID.get(directId) || trimmed;
@@ -517,7 +584,7 @@ async function handleStep1(session, userText) {
 if (uniqueLabels.length === 1 && resolved.length === 0) {
   const label = uniqueLabels[0];
   if (!Array.isArray(session.status.licenses)) session.status.licenses = [];
-  if (!session.status.licenses.includes(label)) session.statu.licenses.push(label);
+  if (!session.status.licenses.includes(label)) session.status.licenses.push(label);
   session.stage.turnIndex = 0;
   resetDrill(session);
   return {
@@ -559,8 +626,20 @@ if (uniqueLabels.length === 1 && resolved.length === 0) {
     };
   }
 
+  // 資格が見つからない場合でも、ユーザーの入力をそのまま登録して次に進む
+  // これにより、離脱を防ぎ、ユーザー体験を向上させる
+  console.log(`[STEP1 INFO] License not found in database, registering as-is. User input: "${trimmed}"`);
+  
+  if (!Array.isArray(session.status.licenses)) session.status.licenses = [];
+  if (!session.status.licenses.includes(trimmed)) {
+    session.status.licenses.push(trimmed);
+  }
+  
+  session.stage.turnIndex = 0;
+  resetDrill(session);
+
   return {
-    response: "ごめん、その資格名が見つからなかったよ。正式名称で教えてくれる？（まだ資格の登録中だよ）",
+    response: `「${trimmed}」だね！他にもある？あれば教えて！なければ「ない」と言ってね`,
     status: session.status,
     meta: { step: 1 },
     drill: session.drill,
@@ -578,18 +657,30 @@ function buildStepPayload(session, userText, recentCount) {
 }
 
 async function handleStep2(session, userText) {
+  console.log(`[STEP2] Called with userText: "${userText}", session.step: ${session.step}, turnIndex: ${session.stage.turnIndex}`);
   // session.meta 初期化
   if (!session.meta) session.meta = {};
   if (typeof session.meta.step2_intro_phase !== "number") {
-    session.meta.step2_intro_phase = 1; // 1: first質問, 2: second質問後
+    session.meta.step2_intro_phase = 1; // デフォルトはfirst質問から開始
+  }
+  if (typeof session.meta.step2_deepening_count !== "number") {
+    session.meta.step2_deepening_count = 0;
   }
 
-  // 【Phase 1】first質問を返す（userTextが空 && phase=1）
-  if ((!userText || !userText.trim()) && session.meta.step2_intro_phase === 1) {
+  // STEP遷移時（userTextが空）は、introフェーズに応じた質問を返す
+  if (!userText || !userText.trim()) {
+    if (session.meta.step2_intro_phase === 1) {
+      return {
+        response: STEP_INTRO_QUESTIONS[2].first,
+        status: session.status,
+        meta: { step: 2, intro_phase: 1 },
+        drill: session.drill,
+      };
+    }
     return {
-      response: STEP_INTRO_QUESTIONS[2].first,
+      response: STEP_INTRO_QUESTIONS[2].second,
       status: session.status,
-      meta: { step: 2, intro_phase: 1 },
+      meta: { step: 2, intro_phase: 2 },
       drill: session.drill,
     };
   }
@@ -610,11 +701,10 @@ async function handleStep2(session, userText) {
 
   // 【Phase 1の応答処理】empathy + second質問を結合
   if (session.meta.step2_intro_phase === 1 && parsed?.empathy) {
-    session.meta.step2_intro_phase = 2; // フェーズを2に進める
-    const combinedResponse = [
-      parsed.empathy,
-      STEP_INTRO_QUESTIONS[2].second
-    ].filter(Boolean).join("\n\n");
+    session.meta.step2_intro_phase = 2;
+    const combinedResponse = [parsed.empathy, STEP_INTRO_QUESTIONS[2].second]
+      .filter(Boolean)
+      .join("\n\n");
 
     return {
       response: combinedResponse,
@@ -626,7 +716,6 @@ async function handleStep2(session, userText) {
 
   // intro フェーズの処理（安全装置：LLMが予期せずintroを返した場合）
   if (parsed?.control?.phase === "intro") {
-    // deepening_countをリセット
     if (!session.meta) session.meta = {};
     session.meta.step2_deepening_count = 0;
     return {
@@ -840,8 +929,10 @@ async function handleStep2(session, userText) {
 
 
 async function handleStep3(session, userText) {
+  console.log(`[STEP3] Called with userText: "${userText}", session.step: ${session.step}, turnIndex: ${session.stage.turnIndex}`);
   // 【重要】STEP遷移時（userTextが空）は、LLMを呼ばずにintro質問を返す
   if (!userText || !userText.trim()) {
+    console.log(`[STEP3] Returning intro question (empty userText)`);
     return {
       response: STEP_INTRO_QUESTIONS[3],
       status: session.status,
@@ -851,13 +942,14 @@ async function handleStep3(session, userText) {
   }
 
   // userTextがある場合のみturnIndexをインクリメント
-  session.stage.turnIndex += 1;
+    session.stage.turnIndex += 1;
   const payload = buildStepPayload(session, userText, 5);
   const llm = await callLLM(3, payload, session, { model: "gpt-4o" });
   if (!llm.ok) {
     return buildSchemaError(3, session, "あなたの「これから挑戦したいこと」の生成でエラーが発生したよ。少し時間を置いてみてね。", llm.error);
   }
   const parsed = llm.parsed || {};
+  console.log(`[STEP3] LLM response phase: ${parsed?.control?.phase}, meta.step: ${parsed?.meta?.step}`);
 
   // intro フェーズ（初回質問）
   if (parsed?.control?.phase === "intro") {
@@ -989,6 +1081,7 @@ async function handleStep3(session, userText) {
 
     // 通常の会話フェーズ（empathy と ask_next を \n\n で結合）
     const message = [empathy, ask_next].filter(Boolean).join("\n\n") || empathy || "ありがとう。もう少し教えて。";
+    console.log(`[STEP3] Returning empathy+deepening. session.step: ${session.step}, nextStep: ${nextStep}`);
     return {
       response: message,
       status: session.status,
@@ -997,6 +1090,7 @@ async function handleStep3(session, userText) {
     };
   }
 
+  console.log(`[STEP3] Fallback response. session.step: ${session.step}`);
   return {
     response: "これから挑戦したいことについて、もう少し具体的に教えてほしい。短くで良いから、やってみたいことの概要を教えて。",
     status: session.status,
@@ -1840,7 +1934,7 @@ function refineStep5Question(session, question) {
     if (/(と思う|と思います|だと思う|だと思います)$/.test(anchor)) {
       result = `それって、いつ頃からそう思うようになった？`;
     } else {
-      result = `${anchor}と感じたとき、具体的にどんな状況だった？`;
+    result = `${anchor}と感じたとき、具体的にどんな状況だった？`;
     }
   }
 
@@ -1875,6 +1969,27 @@ async function handleStep4(session, userText) {
     session.drill.phase = null;
     session.drill.options = [];
     userText = selectedLabel;
+  }
+
+  // 方向性選択の場合（残業、休日などの選択肢）
+  if (session.drill.awaitingChoice && session.drill.phase === "step4_direction_choice") {
+    const options = Array.isArray(session.drill.options) ? session.drill.options : [];
+    const normalized = normKey(userText || "");
+    const selectedOption = options.find(opt => normKey(opt) === normalized || normalizePick(opt) === normalizePick(userText || ""));
+    if (!selectedOption) {
+      return {
+        response: `候補から選んでね。『${formatOptions(options)}』`,
+        status: session.status,
+        meta: { step: 4, phase: "choice" },
+        drill: session.drill,
+      };
+    }
+    session.drill.awaitingChoice = false;
+    session.drill.phase = null;
+    session.drill.options = [];
+    
+    // 選択肢に基づいてuserTextを再構成（LLMに渡すため）
+    userText = selectedOption;
   }
 
   // 【重要】STEP遷移時（userTextが空）は、LLMを呼ばずにintro質問を返す
@@ -1948,45 +2063,45 @@ async function handleStep4(session, userText) {
 
     // 方向性が確定した場合のみ、sessionのstatusを更新
     if (direction !== null && autoConfirmedIds.length > 0) {
-      if (!session.status.must_have_ids) session.status.must_have_ids = [];
-      if (!session.status.ng_ids) session.status.ng_ids = [];
-      if (!session.status.pending_ids) session.status.pending_ids = [];
-      if (!session.status.direction_map) session.status.direction_map = {};
-      const id = autoConfirmedIds[0];
+    if (!session.status.must_have_ids) session.status.must_have_ids = [];
+    if (!session.status.ng_ids) session.status.ng_ids = [];
+    if (!session.status.pending_ids) session.status.pending_ids = [];
+    if (!session.status.direction_map) session.status.direction_map = {};
+    const id = autoConfirmedIds[0];
 
-      // 他の配列から同一IDを除外
-      const removeId = (arr) => {
-        if (Array.isArray(arr)) {
-          const idx = arr.indexOf(id);
-          if (idx >= 0) arr.splice(idx, 1);
-        }
-      };
-      removeId(session.status.must_have_ids);
-      removeId(session.status.ng_ids);
-      removeId(session.status.pending_ids);
-
-      if (direction === "have") {
-        if (!session.status.must_have_ids.includes(id)) {
-          session.status.must_have_ids.push(id);
-        }
-      } else if (direction === "ng") {
-        if (!session.status.ng_ids.includes(id)) {
-          session.status.ng_ids.push(id);
-        }
-      } else if (direction === "pending") {
-        if (!session.status.pending_ids.includes(id)) {
-          session.status.pending_ids.push(id);
-        }
+    // 他の配列から同一IDを除外
+    const removeId = (arr) => {
+      if (Array.isArray(arr)) {
+        const idx = arr.indexOf(id);
+        if (idx >= 0) arr.splice(idx, 1);
       }
-      session.status.direction_map[String(id)] = direction;
-      autoDirectionMap[String(id)] = direction;
+    };
+    removeId(session.status.must_have_ids);
+    removeId(session.status.ng_ids);
+    removeId(session.status.pending_ids);
+
+    if (direction === "have") {
+      if (!session.status.must_have_ids.includes(id)) {
+        session.status.must_have_ids.push(id);
+      }
+    } else if (direction === "ng") {
+      if (!session.status.ng_ids.includes(id)) {
+        session.status.ng_ids.push(id);
+      }
+      } else if (direction === "pending") {
+      if (!session.status.pending_ids.includes(id)) {
+        session.status.pending_ids.push(id);
+      }
+    }
+    session.status.direction_map[String(id)] = direction;
+    autoDirectionMap[String(id)] = direction;
 
       // ステータスバーは後で finalizeMustState で生成するため、ここでは更新しない
       // （LLMの共感文生成後に更新）
     }
   } else if (directMatches.length > 1) {
     // 複数キーワードが見つかった場合、各キーワードについて個別に方向性を判定
-    console.log(
+      console.log(
       `[STEP4 FAST] Multiple matches found: ${directMatches.map(t => t.name).join(", ")}`
     );
 
@@ -2321,7 +2436,7 @@ async function handleStep4(session, userText) {
       const combinedText = `${userInput} ${recentTexts}`;
 
       let question;
-
+      
       // 方向性が既に明確な場合は質問をスキップ
       const allDirectionsConfirmed = autoConfirmedIds.length > 0 && autoConfirmedIds.every((id) => {
         const key = String(id);
@@ -2353,10 +2468,37 @@ async function handleStep4(session, userText) {
 
       if (isShortWord && serverCount === 0) {
         // 初回：方向性を確認（あってほしいのか、なしにしてほしいのか）
+        // 選択肢をボタン形式で提示
         if (userInput.includes("残業")) {
-            question = "残業については『残業なし』と『多少の残業はOK』のどちらが合うか教えてほしいな。";
+          session.drill.phase = "step4_direction_choice";
+          session.drill.awaitingChoice = true;
+          session.drill.options = ["残業なし", "多少の残業はOK"];
+          return {
+            response: `${responseText ? `${responseText}\n\n` : ""}残業については、どちらが合うか教えてほしいな。`,
+            status: session.status,
+            meta: { step: 4, phase: "choice", deepening_count: serverCount },
+            drill: session.drill,
+          };
         } else if (userInput.includes("休み") || userInput.includes("休日")) {
-            question = "休日面では『完全週休2日』と『月6日以上あればOK』のどちらが理想かな？";
+          session.drill.phase = "step4_direction_choice";
+          session.drill.awaitingChoice = true;
+          session.drill.options = ["完全週休2日", "月6日以上あればOK"];
+          return {
+            response: `${responseText ? `${responseText}\n\n` : ""}休日面では、どちらが理想かな？`,
+            status: session.status,
+            meta: { step: 4, phase: "choice", deepening_count: serverCount },
+            drill: session.drill,
+          };
+        } else if (userInput.includes("給料") || userInput.includes("給与") || userInput.includes("年収") || userInput.includes("昇給") || userInput.includes("アップ")) {
+          session.drill.phase = "step4_direction_choice";
+          session.drill.awaitingChoice = true;
+          session.drill.options = ["年収300万円以上", "年収350万円以上", "年収400万円以上", "年収450万円以上", "年収500万円以上"];
+          return {
+            response: `${responseText ? `${responseText}\n\n` : ""}年収については、どのくらいを希望するか教えてほしいな。`,
+            status: session.status,
+            meta: { step: 4, phase: "choice", deepening_count: serverCount },
+            drill: session.drill,
+          };
         } else {
             question = "その条件は『絶対あってほしい』『絶対なしにしてほしい』のどちらかで教えてほしいな。";
         }
@@ -2365,9 +2507,35 @@ async function handleStep4(session, userText) {
         if (serverCount === 1) {
           // 残業の場合
           if (combinedText.includes("残業")) {
-            question = "残業については『残業なし』と『多少の残業はOK』のどちらが合うか教えてほしいな。";
+            session.drill.phase = "step4_direction_choice";
+            session.drill.awaitingChoice = true;
+            session.drill.options = ["残業なし", "多少の残業はOK"];
+            return {
+              response: `${responseText ? `${responseText}\n\n` : ""}残業については、どちらが合うか教えてほしいな。`,
+              status: session.status,
+              meta: { step: 4, phase: "choice", deepening_count: serverCount },
+              drill: session.drill,
+            };
           } else if (combinedText.includes("休み") || combinedText.includes("休日")) {
-            question = "休日面では『完全週休2日』と『月6日以上あればOK』のどちらが理想かな？";
+            session.drill.phase = "step4_direction_choice";
+            session.drill.awaitingChoice = true;
+            session.drill.options = ["完全週休2日", "月6日以上あればOK"];
+            return {
+              response: `${responseText ? `${responseText}\n\n` : ""}休日面では、どちらが理想かな？`,
+              status: session.status,
+              meta: { step: 4, phase: "choice", deepening_count: serverCount },
+              drill: session.drill,
+            };
+          } else if (combinedText.includes("給料") || combinedText.includes("給与") || combinedText.includes("年収") || combinedText.includes("昇給") || combinedText.includes("アップ")) {
+            session.drill.phase = "step4_direction_choice";
+            session.drill.awaitingChoice = true;
+            session.drill.options = ["年収300万円以上", "年収350万円以上", "年収400万円以上", "年収450万円以上", "年収500万円以上"];
+            return {
+              response: `${responseText ? `${responseText}\n\n` : ""}年収については、どのくらいを希望するか教えてほしいな。`,
+              status: session.status,
+              meta: { step: 4, phase: "choice", deepening_count: serverCount },
+              drill: session.drill,
+            };
           } else {
             // デフォルト：方向性を確認
             question = "その条件は『絶対あってほしい』『絶対なしにしてほしい』のどちらかで教えてほしいな。";
@@ -2412,13 +2580,37 @@ async function handleStep4(session, userText) {
       if (serverCount === 0) {
         responseText = "例えば働き方で言うと、『リモートワークができる』『フレックスタイム』『残業なし』などの中で、どれが一番大事か教えてほしいな。";
       } else if (serverCount === 1) {
-        // 方向性を確認する質問
+        // 方向性を確認する質問（選択肢形式）
         if (combinedText.includes("残業")) {
-        responseText = "残業については『残業なし』と『多少の残業はOK』のどちらが合うか教えてほしいな。";
+          session.drill.phase = "step4_direction_choice";
+          session.drill.awaitingChoice = true;
+          session.drill.options = ["残業なし", "多少の残業はOK"];
+          return {
+            response: "残業については、どちらが合うか教えてほしいな。",
+            status: session.status,
+            meta: { step: 4, phase: "choice", deepening_count: serverCount },
+            drill: session.drill,
+          };
         } else if (combinedText.includes("給料") || combinedText.includes("給与") || combinedText.includes("年収") || combinedText.includes("収入") || combinedText.includes("昇給")) {
-          responseText = "給与については『高めの給与』と『平均的でも安定』のどちらに惹かれるか教えてほしいな。";
+          session.drill.phase = "step4_direction_choice";
+          session.drill.awaitingChoice = true;
+          session.drill.options = ["年収300万円以上", "年収350万円以上", "年収400万円以上", "年収450万円以上", "年収500万円以上"];
+          return {
+            response: "年収については、どのくらいを希望するか教えてほしいな。",
+            status: session.status,
+            meta: { step: 4, phase: "choice", deepening_count: serverCount },
+            drill: session.drill,
+          };
         } else if (combinedText.includes("休み") || combinedText.includes("休日")) {
-          responseText = "休日面では『完全週休2日』と『月6日以上あればOK』のどちらが理想かな？";
+          session.drill.phase = "step4_direction_choice";
+          session.drill.awaitingChoice = true;
+          session.drill.options = ["完全週休2日", "月6日以上あればOK"];
+          return {
+            response: "休日面では、どちらが理想かな？",
+            status: session.status,
+            meta: { step: 4, phase: "choice", deepening_count: serverCount },
+            drill: session.drill,
+          };
         } else {
           responseText = "その条件は『絶対あってほしい』『絶対なしにしてほしい』のどちらかで教えてほしいな。";
         }
@@ -2433,11 +2625,37 @@ async function handleStep4(session, userText) {
         
         // 方向性が確定していない場合
         if (!hasPositiveKeywords && !hasNegativeKeywords) {
-          // 方向性を確認する質問
+          // 方向性を確認する質問（選択肢形式）
           if (combinedText.includes("残業")) {
-            comparisonQuestion = "残業については『残業なし』と『多少の残業はOK』のどちらが合うか教えてほしいな。";
+            session.drill.phase = "step4_direction_choice";
+            session.drill.awaitingChoice = true;
+            session.drill.options = ["残業なし", "多少の残業はOK"];
+            return {
+              response: "残業については、どちらが合うか教えてほしいな。",
+              status: session.status,
+              meta: { step: 4, phase: "choice", deepening_count: serverCount },
+              drill: session.drill,
+            };
+          } else if (combinedText.includes("給料") || combinedText.includes("給与") || combinedText.includes("年収") || combinedText.includes("収入") || combinedText.includes("昇給")) {
+            session.drill.phase = "step4_direction_choice";
+            session.drill.awaitingChoice = true;
+            session.drill.options = ["年収300万円以上", "年収350万円以上", "年収400万円以上", "年収450万円以上", "年収500万円以上"];
+            return {
+              response: "年収については、どのくらいを希望するか教えてほしいな。",
+              status: session.status,
+              meta: { step: 4, phase: "choice", deepening_count: serverCount },
+              drill: session.drill,
+            };
           } else if (combinedText.includes("休み") || combinedText.includes("休日")) {
-            comparisonQuestion = "休日面では『完全週休2日』と『月6日以上あればOK』のどちらが理想かな？";
+            session.drill.phase = "step4_direction_choice";
+            session.drill.awaitingChoice = true;
+            session.drill.options = ["完全週休2日", "月6日以上あればOK"];
+            return {
+              response: "休日面では、どちらが理想かな？",
+              status: session.status,
+              meta: { step: 4, phase: "choice", deepening_count: serverCount },
+              drill: session.drill,
+            };
           } else {
             comparisonQuestion = "その条件は『絶対あってほしい』『絶対なしにしてほしい』のどちらかで教えてほしいな。";
           }
@@ -2445,7 +2663,9 @@ async function handleStep4(session, userText) {
           // 方向性が確定している場合は重要度を確認
           comparisonQuestion = "それって、どのくらい譲れない条件？『絶対必須』レベル？";
         }
+        if (comparisonQuestion) {
         responseText = comparisonQuestion;
+        }
       }
     }
 
@@ -2492,8 +2712,8 @@ async function handleStep5(session, userText) {
   }
 
   // userTextがある場合のみturnIndexをインクリメント
-  session.stage.turnIndex += 1;
-
+    session.stage.turnIndex += 1;
+  
   // ペイロード最適化：発話履歴ではなく生成済みテキストを送る
   const payload = {
     locale: "ja",
@@ -2509,7 +2729,7 @@ async function handleStep5(session, userText) {
       self_text: session.status.self_text || "",
     },
   };
-
+  
   // STEP5はまずGPT-4oで試す（タイムアウト回避）
   let llm = await callLLM(5, payload, session, { model: "gpt-4o" });
   if (!llm.ok) {
@@ -2754,6 +2974,78 @@ async function handleStep6(session, userText) {
     session.status.being_text = smoothAnalysisText(session.status.self_text || "価値観・関わり方について伺いました。");
   }
 
+  // 職業を決定（STEP1の資格から）
+  let occupation = "専門職";
+  if (Array.isArray(session.status.qual_ids) && session.status.qual_ids.length > 0) {
+    // STEP2〜5で最も多く言及された資格を探す
+    const step2to5History = session.history.filter(h => h.step >= 2 && h.step <= 5 && h.role === "user");
+    const qualMentionCounts = new Map();
+    
+    for (const qualId of session.status.qual_ids) {
+      const qualName = QUAL_NAME_BY_ID.get(Number(qualId));
+      if (!qualName) continue;
+      
+      let count = 0;
+      for (const historyItem of step2to5History) {
+        if (historyItem.text && historyItem.text.includes(qualName)) {
+          count++;
+        }
+      }
+      qualMentionCounts.set(qualId, count);
+    }
+    
+    // 最も多く言及された資格を選択
+    let maxCount = -1;
+    let selectedQualId = null;
+    for (const [qualId, count] of qualMentionCounts.entries()) {
+      if (count > maxCount) {
+        maxCount = count;
+        selectedQualId = qualId;
+      }
+    }
+    
+    // 言及がない場合は最初の資格を使用
+    if (selectedQualId === null || maxCount === 0) {
+      selectedQualId = session.status.qual_ids[0];
+    }
+    
+    const selectedQualName = QUAL_NAME_BY_ID.get(Number(selectedQualId));
+    if (selectedQualName) {
+      occupation = selectedQualName;
+    }
+  }
+  
+  // キャッチコピーを生成
+  const catchcopyPayload = {
+    locale: "ja",
+    occupation: occupation,
+    can_text: session.status.can_text || "",
+    will_text: session.status.will_text || "",
+    must_text: session.status.must_text || "",
+    self_text: session.status.self_text || "",
+    doing_text: session.status.doing_text || "",
+    being_text: session.status.being_text || "",
+  };
+  
+  let catchcopy = `${occupation}として働く人`;
+  try {
+    const catchcopyLLM = await callLLM(6, {
+      ...catchcopyPayload,
+      request_type: "generate_catchcopy"
+    }, session, { model: "gpt-4o" });
+    
+    if (catchcopyLLM.ok && catchcopyLLM.parsed?.catchcopy) {
+      catchcopy = catchcopyLLM.parsed.catchcopy;
+      console.log("[STEP6] Generated catchcopy:", catchcopy);
+    } else {
+      console.warn("[STEP6 WARNING] Catchcopy generation failed. Using fallback.");
+    }
+  } catch (err) {
+    console.error("[STEP6 ERROR] Catchcopy generation error:", err);
+      }
+  
+  session.status.catchcopy = catchcopy;
+
   const hearingCards = [];
     if (Array.isArray(session.status.qual_ids) && session.status.qual_ids.length > 0) {
       const qualNames = session.status.qual_ids
@@ -2765,23 +3057,11 @@ async function handleStep6(session, userText) {
       }
     }
 
-  // STEP2のファースト質問への回答（経歴）を取得
-  const step2History = session.history.filter(h => h.step === 2 && h.role === "user");
-  const careerBackground = step2History.length > 0 ? step2History[0].text : "";
-
-  // CAN表示：経歴 + 強み
-  const canParts = [];
-  if (careerBackground) {
-    canParts.push(careerBackground);
-  }
-  const canStrengths = Array.isArray(session.status.can_texts) && session.status.can_texts.length > 0
+  // CAN表示：LLMが生成したcan_textを使用（経歴も含まれているため、重複を避ける）
+  const canSummary = Array.isArray(session.status.can_texts) && session.status.can_texts.length > 0
     ? session.status.can_texts.join("／")
     : session.status.can_text || "";
-  if (canStrengths) {
-    canParts.push(canStrengths);
-  }
-  const canSummary = canParts.filter(Boolean).join("。");
-
+  
   if (canSummary) {
     hearingCards.push({ title: "Can（今できること）", body: canSummary });
     }
@@ -2863,6 +3143,60 @@ async function handleStep6(session, userText) {
     </section>
   `;
 
+  // AI分析テキストの一部をぼかす処理（1文節目 + 2文節目の5文字まで表示、残りをぼかす）
+  function blurAnalysisText(text) {
+    if (!text) return '';
+    
+    // CTAボタンのHTML（無料で作成するボタンと同じスタイル）
+    const ctaButton = `<a href="https://hoap-ai-career-sheet.vercel.app/" target="_blank" rel="noopener noreferrer" style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); display: inline-block; background: linear-gradient(135deg, #F09433 0%, #E6683C 25%, #DC2743 50%, #CC2366 75%, #BC1888 100%); border: none; border-radius: 999px; padding: 10px 20px; font-size: 14px; font-weight: 700; color: #fff; white-space: nowrap; text-decoration: none; box-shadow: 0 4px 12px rgba(236, 72, 153, 0.3); cursor: pointer; transition: transform 0.2s ease;">続きを表示</a>`;
+    
+    // 改行で段落分割
+    const paragraphs = text.split(/\n+/).filter(p => p.trim());
+    
+    if (paragraphs.length > 1) {
+      // 複数段落の場合：1段落目は表示、2段落目以降をぼかす
+      const visible = escapeHtml(paragraphs[0]);
+      const blurred = paragraphs.slice(1).join('\n');
+      
+      return `${visible}<br /><br /><div style="position: relative;"><span style="filter: blur(8px); opacity: 0.4; user-select: none; -webkit-user-select: none;">${escapeHtml(blurred).replace(/\n/g, "<br />")}</span>${ctaButton}</div>`;
+    }
+    
+    // 1段落の場合：文章を。で分割
+    const sentences = text.split(/。/).filter(s => s.trim());
+    
+    if (sentences.length >= 2) {
+      // 1文節目全体を表示
+      const firstSentence = sentences[0] + '。';
+      // 2文節目の最初の5文字を表示
+      const secondSentence = sentences[1];
+      const secondVisible = secondSentence.substring(0, 5);
+      const secondBlurred = secondSentence.substring(5);
+      // 3文節目以降
+      const restSentences = sentences.slice(2);
+      
+      let result = escapeHtml(firstSentence) + escapeHtml(secondVisible);
+      
+      // 2文節目の残り + 3文節目以降をぼかす
+      let blurredText = secondBlurred;
+      if (restSentences.length > 0) {
+        blurredText += '。' + restSentences.join('。') + (text.endsWith('。') ? '。' : '');
+      } else if (text.split('。').length > 2 || text.endsWith('。')) {
+        blurredText += '。';
+      }
+      
+      result += `<span style="position: relative; display: inline-block;"><span style="filter: blur(8px); opacity: 0.4; user-select: none; -webkit-user-select: none;">${escapeHtml(blurredText)}</span>${ctaButton}</span>`;
+      
+      return result;
+    }
+    
+    // 1文しかない場合：後半60%をぼかす
+    const visibleLength = Math.floor(text.length * 0.4);
+    const visible = escapeHtml(text.substring(0, visibleLength));
+    const blurred = escapeHtml(text.substring(visibleLength));
+    
+    return `${visible}<span style="position: relative; display: inline-block;"><span style="filter: blur(8px); opacity: 0.4; user-select: none; -webkit-user-select: none;">${blurred}</span>${ctaButton}</span>`;
+  }
+
   // AI分析HTML：大枠の中にDoing/Beingをサブセクションとして配置
   const analysisHtml = `
     <section class="summary-panel summary-panel--ai-analysis">
@@ -2871,27 +3205,27 @@ async function handleStep6(session, userText) {
         ? analysisParts.map((part) => `
           <div class="analysis-subsection">
             <div class="analysis-subtitle">${escapeHtml(part.label)}</div>
-            <p>${escapeHtml(part.text).replace(/\n/g, "<br />")}</p>
-          </div>
+            <p>${blurAnalysisText(part.text)}</p>
+      </div>
         `).join("")
         : `<p>AI分析を生成中です。</p>`
       }
     </section>
   `;
 
-  const ctaHtml = `
-    <div style="text-align: center; margin-bottom: 24px;">
-      <p style="color: #000; font-weight: 600; margin: 0 0 16px 0; font-size: 14px; line-height: 1.7;">自分の経歴書代わりに使えるキャリアシートを作成したい人はこちらのボタンから無料作成してね！<br>これまでの経歴や希望条件を入れたり、キャリアエージェントに相談もできるよ。</p>
-      <button type="button" style="background: linear-gradient(135deg, #F09433 0%, #E6683C 25%, #DC2743 50%, #CC2366 75%, #BC1888 100%); border: none; border-radius: 999px; padding: 14px 28px; font-size: 16px; font-weight: 700; color: #fff; cursor: pointer; box-shadow: 0 4px 12px rgba(236, 72, 153, 0.3); transition: transform 0.2s ease;">無料で作成する</button>
-    </div>
-  `;
+  // キャッチコピーはぼかさず全文表示
 
   const sheetHeaderHtml = `
-    <div style="text-align: center; margin-bottom: 24px;">
-      <h2 style="margin: 0 0 8px 0; font-size: clamp(24px, 5vw, 36px); font-weight: 900; background: linear-gradient(135deg, #F09433 0%, #E6683C 25%, #DC2743 50%, #CC2366 75%, #BC1888 100%); -webkit-background-clip: text; background-clip: text; color: transparent;">
+    <div style="text-align: center; margin-bottom: 32px;">
+      <h2 style="margin: 0 0 16px 0; font-size: 18px; font-weight: 700; color: #000;">
         ${escapeHtml(displayName)}さんのキャリア分析シート
       </h2>
-      <p style="margin: 0; font-size: 14px; color: #64748b;">あなたのキャリアにおける強みと価値観をAIが分析してまとめたよ。</p>
+      <div style="position: relative; display: inline-block; text-align: left; max-width: 90%;">
+        <span style="display: inline-block; background: linear-gradient(135deg, #fde2f3, #e9e7ff 50%, #e6f0ff); color: #000; font-size: 11px; font-weight: 600; padding: 4px 12px; border-radius: 999px; margin-bottom: 8px;">キャッチコピー</span>
+        <p style="margin: 0; font-size: clamp(20px, 4.5vw, 28px); font-weight: 900; line-height: 1.5; letter-spacing: 0.02em; background: linear-gradient(135deg, #F09433 0%, #E6683C 25%, #DC2743 50%, #CC2366 75%, #BC1888 100%); -webkit-background-clip: text; background-clip: text; color: transparent; font-family: 'Klee', 'Hiragino Maru Gothic ProN', 'ヒラギノ丸ゴ ProN W4', 'HG正楷書体-PRO', 'HGP行書体', 'HG丸ｺﾞｼｯｸM-PRO', 'Segoe Print', 'Comic Sans MS', cursive, sans-serif;">
+          ${escapeHtml(catchcopy)}
+        </p>
+      </div>
     </div>
   `;
 
@@ -2908,9 +3242,13 @@ async function handleStep6(session, userText) {
     </div>
   `.trim();
 
-  const summaryData = `
-    ${ctaHtml}
-    ${summaryReportHtml}
+  const ctaHtml = `
+    <div class="summary-cta" style="text-align: center; margin: 0 auto; max-width: 600px; display: flex; flex-direction: column; align-items: center;">
+      <p style="color: #000; font-weight: 600; margin: 0 0 12px 0; font-size: 14px; line-height: 1.7; text-align: center; width: 100%;">
+        AIによる分析を全部見たり、<br>オリジナルキャリアシートを無料作成するにはここから！
+      </p>
+      <a href="https://hoap-ai-career-sheet.vercel.app/" target="_blank" rel="noopener noreferrer" style="display: inline-block; background: linear-gradient(135deg, #F09433 0%, #E6683C 25%, #DC2743 50%, #CC2366 75%, #BC1888 100%); border: none; border-radius: 999px; padding: 14px 32px; font-size: 16px; font-weight: 700; color: #fff; cursor: pointer; box-shadow: 0 4px 12px rgba(236, 72, 153, 0.3); transition: transform 0.2s ease; text-decoration: none;">無料で作成する</a>
+    </div>
   `.trim();
 
   // ai_analysisはDoing/Beingの組み合わせ
@@ -2930,7 +3268,8 @@ async function handleStep6(session, userText) {
       meta: {
         step: session.step,
       show_summary_after_delay: 5000,
-        summary_data: summaryData || "キャリアの説明書を作成しました。",
+        summary_data: summaryReportHtml || "キャリアの説明書を作成しました。",
+        cta_html: ctaHtml,
       },
     drill: session.drill,
   };
@@ -2938,7 +3277,7 @@ async function handleStep6(session, userText) {
 
 function initialGreeting(session) {
   return {
-    response: "こんにちは！AIキャリアデザイナーのほーぷちゃんだよ✨\n今日はあなたのこれまでキャリアの説明書をあなたの言葉とAIの分析で作っていくね！\n\nそれじゃあ、まずは持っている資格を教えて欲しいな🌱\n複数ある場合は1つずつ教えてね。\n資格がない場合は「資格なし」でOKだよ！",
+    response: "こんにちは！AIキャリアデザイナーのほーぷちゃんだよ✨\n今日はあなたのキャリア分析シートを作っていくね！\n\nまずは持っている資格を教えて欲しいな🌱\n複数ある場合は1つずつ教えてね。\n資格がない場合は「資格なし」でOKだよ！",
     status: session.status,
     meta: { step: session.step },
     drill: session.drill,
@@ -2964,14 +3303,48 @@ async function handler(req, res) {
     return;
   }
 
+  // ストレージの状態をログ出力（初回のみ）
+  if (!handler.storageLogged) {
+    console.log(`[SESSION STORAGE] Using: ${isKVAvailable() ? 'Vercel KV' : 'Memory (fallback)'}`);
+    if (isKVAvailable()) {
+      console.log(`[SESSION STORAGE] KV URL: ${process.env.KV_REST_API_URL ? 'configured' : 'not configured'}`);
+    }
+    handler.storageLogged = true;
+  }
+
   // body 取得の保険（Edge/Node 両対応）
   const body = (await req.json?.().catch(() => null)) || req.body || {};
   const { message, sessionId } = body;
-  const session = getSession(sessionId);
-  saveSession(session);
+  const session = await getSession(sessionId);
+  
+  console.log(`[HANDLER] Received request - sessionId: ${sessionId}, message: "${message}"`);
+  console.log(`[HANDLER] Session state - step: ${session.step}, qual_ids: ${JSON.stringify(session.status.qual_ids)}, licenses: ${JSON.stringify(session.status.licenses)}, history length: ${session.history.length}`);
 
   try {
-    console.log(`[HANDLER] Received message: "${message}", session.step: ${session.step}`);
+    console.log(`[HANDLER] Processing message: "${message}", sessionId: ${sessionId}, session.step: ${session.step}`);
+    
+    // 【開発用】テストモード：STEP6を直接表示
+    if (message === "__TEST_STEP6__") {
+      console.log("[TEST MODE] Generating STEP6 with dummy data");
+      // ダミーデータでセッションを初期化
+      session.step = 6;
+      session.status.qual_ids = [1]; // 看護師
+      session.status.licenses = ["看護師"];
+      session.status.can_text = "病棟、外来、クリニックでの勤務経験があります。患者さんだけでなくご家族とのコミュニケーションも得意です。";
+      session.status.will_text = "患者さんとご家族をトータルでケアできる看護師になりたいです。";
+      session.status.must_text = "残業は少なめ、年収450万円以上希望";
+      session.status.self_text = "プライベートと仕事をしっかり区別して、どちらも楽しんでいます。周りからは「あなたは上手に両立しているよね」と言われます。";
+      session.history = [
+        { role: "user", text: "看護師", step: 1 },
+        { role: "ai", text: "ありがとう！", step: 2 },
+        { role: "user", text: "病棟で働いています", step: 2 },
+      ];
+      const result = await handleStep6(session, "");
+      session.step = result.meta?.step || session.step;
+      await saveSession(session);
+      res.status(200).json(result);
+      return;
+    }
     
     // STEP6では空メッセージでも処理を続行（自動開始のため）
     if ((!message || message.trim() === "") && session.step !== 6) {
@@ -3054,8 +3427,24 @@ async function handler(req, res) {
       // 【安全装置】result.meta.step が現在のステップより小さい値の場合は拒否
       // ステップは必ず前進するか維持されるべきで、後退してはならない
       if (proposedStep < beforeStep) {
-        console.error(`[HANDLER ERROR] Attempted to go backwards: ${beforeStep} -> ${proposedStep}. REJECTING step change.`);
-        // ステップ変更を拒否して現在のステップを維持
+        console.error(`[HANDLER ERROR] ========== STEP REGRESSION DETECTED ==========`);
+        console.error(`[HANDLER ERROR] Current step: ${beforeStep}, Proposed step: ${proposedStep}`);
+        console.error(`[HANDLER ERROR] User message: "${message}"`);
+        console.error(`[HANDLER ERROR] Original response: "${result.response}"`);
+        console.error(`[HANDLER ERROR] SessionId: ${sessionId}`);
+        console.error(`[HANDLER ERROR] Session history length: ${session.history.length}`);
+        console.error(`[HANDLER ERROR] Session licenses: ${JSON.stringify(session.status?.licenses || [])}`);
+        console.error(`[HANDLER ERROR] Session qual_ids: ${JSON.stringify(session.status?.qual_ids || [])}`);
+        console.error(`[HANDLER ERROR] Last 3 history entries:`);
+        const lastThree = session.history.slice(-3);
+        lastThree.forEach((h, i) => {
+          console.error(`[HANDLER ERROR]   [${i}] step=${h.step}, role=${h.role}, text="${h.text?.substring(0, 50)}..."`);
+        });
+        console.error(`[HANDLER ERROR] This likely indicates session loss or incorrect handler call.`);
+        console.error(`[HANDLER ERROR] ===============================================`);
+        // ステップ変更を拒否して現在のステップを維持し、エラーレスポンスを上書き
+        result.response = "ごめん、処理中にエラーが起きちゃった💦 さっきの続きから話してくれる？";
+        result.meta.step = beforeStep;
       } else {
         session.step = proposedStep;
         if (beforeStep !== session.step) {
@@ -3064,7 +3453,7 @@ async function handler(req, res) {
       }
     }
     if (result.drill) session.drill = result.drill;
-    saveSession(session);
+    await saveSession(session);
 
     res.status(200).json(result);
   } catch (err) {
