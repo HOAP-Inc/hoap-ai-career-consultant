@@ -692,9 +692,10 @@ html, body, #__next { height: 100%; }
   background: linear-gradient(135deg, var(--user-grad-from), var(--user-grad-via) 50%, var(--user-grad-to));
   border: 1px solid #e9d5ff;
   border-radius: 16px;
-  padding: 10px 12px;
+  padding: 14px 16px;
   box-shadow: var(--card-shadow);
   white-space: pre-wrap;
+  line-height: 1.8;
 
   width: 100%;
   max-width: 1040px;
@@ -855,9 +856,10 @@ html, body, #__next { height: 100%; }
   background: linear-gradient(135deg, var(--user-grad-from), var(--user-grad-via) 50%, var(--user-grad-to));
   border: 1px solid #e9d5ff;
   border-radius: 16px;
-  padding: 10px 12px;
+  padding: 14px 16px;
   box-shadow: var(--card-shadow);
   white-space: pre-wrap;
+  line-height: 1.8;
 
   width: 100%;
   max-width: 1040px;
