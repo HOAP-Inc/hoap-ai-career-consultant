@@ -3036,26 +3036,14 @@ async function handleStep6(session, userText) {
       }
     }
 
-  // STEP2のファースト質問への回答（経歴）を取得
-  const step2History = session.history.filter(h => h.step === 2 && h.role === "user");
-  const careerBackground = step2History.length > 0 ? step2History[0].text : "";
-
-  // CAN表示：経歴 + 強み
-  const canParts = [];
-  if (careerBackground) {
-    canParts.push(careerBackground);
-  }
-  const canStrengths = Array.isArray(session.status.can_texts) && session.status.can_texts.length > 0
+  // CAN表示：LLMが生成したcan_textを使用（経歴も含まれているため、重複を避ける）
+  const canSummary = Array.isArray(session.status.can_texts) && session.status.can_texts.length > 0
     ? session.status.can_texts.join("／")
     : session.status.can_text || "";
-  if (canStrengths) {
-    canParts.push(canStrengths);
-  }
-  const canSummary = canParts.filter(Boolean).join("。");
-
+  
   if (canSummary) {
     hearingCards.push({ title: "Can（今できること）", body: canSummary });
-    }
+  }
 
   // Will表示：整形処理を適用
   const rawWill = Array.isArray(session.status.will_texts) && session.status.will_texts.length > 0
