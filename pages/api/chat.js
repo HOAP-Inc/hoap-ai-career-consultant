@@ -3189,7 +3189,7 @@ async function handleStep6(session, userText) {
   const ctaHtml = `
     <div class="summary-cta" style="text-align: center; margin: 0 auto; max-width: 600px;">
       <p style="color: #000; font-weight: 600; margin: 0 auto 12px auto; font-size: 14px; line-height: 1.7; text-align: center;">
-        キャリアシートを無料作成したい人はこちらから！<br>経歴や希望条件を入れたり、キャリアエージェントに相談もできるよ。
+        AIによる分析を全部見たり、<br>オリジナルキャリアシートを無料作成するにはここから！
       </p>
       <a href="https://hoap-ai-career-sheet.vercel.app/" target="_blank" rel="noopener noreferrer" style="display: block; margin: 0 auto; width: fit-content; background: linear-gradient(135deg, #F09433 0%, #E6683C 25%, #DC2743 50%, #CC2366 75%, #BC1888 100%); border: none; border-radius: 999px; padding: 14px 32px; font-size: 16px; font-weight: 700; color: #fff; cursor: pointer; box-shadow: 0 4px 12px rgba(236, 72, 153, 0.3); transition: transform 0.2s ease; text-decoration: none;">無料で作成する</a>
     </div>
