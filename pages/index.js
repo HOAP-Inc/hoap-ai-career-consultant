@@ -204,7 +204,7 @@ function getStatusRowDisplay(key, statusMeta = {}) {
     messageTimersRef.current = [];
   }, []);
 
-  const showAiSequence = useCallback((parts) => {
+  const showAiSequence = useCallback((parts, isInitial = false) => {
     clearMessageTimers();
     if (!Array.isArray(parts) || parts.length === 0) {
       setAiText("");
@@ -219,7 +219,10 @@ function getStatusRowDisplay(key, statusMeta = {}) {
     for (let i = 1; i < parts.length; i++) {
       const prev = parts[i - 1] || "";
       const prevLength = prev.length || 0;
-      const segmentDelay = Math.min(4000, 1300 + prevLength * 25);
+      // 初回メッセージは短い時間で表示
+      const segmentDelay = isInitial 
+        ? Math.min(3000, 1000 + prevLength * 20)
+        : Math.min(8000, 2600 + prevLength * 45);
       delay += segmentDelay;
       const timerId = setTimeout(() => {
         setAiText(parts[i]);
@@ -247,7 +250,7 @@ const data = raw ? JSON.parse(raw) : null;
         if (responseParts.length === 0) {
           setAiText("");
         } else {
-          showAiSequence(responseParts);
+          showAiSequence(responseParts, true);
         }
 
         const next = data?.meta?.step ?? 0;
@@ -480,12 +483,12 @@ setChoices(isChoiceStep(next) ? uniqueByNormalized(inline) : []);
           for (let i = 1; i < finalParts.length; i++) {
             const prev = finalParts[i - 1] || "";
             const prevLen = prev.length || 0;
-            const segmentDelay = Math.min(4000, 1300 + prevLen * 25);
+            const segmentDelay = Math.min(8000, 2600 + prevLen * 45);
             accumulatedDelay += segmentDelay;
           }
           const lastPart = finalParts[finalParts.length - 1] || "";
-          const lastReadTime = Math.min(4500, 1600 + (lastPart.length || 0) * 25);
-          const sheetDelay = Math.max(2500, accumulatedDelay + lastReadTime);
+          const lastReadTime = Math.min(9000, 3200 + (lastPart.length || 0) * 45);
+          const sheetDelay = Math.max(5000, accumulatedDelay + lastReadTime);
           setTimeout(() => {
             setSummaryData(data.meta.summary_data);
             setCtaHtml(data.meta.cta_html);
