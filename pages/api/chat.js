@@ -621,7 +621,7 @@ if (uniqueLabels.length === 1 && resolved.length === 0) {
   
   session.stage.turnIndex = 0;
   resetDrill(session);
-  
+
   return {
     response: `「${trimmed}」だね！他にもある？あれば教えて！なければ「ない」と言ってね`,
     status: session.status,
@@ -924,7 +924,7 @@ async function handleStep3(session, userText) {
   }
 
   // userTextがある場合のみturnIndexをインクリメント
-  session.stage.turnIndex += 1;
+    session.stage.turnIndex += 1;
   const payload = buildStepPayload(session, userText, 5);
   const llm = await callLLM(3, payload, session, { model: "gpt-4o" });
   if (!llm.ok) {
@@ -1913,7 +1913,7 @@ function refineStep5Question(session, question) {
     if (/(と思う|と思います|だと思う|だと思います)$/.test(anchor)) {
       result = `それって、いつ頃からそう思うようになった？`;
     } else {
-      result = `${anchor}と感じたとき、具体的にどんな状況だった？`;
+    result = `${anchor}と感じたとき、具体的にどんな状況だった？`;
     }
   }
 
@@ -2042,45 +2042,45 @@ async function handleStep4(session, userText) {
 
     // 方向性が確定した場合のみ、sessionのstatusを更新
     if (direction !== null && autoConfirmedIds.length > 0) {
-      if (!session.status.must_have_ids) session.status.must_have_ids = [];
-      if (!session.status.ng_ids) session.status.ng_ids = [];
-      if (!session.status.pending_ids) session.status.pending_ids = [];
-      if (!session.status.direction_map) session.status.direction_map = {};
-      const id = autoConfirmedIds[0];
+    if (!session.status.must_have_ids) session.status.must_have_ids = [];
+    if (!session.status.ng_ids) session.status.ng_ids = [];
+    if (!session.status.pending_ids) session.status.pending_ids = [];
+    if (!session.status.direction_map) session.status.direction_map = {};
+    const id = autoConfirmedIds[0];
 
-      // 他の配列から同一IDを除外
-      const removeId = (arr) => {
-        if (Array.isArray(arr)) {
-          const idx = arr.indexOf(id);
-          if (idx >= 0) arr.splice(idx, 1);
-        }
-      };
-      removeId(session.status.must_have_ids);
-      removeId(session.status.ng_ids);
-      removeId(session.status.pending_ids);
-
-      if (direction === "have") {
-        if (!session.status.must_have_ids.includes(id)) {
-          session.status.must_have_ids.push(id);
-        }
-      } else if (direction === "ng") {
-        if (!session.status.ng_ids.includes(id)) {
-          session.status.ng_ids.push(id);
-        }
-      } else if (direction === "pending") {
-        if (!session.status.pending_ids.includes(id)) {
-          session.status.pending_ids.push(id);
-        }
+    // 他の配列から同一IDを除外
+    const removeId = (arr) => {
+      if (Array.isArray(arr)) {
+        const idx = arr.indexOf(id);
+        if (idx >= 0) arr.splice(idx, 1);
       }
-      session.status.direction_map[String(id)] = direction;
-      autoDirectionMap[String(id)] = direction;
+    };
+    removeId(session.status.must_have_ids);
+    removeId(session.status.ng_ids);
+    removeId(session.status.pending_ids);
+
+    if (direction === "have") {
+      if (!session.status.must_have_ids.includes(id)) {
+        session.status.must_have_ids.push(id);
+      }
+    } else if (direction === "ng") {
+      if (!session.status.ng_ids.includes(id)) {
+        session.status.ng_ids.push(id);
+      }
+      } else if (direction === "pending") {
+      if (!session.status.pending_ids.includes(id)) {
+        session.status.pending_ids.push(id);
+      }
+    }
+    session.status.direction_map[String(id)] = direction;
+    autoDirectionMap[String(id)] = direction;
 
       // ステータスバーは後で finalizeMustState で生成するため、ここでは更新しない
       // （LLMの共感文生成後に更新）
     }
   } else if (directMatches.length > 1) {
     // 複数キーワードが見つかった場合、各キーワードについて個別に方向性を判定
-    console.log(
+      console.log(
       `[STEP4 FAST] Multiple matches found: ${directMatches.map(t => t.name).join(", ")}`
     );
 
@@ -2415,7 +2415,7 @@ async function handleStep4(session, userText) {
       const combinedText = `${userInput} ${recentTexts}`;
 
       let question;
-
+      
       // 方向性が既に明確な場合は質問をスキップ
       const allDirectionsConfirmed = autoConfirmedIds.length > 0 && autoConfirmedIds.every((id) => {
         const key = String(id);
@@ -2643,7 +2643,7 @@ async function handleStep4(session, userText) {
           comparisonQuestion = "それって、どのくらい譲れない条件？『絶対必須』レベル？";
         }
         if (comparisonQuestion) {
-          responseText = comparisonQuestion;
+        responseText = comparisonQuestion;
         }
       }
     }
@@ -2691,8 +2691,8 @@ async function handleStep5(session, userText) {
   }
 
   // userTextがある場合のみturnIndexをインクリメント
-  session.stage.turnIndex += 1;
-
+    session.stage.turnIndex += 1;
+  
   // ペイロード最適化：発話履歴ではなく生成済みテキストを送る
   const payload = {
     locale: "ja",
@@ -2708,7 +2708,7 @@ async function handleStep5(session, userText) {
       self_text: session.status.self_text || "",
     },
   };
-
+  
   // STEP5はまずGPT-4oで試す（タイムアウト回避）
   let llm = await callLLM(5, payload, session, { model: "gpt-4o" });
   if (!llm.ok) {
@@ -3021,7 +3021,7 @@ async function handleStep6(session, userText) {
     }
   } catch (err) {
     console.error("[STEP6 ERROR] Catchcopy generation error:", err);
-  }
+      }
   
   session.status.catchcopy = catchcopy;
 
@@ -3043,7 +3043,7 @@ async function handleStep6(session, userText) {
   
   if (canSummary) {
     hearingCards.push({ title: "Can（今できること）", body: canSummary });
-  }
+    }
 
   // Will表示：整形処理を適用
   const rawWill = Array.isArray(session.status.will_texts) && session.status.will_texts.length > 0
@@ -3131,7 +3131,7 @@ async function handleStep6(session, userText) {
           <div class="analysis-subsection">
             <div class="analysis-subtitle">${escapeHtml(part.label)}</div>
             <p>${escapeHtml(part.text).replace(/\n/g, "<br />")}</p>
-          </div>
+      </div>
         `).join("")
         : `<p>AI分析を生成中です。</p>`
       }
@@ -3164,13 +3164,10 @@ async function handleStep6(session, userText) {
 
   const ctaHtml = `
     <div class="summary-cta" style="text-align: center; margin-top: 24px; margin-bottom: 32px;">
-      <p style="color: #000; font-weight: 600; margin: 0 0 8px 0; font-size: 14px; line-height: 1.7;">
-        自分の経歴書代わりに使えるキャリアシートを作成したい人はこちらのボタンから無料作成してね！
+      <p style="color: #000; font-weight: 600; margin: 0; font-size: 14px; line-height: 1.5;">
+        自分の経歴書代わりに使えるキャリアシートを作成したい人はこちらのボタンから無料作成してね！<br>これまでの経歴や希望条件を入れたり、キャリアエージェントに相談もできるよ。
       </p>
-      <p style="color: #000; font-weight: 600; margin: 0 0 20px 0; font-size: 14px; line-height: 1.7;">
-        これまでの経歴や希望条件を入れたり、キャリアエージェントに相談もできるよ。
-      </p>
-      <a href="https://hoap-ai-career-sheet.vercel.app/" target="_blank" rel="noopener noreferrer" style="display: inline-block; background: linear-gradient(135deg, #F09433 0%, #E6683C 25%, #DC2743 50%, #CC2366 75%, #BC1888 100%); border: none; border-radius: 999px; padding: 14px 32px; font-size: 16px; font-weight: 700; color: #fff; cursor: pointer; box-shadow: 0 4px 12px rgba(236, 72, 153, 0.3); transition: transform 0.2s ease; text-decoration: none;">無料で作成する</a>
+      <a href="https://hoap-ai-career-sheet.vercel.app/" target="_blank" rel="noopener noreferrer" style="display: block; margin: 20px auto 0; width: fit-content; background: linear-gradient(135deg, #F09433 0%, #E6683C 25%, #DC2743 50%, #CC2366 75%, #BC1888 100%); border: none; border-radius: 999px; padding: 14px 32px; font-size: 16px; font-weight: 700; color: #fff; cursor: pointer; box-shadow: 0 4px 12px rgba(236, 72, 153, 0.3); transition: transform 0.2s ease; text-decoration: none;">無料で作成する</a>
     </div>
   `.trim();
 
