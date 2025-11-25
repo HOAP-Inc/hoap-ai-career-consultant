@@ -1,0 +1,69 @@
+{
+  "医療": [
+    { "label": "正看護師", "aliases": ["正看", "看護師", "ナース", "看護"] },
+    { "label": "准看護師", "aliases": ["准看", "看護師", "ナース", "看護"] },
+    { "label": "保健師", "aliases": [] },
+    { "label": "助産師", "aliases": [] },
+    { "label": "薬剤師", "aliases": [] },
+    { "label": "医師", "aliases": ["ドクター", "医者"] },
+    { "label": "臨床検査技師", "aliases": ["検査技師"] },
+    { "label": "言語聴覚士", "aliases": ["ST"] },
+    { "label": "臨床工学技士", "aliases": ["CE"] },
+    { "label": "作業療法士", "aliases": ["OT"] },
+    { "label": "理学療法士", "aliases": ["PT"] },
+    { "label": "視能訓練士", "aliases": [] },
+    { "label": "診療放射線技師", "aliases": ["放射線技師", "レントゲン技師"] },
+    { "label": "鍼灸師", "aliases": [] },
+    { "label": "あん摩マッサージ指圧師", "aliases": ["あマ指"] },
+    { "label": "柔道整復師", "aliases": ["整復師"] },
+    { "label": "公認心理師", "aliases": [] },
+    { "label": "臨床心理士", "aliases": [] },
+    { "label": "栄養士", "aliases": [] },
+    { "label": "管理栄養士", "aliases": [] }
+  ],
+  "介護": [
+    { "label": "介護支援専門員（ケアマネ）", "aliases": ["ケアマネ"] },
+    { "label": "介護福祉士", "aliases": ["介福", "ヘルパー", "介護職"] },
+    { "label": "初任者研修", "aliases": ["ヘルパー2級", "初任者", "ヘルパー", "介護職"] },
+    { "label": "資格なし", "aliases": ["ヘルパー", "介護職"] },
+    { "label": "実務者研修", "aliases": ["実務者", "ヘルパー", "介護職"] },
+    { "label": "サービス管理責任者研修", "aliases": ["サビ管研修", "サビ管"] },
+    { "label": "主任介護支援専門員（主任ケアマネ）", "aliases": ["主任ケアマネ", "主マネ"] },
+    { "label": "介護事務資格（民間）", "aliases": ["介護事務"] },
+    { "label": "社会福祉士", "aliases": [] },
+    { "label": "精神保健福祉士", "aliases": [] },
+    { "label": "主任相談支援専門員", "aliases": [] }
+  ],
+  "歯科": [
+    { "label": "歯科医師", "aliases": [] },
+    { "label": "歯科技工士", "aliases": ["DT", "技工士"] },
+    { "label": "歯科衛生士", "aliases": ["DH", "衛生士"] },
+    { "label": "歯科助手", "aliases": ["DA"] }
+  ],
+  "障害福祉": [
+    { "label": "児童発達支援管理責任者研修", "aliases": ["児発管研修"] },
+    { "label": "児童指導員任用資格", "aliases": ["児童指導員"] },
+    { "label": "放課後児童支援員認定資格", "aliases": ["放デイ支援員"] }
+  ],
+  "その他": [
+    { "label": "幼稚園教諭", "aliases": [] },
+    { "label": "保育士", "aliases": [] },
+    { "label": "登録販売者", "aliases": [] },
+    { "label": "カイロプラクター", "aliases": [] },
+    { "label": "リフレクソロジスト", "aliases": [] },
+    { "label": "アロマセラピスト", "aliases": [] },
+    { "label": "自動車運転免許", "aliases": ["普通免許"] },
+    { "label": "福祉用具専門相談員", "aliases": [] },
+    { "label": "調剤事務資格（民間）", "aliases": ["調剤事務"] },
+    { "label": "MR認定資格", "aliases": ["MR"] },
+    { "label": "医療事務資格（民間）", "aliases": ["医療事務"] },
+    { "label": "高等学校教諭", "aliases": ["高校教員"] },
+    { "label": "中学校教諭", "aliases": ["中学教員"] },
+    { "label": "小学校教諭", "aliases": ["小学校教員"] },
+    { "label": "養護教諭", "aliases": [] },
+    { "label": "栄養教諭", "aliases": [] },
+    { "label": "整体師", "aliases": [] },
+    { "label": "美容師", "aliases": [] },
+    { "label": "理容師", "aliases": [] }
+  ]
+}
