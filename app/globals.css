@@ -1,5 +1,6 @@
 /* styles/globals.css */
 
+
 /* Google Fonts を使いたければ _document.js に仕込む。ここではシステムフォントで軽量に */
 :root{
   --bg-from:#fdf2f8;   /* very light pink */
