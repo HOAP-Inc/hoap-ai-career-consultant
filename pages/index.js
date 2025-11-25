@@ -1,14 +1,14 @@
 import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 /* eslint-disable @next/next/no-img-element */
 
-// 定期アニメーション用画像（ランダムに使用）12以外
+// 定期アニメーション用画像（ランダムに使用）
 const HOAP_ANIMATION_IMAGES = [
-  "/hoap-wide.png",
-  "/hoap-skip.png",
   "/10.png",
   "/11.png",
   "/13.png",
-  "/14.png"
+  "/14.png",
+  "/hoap-skip.png",
+  "/hoap-wide.png"
 ];
 
 export default function Home() {
@@ -156,13 +156,18 @@ function getStatusRowDisplay(key, statusMeta = {}) {
   const messageTimersRef = useRef([]);
 
   // ほーぷちゃん画像の切替用（初期は基本）
-  const [hoapSrc, setHoapSrc] = useState("/hoap-basic.png");
+  const [hoapSource, setHoapSource] = useState("/hoap-basic.png");
+  const [isMouthOpen, setIsMouthOpen] = useState(false);
 
   // ポーズを元に戻すタイマー保持
   const revertTimerRef = useRef(null);
 
   // isTyping用のランダム動きタイマー
   const typingAnimationTimerRef = useRef(null);
+
+  // 口パクアニメーション用のタイマー
+  const mouthIntervalRef = useRef(null);
+  const lastAiTextRef = useRef("");
 
   // 進捗バー（STEP1〜6の6段階）
   const MAX_STEP = 6;
@@ -269,6 +274,8 @@ setChoices(isChoiceStep(next) ? uniqueByNormalized(inline) : []);
 
   // step変化でトリガー：ID取得後(2以上に到達)／完了(10)で一度だけバンザイ
   useEffect(() => {
+    if (isTyping) return; // タイピング中はステップアニメーションを実行しない
+
     // タイマー整理
     if (revertTimerRef.current) {
       clearTimeout(revertTimerRef.current);
@@ -278,9 +285,14 @@ setChoices(isChoiceStep(next) ? uniqueByNormalized(inline) : []);
     // STEP2到達時：初回ID番号取得後
     if (step >= 2 && !cheeredIdRef.current) {
       cheeredIdRef.current = true;
-      setHoapSrc("/hoap-up.png");
+      // 口パクを停止
+      if (mouthIntervalRef.current) {
+        clearInterval(mouthIntervalRef.current);
+        mouthIntervalRef.current = null;
+      }
+      setHoapSource("/hoap-up.png");
       revertTimerRef.current = setTimeout(() => {
-        setHoapSrc("/hoap-basic.png");
+        setHoapSource("/hoap-basic.png");
         revertTimerRef.current = null;
       }, 2400);
       return;
@@ -289,9 +301,14 @@ setChoices(isChoiceStep(next) ? uniqueByNormalized(inline) : []);
     // STEP4到達時：Must（譲れない条件）がまとまったら
     if (step >= 4 && !cheeredMustRef.current) {
       cheeredMustRef.current = true;
-      setHoapSrc("/hoap-up.png");
+      // 口パクを停止
+      if (mouthIntervalRef.current) {
+        clearInterval(mouthIntervalRef.current);
+        mouthIntervalRef.current = null;
+      }
+      setHoapSource("/hoap-up.png");
       revertTimerRef.current = setTimeout(() => {
-        setHoapSrc("/hoap-basic.png");
+        setHoapSource("/hoap-basic.png");
         revertTimerRef.current = null;
       }, 2400);
       return;
@@ -300,9 +317,14 @@ setChoices(isChoiceStep(next) ? uniqueByNormalized(inline) : []);
     // STEP5到達時：Self（私はこんな人）がまとまったら
     if (step >= 5 && !cheeredSelfRef.current) {
       cheeredSelfRef.current = true;
-      setHoapSrc("/hoap-up.png");
+      // 口パクを停止
+      if (mouthIntervalRef.current) {
+        clearInterval(mouthIntervalRef.current);
+        mouthIntervalRef.current = null;
+      }
+      setHoapSource("/hoap-up.png");
       revertTimerRef.current = setTimeout(() => {
-        setHoapSrc("/hoap-basic.png");
+        setHoapSource("/hoap-basic.png");
         revertTimerRef.current = null;
       }, 2400);
       return;
@@ -311,50 +333,130 @@ setChoices(isChoiceStep(next) ? uniqueByNormalized(inline) : []);
     // STEP6到達時：最終まとめ完了
     if (step >= 6 && !cheeredDoneRef.current) {
       cheeredDoneRef.current = true;
-      setHoapSrc("/hoap-up.png");
+      // 口パクを停止
+      if (mouthIntervalRef.current) {
+        clearInterval(mouthIntervalRef.current);
+        mouthIntervalRef.current = null;
+      }
+      setHoapSource("/hoap-up.png");
       revertTimerRef.current = setTimeout(() => {
-        setHoapSrc("/hoap-basic.png");
+        setHoapSource("/hoap-basic.png");
         revertTimerRef.current = null;
       }, 2400);
     }
-  }, [step]);
+  }, [step, isTyping]);
 
-  // AI応答が更新されるたびに、ランダム画像を短時間表示
+  // 吹き出し表示時：ベーシックポーズに設定（口パク用）
+  useEffect(() => {
+    if (!aiText) return;
+    
+    // aiTextが新しい時だけ実行
+    const isNewText = aiText !== lastAiTextRef.current;
+    if (!isNewText) return;
+    
+    // ありがとう反応は除外
+    if (aiText.includes("ありがとう") || aiText.includes("ありがと")) return;
+    
+    // ベーシックポーズに設定（口パクが自然なため）
+    setHoapSource("/hoap-basic.png");
+  }, [aiText]);
+
+  // 口パクアニメーション: 吹き出し表示中かつベーシックポーズの時に口を開閉
+  useEffect(() => {
+    // aiTextが変わった時だけ実行（同じテキストなら何もしない）
+    if (!aiText || aiText === lastAiTextRef.current) return;
+    lastAiTextRef.current = aiText;
+    
+    // 口パク対象のポーズ（ベーシックのみ）
+    const shouldAnimate = hoapSource === "/hoap-basic.png";
+    
+    if (shouldAnimate) {
+      // 既存の口パクタイマーをクリア
+      if (mouthIntervalRef.current) {
+        clearInterval(mouthIntervalRef.current);
+        mouthIntervalRef.current = null;
+      }
+      
+      // 口を閉じた状態から開始
+      setIsMouthOpen(false);
+      
+      mouthIntervalRef.current = setInterval(() => {
+        setIsMouthOpen((prev) => !prev);
+      }, 100); // 100msごとに口を開閉（倍速）
+      
+      // 1.5秒後に停止
+      const stopTimer = setTimeout(() => {
+        if (mouthIntervalRef.current) {
+          clearInterval(mouthIntervalRef.current);
+          mouthIntervalRef.current = null;
+        }
+        setIsMouthOpen(false);
+        
+        // 質問時のみ：口パク終了0.5秒後にランダムでポーズ変更
+        const isQuestion = aiText.includes("？") || aiText.includes("?");
+        if (isQuestion) {
+          const randomPoseTimer = setTimeout(() => {
+            if (revertTimerRef.current) {
+              clearTimeout(revertTimerRef.current);
+              revertTimerRef.current = null;
+            }
+            
+            const randomImage = HOAP_ANIMATION_IMAGES[Math.floor(Math.random() * HOAP_ANIMATION_IMAGES.length)];
+            if (randomImage) {
+              setHoapSource(randomImage);
+              // 2秒後に元に戻す（停止）
+              revertTimerRef.current = setTimeout(() => {
+                setHoapSource("/hoap-basic.png");
+                revertTimerRef.current = null;
+              }, 2000);
+            }
+          }, 500);
+          return () => clearTimeout(randomPoseTimer);
+        }
+      }, 1500);
+      
+      return () => {
+        clearTimeout(stopTimer);
+        if (mouthIntervalRef.current) {
+          clearInterval(mouthIntervalRef.current);
+          mouthIntervalRef.current = null;
+        }
+        setIsMouthOpen(false);
+      };
+    } else {
+      // 条件を満たさない場合は口パクを停止
+      if (mouthIntervalRef.current) {
+        clearInterval(mouthIntervalRef.current);
+        mouthIntervalRef.current = null;
+      }
+      setIsMouthOpen(false);
+    }
+  }, [aiText, hoapSource]);
+
+  // ありがとう反応
   useEffect(() => {
     if (!aiText) return;
 
-    // すでに「バンザイ」表示中なら邪魔しない（競合回避）
-    if (hoapSrc === "/hoap-up.png") return;
-
-    // 「ありがとう」が含まれている場合はバンザイ
     if (aiText.includes("ありがとう") || aiText.includes("ありがと")) {
+      if (hoapSource === "/hoap-up.png") return; // 既にhoap-upなら何もしない
+      
       if (revertTimerRef.current) {
         clearTimeout(revertTimerRef.current);
         revertTimerRef.current = null;
       }
-      setHoapSrc("/hoap-up.png");
+      // 口パクを停止
+      if (mouthIntervalRef.current) {
+        clearInterval(mouthIntervalRef.current);
+        mouthIntervalRef.current = null;
+      }
+      setHoapSource("/hoap-up.png");
       revertTimerRef.current = setTimeout(() => {
-        setHoapSrc("/hoap-basic.png");
+        setHoapSource("/hoap-basic.png");
         revertTimerRef.current = null;
       }, 2400);
       return;
     }
-
-    // 33% くらいの確率でランダム画像を表示
-    if (Math.random() < 0.33) {
-      if (revertTimerRef.current) {
-        clearTimeout(revertTimerRef.current);
-        revertTimerRef.current = null;
-      }
-      const randomImage = HOAP_ANIMATION_IMAGES[Math.floor(Math.random() * HOAP_ANIMATION_IMAGES.length)];
-      setHoapSrc(randomImage);
-      revertTimerRef.current = setTimeout(() => {
-        // バンザイに上書きされていない場合のみ basic に戻す
-        setHoapSrc((cur) => (cur === "/hoap-up.png" ? cur : "/hoap-basic.png"));
-        revertTimerRef.current = null;
-      }, 1600);
-    }
-  }, [aiText]);
+  }, [aiText, hoapSource]);
 
   // isTypingが3秒以上続く場合、ランダムで動きを入れる
   useEffect(() => {
@@ -364,11 +466,11 @@ setChoices(isChoiceStep(next) ? uniqueByNormalized(inline) : []);
         const randomPoses = ["/hoap-skip.png", "/hoap-wide.png", "/hoap-up.png"];
         const randomPose = randomPoses[Math.floor(Math.random() * randomPoses.length)];
 
-        setHoapSrc(randomPose);
+        setHoapSource(randomPose);
 
         // 800ms後に基本ポーズに戻す
         setTimeout(() => {
-          setHoapSrc("/hoap-basic.png");
+          setHoapSource("/hoap-basic.png");
         }, 800);
       }, 3000);
     } else {
@@ -657,7 +759,21 @@ setChoices(isChoiceStep(next) ? uniqueByNormalized(inline) : []);
         <div className="duo-stage__bg" />
         <div className="duo-stage__wrap">
           <div className="duo-stage__hoap-container">
-            <img className="duo-stage__hoap" src={hoapSrc} alt="ほーぷちゃん" />
+            {/* ベース画像（常に表示） */}
+            <img className="duo-stage__hoap" src={hoapSource} alt="ほーぷちゃん" />
+            {/* 口パク用のオーバーレイ（ベーシックポーズのみ） */}
+            {aiText && hoapSource === "/hoap-basic.png" && (
+              <img 
+                alt="" 
+                className="duo-stage__hoap duo-stage__hoap-mouth" 
+                src="/hoap-wide.png"
+                style={{
+                  clipPath: 'ellipse(5% 2.5% at 50% 42.5%)',
+                  opacity: isMouthOpen ? 1 : 0,
+                  transition: 'opacity 0.05s ease-in-out',
+                }}
+              />
+            )}
           </div>
           <div className="duo-stage__bubbles-container">
             {isTyping ? (
